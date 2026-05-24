@@ -7,6 +7,7 @@ import { HomeComponent } from '../home/home.component';
 import { LoginComponent } from '../auth/auth.component';
 import { RegisterComponent } from '../auth/register.component';
 import { InvitationsComponent } from '../invitations/invitations.component';
+import { InboxComponent } from '../inbox/inbox.component';
 
 const tpl = template(`
     <div class="app-layout">
@@ -55,6 +56,7 @@ export class AppComponent extends Component {
             '/login': LoginComponent,
             '/register': RegisterComponent,
             '/invitations': InvitationsComponent,
+            '/inbox': InboxComponent,
         }, HomeComponent);
 
         return frag;

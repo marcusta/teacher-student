@@ -236,3 +236,79 @@ test('POST /api/auth/logout clears session', async () => {
     const res = await req(app, 'GET', '/api/auth/me', undefined, cookie);
     expect(res.status).toBe(401);
 });
+
+// --- Invitations: inbox + accept/decline ---
+
+async function registerAndLogin(app: Hono, email: string, password = 'secret123', displayName = email): Promise<string> {
+    await req(app, 'POST', '/api/auth/register', { email, password, displayName });
+    return loginAs(app, email, password);
+}
+
+test('GET /api/invitations/inbox without session returns 401', async () => {
+    const { app } = await setup();
+    const res = await req(app, 'GET', '/api/invitations/inbox');
+    expect(res.status).toBe(401);
+});
+
+test('GET /api/invitations/inbox returns pending invitations addressed to me', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    await req(app, 'POST', '/api/invitations', { inviteeEmail: 'student@example.com' }, teacherCookie);
+
+    const studentCookie = await registerAndLogin(app, 'student@example.com');
+    const res = await req(app, 'GET', '/api/invitations/inbox', undefined, studentCookie);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.length).toBe(1);
+    expect(data[0].inviteeEmail).toBe('student@example.com');
+});
+
+test('POST /api/invitations/accept happy path returns Relation', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/invitations', { inviteeEmail: 'student@example.com' }, teacherCookie);
+    const { id: invitationId } = await created.json();
+
+    const studentCookie = await registerAndLogin(app, 'student@example.com');
+    const res = await req(app, 'POST', '/api/invitations/accept', { invitationId }, studentCookie);
+    expect(res.status).toBe(200);
+    const relation = await res.json();
+    expect(relation.id).toBeString();
+    expect(relation.invitationId).toBe(invitationId);
+});
+
+test('POST /api/invitations/accept by non-invitee returns 403', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/invitations', { inviteeEmail: 'student@example.com' }, teacherCookie);
+    const { id: invitationId } = await created.json();
+
+    const intruderCookie = await registerAndLogin(app, 'someone-else@example.com');
+    const res = await req(app, 'POST', '/api/invitations/accept', { invitationId }, intruderCookie);
+    expect(res.status).toBe(403);
+});
+
+test('POST /api/invitations/accept on revoked returns 409 with currentStatus', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/invitations', { inviteeEmail: 'student@example.com' }, teacherCookie);
+    const { id: invitationId } = await created.json();
+    await req(app, 'POST', '/api/invitations/revoke', { invitationId }, teacherCookie);
+
+    const studentCookie = await registerAndLogin(app, 'student@example.com');
+    const res = await req(app, 'POST', '/api/invitations/accept', { invitationId }, studentCookie);
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.detail?.currentStatus).toBe('revoked');
+});
+
+test('POST /api/invitations/decline happy path returns ok', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/invitations', { inviteeEmail: 'student@example.com' }, teacherCookie);
+    const { id: invitationId } = await created.json();
+
+    const studentCookie = await registerAndLogin(app, 'student@example.com');
+    const res = await req(app, 'POST', '/api/invitations/decline', { invitationId }, studentCookie);
+    expect(res.status).toBe(200);
+});

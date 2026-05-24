@@ -3,6 +3,15 @@ import type { Generated } from 'kysely';
 export interface Database {
     users: UsersTable;
     invitations: InvitationsTable;
+    relations: RelationsTable;
+}
+
+export interface RelationsTable {
+    id: string;
+    teacher_id: string;
+    student_id: string;
+    invitation_id: string;
+    created_at: Generated<string>;
 }
 
 export interface UsersTable {

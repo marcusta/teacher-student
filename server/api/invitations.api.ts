@@ -17,6 +17,10 @@ const RevokeInput = Type.Object({
     invitationId: Type.String({ minLength: 1 }),
 });
 
+const InvitationIdInput = Type.Object({
+    invitationId: Type.String({ minLength: 1 }),
+});
+
 // --- API descriptor ---
 
 export function createInvitationsApi(svc: InvitationService) {
@@ -49,6 +53,36 @@ export function createInvitationsApi(svc: InvitationService) {
             fn: async (c: Context) => {
                 const user = requireUser(c);
                 return svc.listByTeacher(user.id);
+            },
+        },
+        inbox: {
+            method: 'GET' as const,
+            path: '/invitations/inbox',
+            middleware: [requireAuth()],
+            fn: async (c: Context) => {
+                const user = requireUser(c);
+                return svc.listForUser(user.username);
+            },
+        },
+        accept: {
+            method: 'POST' as const,
+            path: '/invitations/accept',
+            schema: InvitationIdInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof InvitationIdInput>, c: Context) => {
+                const user = requireUser(c);
+                return svc.acceptInvitation(input.invitationId, user.id, user.username);
+            },
+        },
+        decline: {
+            method: 'POST' as const,
+            path: '/invitations/decline',
+            schema: InvitationIdInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof InvitationIdInput>, c: Context) => {
+                const user = requireUser(c);
+                await svc.declineInvitation(input.invitationId, user.id, user.username);
+                return { ok: true };
             },
         },
     };

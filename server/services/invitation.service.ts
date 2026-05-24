@@ -1,9 +1,17 @@
 import type { Kysely } from 'kysely';
 import type { Database, InvitationStatus } from '../db/schema';
 import { UniqueViolationError, parseUniqueViolation } from '@basics/core/server/unique-violation';
-import { ForbiddenError } from '@basics/core/server/auth';
+import { ConflictError, ForbiddenError } from '@basics/core/server/auth';
 
-// --- Output type ---
+// --- Output types ---
+
+export interface Relation {
+    id: string;
+    teacherId: string;
+    studentId: string;
+    invitationId: string;
+    createdAt: string;
+}
 
 export interface Invitation {
     id: string;
@@ -22,6 +30,28 @@ export class NotOwnerError extends ForbiddenError {
     constructor(public readonly invitationId: string) {
         super(`Invitation ${invitationId} not owned by caller`);
         this.name = 'NotOwnerError';
+    }
+}
+
+/** Thrown when a user tries to accept/decline an invitation addressed to someone else. */
+export class NotInviteeError extends ForbiddenError {
+    constructor(public readonly invitationId: string) {
+        super(`Invitation ${invitationId} not addressed to caller`);
+        this.name = 'NotInviteeError';
+    }
+}
+
+/**
+ * Thrown when an invitation can no longer be acted on because it is in a
+ * terminal non-`accepted` state (revoked, declined, expired). Carries the
+ * current status so clients can render the right message.
+ */
+export class InvitationNotPendingError extends ConflictError {
+    readonly detail: { currentStatus: InvitationStatus };
+    constructor(public readonly invitationId: string, currentStatus: InvitationStatus) {
+        super(`Invitation ${invitationId} is ${currentStatus}, no longer pending`);
+        this.name = 'InvitationNotPendingError';
+        this.detail = { currentStatus };
     }
 }
 
@@ -51,6 +81,22 @@ function toInvitation(row: {
         createdAt: row.created_at,
         expiresAt: row.expires_at,
         acceptedAt: row.accepted_at,
+    };
+}
+
+function toRelation(row: {
+    id: string;
+    teacher_id: string;
+    student_id: string;
+    invitation_id: string;
+    created_at: string;
+}): Relation {
+    return {
+        id: row.id,
+        teacherId: row.teacher_id,
+        studentId: row.student_id,
+        invitationId: row.invitation_id,
+        createdAt: row.created_at,
     };
 }
 
@@ -89,6 +135,104 @@ export class InvitationService {
             expiresAt,
             acceptedAt: null,
         };
+    }
+
+    /**
+     * Accept an invitation on behalf of `userId`. The caller must already
+     * be the invitee (their `userEmail` must match the invitation's
+     * `invitee_email`).
+     *
+     * Idempotent at the (teacher, student) level: if the user already has
+     * a Relation with this teacher (perhaps from a previously accepted
+     * invitation), this call marks the new invitation accepted and returns
+     * the existing Relation — no error. The student's intent ("be
+     * connected to this teacher") is already satisfied.
+     */
+    async acceptInvitation(invitationId: string, userId: string, userEmail: string): Promise<Relation> {
+        const email = userEmail.trim().toLowerCase();
+        return this.db.transaction().execute(async (trx) => {
+            const inv = await trx
+                .selectFrom('invitations')
+                .selectAll()
+                .where('id', '=', invitationId)
+                .executeTakeFirst();
+            if (!inv || inv.invitee_email !== email) {
+                throw new NotInviteeError(invitationId);
+            }
+            if (inv.status !== 'pending' && inv.status !== 'accepted') {
+                throw new InvitationNotPendingError(invitationId, inv.status);
+            }
+
+            // Idempotent: re-use existing Relation if any.
+            const existing = await trx
+                .selectFrom('relations')
+                .selectAll()
+                .where('teacher_id', '=', inv.teacher_id)
+                .where('student_id', '=', userId)
+                .executeTakeFirst();
+
+            if (existing) {
+                if (inv.status === 'pending') {
+                    await trx.updateTable('invitations')
+                        .set({ status: 'accepted', accepted_at: new Date().toISOString() })
+                        .where('id', '=', invitationId)
+                        .execute();
+                }
+                return toRelation(existing);
+            }
+
+            const id = crypto.randomUUID();
+            const createdAt = new Date().toISOString();
+            await trx.insertInto('relations').values({
+                id,
+                teacher_id: inv.teacher_id,
+                student_id: userId,
+                invitation_id: invitationId,
+                created_at: createdAt,
+            }).execute();
+
+            await trx.updateTable('invitations')
+                .set({ status: 'accepted', accepted_at: new Date().toISOString() })
+                .where('id', '=', invitationId)
+                .execute();
+
+            return {
+                id,
+                teacherId: inv.teacher_id,
+                studentId: userId,
+                invitationId,
+                createdAt,
+            };
+        });
+    }
+
+    async declineInvitation(invitationId: string, _userId: string, userEmail: string): Promise<void> {
+        const email = userEmail.trim().toLowerCase();
+        const inv = await this.db
+            .selectFrom('invitations')
+            .select(['invitee_email', 'status'])
+            .where('id', '=', invitationId)
+            .executeTakeFirst();
+        if (!inv || inv.invitee_email !== email) throw new NotInviteeError(invitationId);
+        if (inv.status !== 'pending') throw new InvitationNotPendingError(invitationId, inv.status);
+
+        await this.db.updateTable('invitations')
+            .set({ status: 'declined' })
+            .where('id', '=', invitationId)
+            .where('status', '=', 'pending')
+            .execute();
+    }
+
+    async listForUser(userEmail: string): Promise<Invitation[]> {
+        const email = userEmail.trim().toLowerCase();
+        const rows = await this.db
+            .selectFrom('invitations')
+            .selectAll()
+            .where('invitee_email', '=', email)
+            .where('status', '=', 'pending')
+            .orderBy('created_at', 'desc')
+            .execute();
+        return rows.map(toInvitation);
     }
 
     async listByTeacher(teacherId: string): Promise<Invitation[]> {

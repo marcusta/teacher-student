@@ -11,10 +11,21 @@ export interface Invitation {
     acceptedAt: null | string;
 }
 
+export interface Relation {
+    id: string;
+    teacherId: string;
+    studentId: string;
+    invitationId: string;
+    createdAt: string;
+}
+
 export interface InvitationsApi {
     create(input: { inviteeEmail: string }): Promise<Invitation>;
     revoke(input: { invitationId: string }): Promise<{ changed: boolean }>;
     list(): Promise<Invitation[]>;
+    inbox(): Promise<Invitation[]>;
+    accept(input: { invitationId: string }): Promise<Relation>;
+    decline(input: { invitationId: string }): Promise<{ ok: boolean }>;
 }
 
 export function createInvitationsClient(baseUrl: string): InvitationsApi {
@@ -27,6 +38,15 @@ export function createInvitationsClient(baseUrl: string): InvitationsApi {
         },
         async list() {
             return apiFetch({ method: 'GET', url: `${baseUrl}/invitations` });
+        },
+        async inbox() {
+            return apiFetch({ method: 'GET', url: `${baseUrl}/invitations/inbox` });
+        },
+        async accept(input) {
+            return apiFetch({ method: 'POST', url: `${baseUrl}/invitations/accept`, body: input });
+        },
+        async decline(input) {
+            return apiFetch({ method: 'POST', url: `${baseUrl}/invitations/decline`, body: input });
         },
     };
 }
