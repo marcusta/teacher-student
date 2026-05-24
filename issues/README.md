@@ -19,3 +19,6 @@ Lokala issues för teacher-student. Filer numreras `NNN-kebab-name.md`.
 | [004](004-teacher-sees-students.md) | Teacher sees Students list | AFK | 003 |
 
 Efter 004 är hela `User ↔ Relation`-grafen på plats. Då kan följande features byggas i valfri ordning mot den: Horse, Exercise, Library, Lesson, Program, Training Session, Note, Question, Goal.
+| [005](005-teacher-creates-and-lists-exercises.md) | Teacher creates and lists Exercises | AFK | 004 |
+| [006](006-teacher-edits-exercise.md) | Teacher edits an Exercise | AFK | 005 |
+| [007](007-teacher-deletes-exercise.md) | Teacher deletes an Exercise | AFK | 005 |

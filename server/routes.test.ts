@@ -7,9 +7,10 @@ import { SessionStore, createAuth, createAuthApi } from '@basics/core/server/aut
 import { createRegisterApi } from './api/register.api';
 import { createInvitationsApi } from './api/invitations.api';
 import { createStudentsApi } from './api/students.api';
+import { createExercisesApi } from './api/exercises.api';
 
 async function setup(seeds: SeedFn[] = []) {
-    const { userService, invitationService, relationService } = await createTestDb(...seeds);
+    const { userService, invitationService, relationService, exerciseService } = await createTestDb(...seeds);
 
     const sessions = new SessionStore(':memory:');
     await sessions.init();
@@ -21,6 +22,7 @@ async function setup(seeds: SeedFn[] = []) {
     mount(app, '/api', createRegisterApi(userService, sessions));
     mount(app, '/api', createInvitationsApi(invitationService));
     mount(app, '/api', createStudentsApi(relationService));
+    mount(app, '/api', createExercisesApi(exerciseService));
 
     return { app, sessions };
 }
@@ -370,4 +372,45 @@ test('GET /api/students/:id returns 404 for another teacher\'s student', async (
 
     const res = await req(app, 'GET', `/api/students/${studentId}`, undefined, teacherCookie);
     expect(res.status).toBe(404);
+});
+
+// --- Exercises ---
+
+test('GET /api/exercises without session returns 401', async () => {
+    const { app } = await setup();
+    const res = await req(app, 'GET', '/api/exercises');
+    expect(res.status).toBe(401);
+});
+
+test('POST /api/exercises happy path returns created Exercise', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const res = await req(app, 'POST', '/api/exercises',
+        { name: 'Skritt', description: 'Lös tygel.' }, cookie);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.id).toBeString();
+    expect(data.name).toBe('Skritt');
+    expect(data.description).toBe('Lös tygel.');
+});
+
+test('POST /api/exercises empty name returns 400', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const res = await req(app, 'POST', '/api/exercises', { name: '' }, cookie);
+    expect(res.status).toBe(400);
+});
+
+test('GET /api/exercises lists only my exercises', async () => {
+    const { app } = await setup([seedUser]);
+    const annaCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    await req(app, 'POST', '/api/exercises', { name: 'A1' }, annaCookie);
+
+    const otherCookie = await registerAndLogin(app, 'other@example.com');
+    await req(app, 'POST', '/api/exercises', { name: 'O1' }, otherCookie);
+
+    const res = await req(app, 'GET', '/api/exercises', undefined, annaCookie);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.map((e: { name: string }) => e.name)).toEqual(['A1']);
 });

@@ -4,6 +4,16 @@ export interface Database {
     users: UsersTable;
     invitations: InvitationsTable;
     relations: RelationsTable;
+    exercises: ExercisesTable;
+}
+
+export interface ExercisesTable {
+    id: string;
+    teacher_id: string;
+    name: string;
+    description: string;
+    created_at: Generated<string>;
+    updated_at: Generated<string>;
 }
 
 export interface RelationsTable {
