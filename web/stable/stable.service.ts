@@ -27,4 +27,18 @@ export class StableService {
         this.items.set([result, ...this.items.get()]);
         return true;
     }
+
+    async get(id: string): Promise<Horse | null> {
+        const result = await request(this.loading, this.error, () => api.horses.get({ id }));
+        return result ?? null;
+    }
+
+    async update(id: string, patch: { name?: string }): Promise<Horse | null> {
+        const result = await request(this.loading, this.error, () =>
+            api.horses.update({ id, ...patch }),
+        );
+        if (!result) return null;
+        this.items.set(this.items.get().map((h) => h.id === id ? result : h));
+        return result;
+    }
 }

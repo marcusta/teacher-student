@@ -31,6 +31,51 @@ test('listForStudent returns empty when none', async () => {
     expect(await horseService.listForStudent(student.id)).toEqual([]);
 });
 
+test('getForStudent returns own Horse', async () => {
+    const { horseService, student } = await seedStudent();
+    const h = await horseService.create(student.id, { name: 'X' });
+    expect(await horseService.getForStudent(student.id, h.id)).toMatchObject({ id: h.id });
+});
+
+test('getForStudent returns null for other student or missing', async () => {
+    const ctx = await seedStudent('s1@example.com');
+    const h = await ctx.horseService.create(ctx.student.id, { name: 'X' });
+    const s2 = await ctx.userService.register({
+        email: 's2@example.com', password: 'secret123', displayName: 'S2',
+    });
+    expect(await ctx.horseService.getForStudent(s2.id, h.id)).toBeNull();
+    expect(await ctx.horseService.getForStudent(ctx.student.id, 'missing')).toBeNull();
+});
+
+test('update refreshes updated_at and returns updated Horse', async () => {
+    const { horseService, student } = await seedStudent();
+    const h = await horseService.create(student.id, { name: 'Old' });
+    await new Promise((r) => setTimeout(r, 5));
+    const updated = await horseService.update(student.id, h.id, { name: 'New' });
+    expect(updated.name).toBe('New');
+    expect(updated.updatedAt > h.updatedAt).toBe(true);
+});
+
+test('update on other student\'s horse throws NotFoundError', async () => {
+    const ctx = await seedStudent('s1@example.com');
+    const h = await ctx.horseService.create(ctx.student.id, { name: 'X' });
+    const s2 = await ctx.userService.register({
+        email: 's2@example.com', password: 'secret123', displayName: 'S2',
+    });
+    await expect(ctx.horseService.update(s2.id, h.id, { name: 'Hack' })).rejects.toThrow();
+});
+
+test('update on missing horse throws NotFoundError', async () => {
+    const { horseService, student } = await seedStudent();
+    await expect(horseService.update(student.id, 'missing', { name: 'X' })).rejects.toThrow();
+});
+
+test('update rejects empty name when provided', async () => {
+    const { horseService, student } = await seedStudent();
+    const h = await horseService.create(student.id, { name: 'X' });
+    await expect(horseService.update(student.id, h.id, { name: '   ' })).rejects.toThrow();
+});
+
 test('listForStudent returns only own horses sorted by created_at DESC', async () => {
     const ctx = await seedStudent('s1@example.com');
     const s2 = await ctx.userService.register({

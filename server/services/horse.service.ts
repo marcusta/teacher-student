@@ -1,4 +1,5 @@
 import type { Kysely, Selectable } from 'kysely';
+import { NotFoundError } from '@basics/core/server/auth';
 import type { Database, HorsesTable } from '../db/schema';
 
 export interface Horse {
@@ -12,6 +13,10 @@ export interface Horse {
 
 export interface CreateHorseInput {
     name: string;
+}
+
+export interface UpdateHorseInput {
+    name?: string;
 }
 
 function toHorse(row: Selectable<HorsesTable>): Horse {
@@ -49,6 +54,39 @@ export class HorseService {
         }).execute();
 
         return { id, studentId, name, archivedAt: null, createdAt: now, updatedAt: now };
+    }
+
+    async getForStudent(studentId: string, horseId: string): Promise<Horse | null> {
+        const row = await this.db
+            .selectFrom('horses')
+            .selectAll()
+            .where('id', '=', horseId)
+            .where('student_id', '=', studentId)
+            .executeTakeFirst();
+        return row ? toHorse(row) : null;
+    }
+
+    async update(studentId: string, horseId: string, input: UpdateHorseInput): Promise<Horse> {
+        const patch: Partial<{ name: string; updated_at: string }> = {};
+        if (input.name !== undefined) {
+            const name = input.name.trim();
+            if (name.length === 0) throw new Error('Horse name must not be empty');
+            patch.name = name;
+        }
+        patch.updated_at = new Date().toISOString();
+
+        const rows = await this.db
+            .updateTable('horses')
+            .set(patch)
+            .where('id', '=', horseId)
+            .where('student_id', '=', studentId)
+            .returning('id')
+            .execute();
+        if (rows.length === 0) throw new NotFoundError('Horse not found');
+
+        const updated = await this.getForStudent(studentId, horseId);
+        if (!updated) throw new NotFoundError('Horse not found');
+        return updated;
     }
 
     async listForStudent(studentId: string): Promise<Horse[]> {

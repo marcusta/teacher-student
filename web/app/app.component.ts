@@ -10,7 +10,7 @@ import { InvitationsComponent } from '../invitations/invitations.component';
 import { InboxComponent } from '../inbox/inbox.component';
 import { StudentsShellComponent } from '../students/students-shell.component';
 import { LibraryShellComponent } from '../library/library-shell.component';
-import { StableComponent } from '../stable/stable.component';
+import { StableShellComponent } from '../stable/stable-shell.component';
 
 const tpl = template(`
     <div class="app-layout">
@@ -62,7 +62,7 @@ export class AppComponent extends Component {
             '/inbox': InboxComponent,
             '/students': StudentsShellComponent,
             '/library': LibraryShellComponent,
-            '/hastar': StableComponent,
+            '/hastar': StableShellComponent,
         }, HomeComponent);
 
         return frag;

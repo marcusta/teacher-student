@@ -1,4 +1,4 @@
-import { Component, Signal, template } from '@basics/core/client/core';
+import { Component, Router, Signal, template } from '@basics/core/client/core';
 import { t } from '../theme';
 import { s, btn, input } from '../css';
 import { StableService } from './stable.service';
@@ -82,12 +82,15 @@ export class StableComponent extends Component {
                 border-radius: ${t('radius')};
                 color: ${t('text')};
                 text-decoration: none;
+                transition: background 0.15s;
+                &:hover { background: ${t('hover-bg')}; }
             }
             & .stable__item-name { font-weight: 500; }
         }
     `;
 
     private svc = this.inject(StableService);
+    private router = this.inject(Router);
     private nameVal = new Signal('');
 
     onMount(): void {
@@ -124,13 +127,15 @@ export class StableComponent extends Component {
 
     private renderItem(item: Horse): HTMLElement {
         const li = document.createElement('li');
-        const row = document.createElement('div');
-        row.className = 'stable__item';
+        const a = document.createElement('a');
+        a.className = 'stable__item';
+        a.href = `/hastar/${item.id}`;
+        a.onclick = (e) => { e.preventDefault(); this.router.navigate(`/hastar/${item.id}`); };
         const name = document.createElement('div');
         name.className = 'stable__item-name';
         name.textContent = item.name;
-        row.appendChild(name);
-        li.appendChild(row);
+        a.appendChild(name);
+        li.appendChild(a);
         return li;
     }
 }
