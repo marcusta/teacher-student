@@ -22,7 +22,7 @@ async function setup(seeds: SeedFn[] = []) {
     mount(app, '/api', createAuthApi({ verify: (u, p) => userService.verify(u, p), sessions }));
     mount(app, '/api', createRegisterApi(userService, sessions));
     mount(app, '/api', createInvitationsApi(invitationService));
-    mount(app, '/api', createStudentsApi(relationService));
+    mount(app, '/api', createStudentsApi(relationService, horseService));
     mount(app, '/api', createExercisesApi(exerciseService));
     mount(app, '/api', createHorsesApi(horseService));
 
@@ -603,4 +603,42 @@ test('DELETE /api/horses/:id on other student returns 404', async () => {
     const otherCookie = await registerAndLogin(app, 'other@example.com');
     const res = await req(app, 'DELETE', `/api/horses/${id}`, undefined, otherCookie);
     expect(res.status).toBe(404);
+});
+
+test('GET /api/students/:id/horses returns connected student\'s horses', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentCookie = await registerAndLogin(app, 'student@example.com');
+
+    // Invite + accept to create the relation.
+    const inv = await (await req(app, 'POST', '/api/invitations',
+        { inviteeEmail: 'student@example.com' }, teacherCookie)).json();
+    await req(app, 'POST', '/api/invitations/accept', { invitationId: inv.id }, studentCookie);
+
+    // Student adds horses.
+    await req(app, 'POST', '/api/horses', { name: 'Visible' }, studentCookie);
+    const arch = await (await req(app, 'POST', '/api/horses', { name: 'Archived' }, studentCookie)).json();
+    await req(app, 'DELETE', `/api/horses/${arch.id}`, undefined, studentCookie);
+
+    // Teacher fetches.
+    const meRes = await (await req(app, 'GET', '/api/auth/me', undefined, studentCookie)).json();
+    const res = await req(app, 'GET', `/api/students/${meRes.id}/horses`, undefined, teacherCookie);
+    expect(res.status).toBe(200);
+    const list = await res.json();
+    expect(list.map((h: any) => h.name)).toEqual(['Visible']);
+});
+
+test('GET /api/students/:id/horses returns 404 for stranger', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const strangerCookie = await registerAndLogin(app, 'stranger@example.com');
+    const me = await (await req(app, 'GET', '/api/auth/me', undefined, strangerCookie)).json();
+    const res = await req(app, 'GET', `/api/students/${me.id}/horses`, undefined, teacherCookie);
+    expect(res.status).toBe(404);
+});
+
+test('GET /api/students/:id/horses without session returns 401', async () => {
+    const { app } = await setup();
+    const res = await req(app, 'GET', '/api/students/anyone/horses');
+    expect(res.status).toBe(401);
 });

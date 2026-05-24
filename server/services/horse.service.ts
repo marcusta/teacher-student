@@ -122,4 +122,29 @@ export class HorseService {
             .execute();
         return rows.map(toHorse);
     }
+
+    /**
+     * Read-only view of a connected Student's stable for a Teacher. Requires
+     * an existing `Relation(teacher_id, student_id)`; otherwise throws
+     * `NotFoundError` (leak-safe — same response whether the relation is
+     * missing or the student doesn't exist).
+     */
+    async listForStudentAsTeacher(teacherId: string, studentId: string): Promise<Horse[]> {
+        const rel = await this.db
+            .selectFrom('relations')
+            .select('id')
+            .where('teacher_id', '=', teacherId)
+            .where('student_id', '=', studentId)
+            .executeTakeFirst();
+        if (!rel) throw new NotFoundError('Student not found');
+
+        const rows = await this.db
+            .selectFrom('horses')
+            .selectAll()
+            .where('student_id', '=', studentId)
+            .where('archived_at', 'is', null)
+            .orderBy('created_at', 'desc')
+            .execute();
+        return rows.map(toHorse);
+    }
 }

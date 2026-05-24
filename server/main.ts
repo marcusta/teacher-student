@@ -26,7 +26,7 @@ const { sessions } = await bootstrapAuth({
 
 mount(app, '/api', createRegisterApi(userService, sessions));
 mount(app, '/api', createInvitationsApi(invitationService));
-mount(app, '/api', createStudentsApi(relationService));
+mount(app, '/api', createStudentsApi(relationService, horseService));
 mount(app, '/api', createExercisesApi(exerciseService));
 mount(app, '/api', createHorsesApi(horseService));
 
