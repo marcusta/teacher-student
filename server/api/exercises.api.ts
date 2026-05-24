@@ -57,5 +57,15 @@ export function createExercisesApi(svc: ExerciseService) {
                 return svc.update(user.id, id, patch);
             },
         },
+        delete: {
+            method: 'DELETE' as const,
+            path: '/exercises/:id',
+            middleware: [requireAuth()],
+            fn: async (input: { id: string }, c: Context) => {
+                const user = requireUser(c);
+                await svc.delete(user.id, input.id);
+                return { ok: true };
+            },
+        },
     };
 }

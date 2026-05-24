@@ -99,3 +99,26 @@ test('update rejects empty name when provided', async () => {
     await expect(exerciseService.update(teacher.id, ex.id, { name: '   ' }))
         .rejects.toThrow();
 });
+
+test('delete removes own exercise', async () => {
+    const { exerciseService, teacher } = await seedTeacher();
+    const ex = await exerciseService.create(teacher.id, { name: 'X' });
+    await exerciseService.delete(teacher.id, ex.id);
+    expect(await exerciseService.getForTeacher(teacher.id, ex.id)).toBeNull();
+});
+
+test('delete on other teacher\'s exercise throws NotFoundError', async () => {
+    const ctx = await seedTeacher('t1@example.com');
+    const ex = await ctx.exerciseService.create(ctx.teacher.id, { name: 'X' });
+    const t2 = await ctx.userService.register({
+        email: 't2@example.com', password: 'secret123', displayName: 'T2',
+    });
+    await expect(ctx.exerciseService.delete(t2.id, ex.id)).rejects.toThrow();
+    // Still exists for original owner.
+    expect(await ctx.exerciseService.getForTeacher(ctx.teacher.id, ex.id)).not.toBeNull();
+});
+
+test('delete on missing exercise throws NotFoundError', async () => {
+    const { exerciseService, teacher } = await seedTeacher();
+    await expect(exerciseService.delete(teacher.id, 'missing')).rejects.toThrow();
+});

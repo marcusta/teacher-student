@@ -95,6 +95,16 @@ export class ExerciseService {
         return updated;
     }
 
+    async delete(teacherId: string, exerciseId: string): Promise<void> {
+        const rows = await this.db
+            .deleteFrom('exercises')
+            .where('id', '=', exerciseId)
+            .where('teacher_id', '=', teacherId)
+            .returning('id')
+            .execute();
+        if (rows.length === 0) throw new NotFoundError('Exercise not found');
+    }
+
     async listForTeacher(teacherId: string): Promise<Exercise[]> {
         const rows = await this.db
             .selectFrom('exercises')

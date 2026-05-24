@@ -41,4 +41,11 @@ export class LibraryService {
         this.items.set(this.items.get().map((e) => e.id === id ? result : e));
         return result;
     }
+
+    async delete(id: string): Promise<boolean> {
+        const result = await request(this.loading, this.error, () => api.exercises.delete({ id }));
+        if (!result) return false;
+        this.items.set(this.items.get().filter((e) => e.id !== id));
+        return true;
+    }
 }
