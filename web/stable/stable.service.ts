@@ -41,4 +41,11 @@ export class StableService {
         this.items.set(this.items.get().map((h) => h.id === id ? result : h));
         return result;
     }
+
+    async archive(id: string): Promise<boolean> {
+        const result = await request(this.loading, this.error, () => api.horses.delete({ id }));
+        if (!result) return false;
+        this.items.set(this.items.get().filter((h) => h.id !== id));
+        return true;
+    }
 }

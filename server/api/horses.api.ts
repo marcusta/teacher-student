@@ -55,5 +55,17 @@ export function createHorsesApi(svc: HorseService) {
                 return svc.update(user.id, id, patch);
             },
         },
+        // Semantic delete = archive (soft-delete). Lessons/notes that reference
+        // a horse should survive its removal, per SCOPE.md.
+        delete: {
+            method: 'DELETE' as const,
+            path: '/horses/:id',
+            middleware: [requireAuth()],
+            fn: async (input: { id: string }, c: Context) => {
+                const user = requireUser(c);
+                await svc.archive(user.id, input.id);
+                return { ok: true };
+            },
+        },
     };
 }

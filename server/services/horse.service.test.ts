@@ -76,6 +76,49 @@ test('update rejects empty name when provided', async () => {
     await expect(horseService.update(student.id, h.id, { name: '   ' })).rejects.toThrow();
 });
 
+test('archive sets archived_at on own horse', async () => {
+    const { horseService, student } = await seedStudent();
+    const h = await horseService.create(student.id, { name: 'X' });
+    await horseService.archive(student.id, h.id);
+    const got = await horseService.getForStudent(student.id, h.id);
+    expect(got?.archivedAt).toBeString();
+});
+
+test('listForStudent excludes archived horses', async () => {
+    const { horseService, student } = await seedStudent();
+    const keep = await horseService.create(student.id, { name: 'Keep' });
+    const drop = await horseService.create(student.id, { name: 'Drop' });
+    await horseService.archive(student.id, drop.id);
+    const list = await horseService.listForStudent(student.id);
+    expect(list.map((h) => h.id)).toEqual([keep.id]);
+});
+
+test('archive on other student\'s horse throws NotFoundError', async () => {
+    const ctx = await seedStudent('s1@example.com');
+    const h = await ctx.horseService.create(ctx.student.id, { name: 'X' });
+    const s2 = await ctx.userService.register({
+        email: 's2@example.com', password: 'secret123', displayName: 'S2',
+    });
+    await expect(ctx.horseService.archive(s2.id, h.id)).rejects.toThrow();
+    // Still active for original owner.
+    expect((await ctx.horseService.getForStudent(ctx.student.id, h.id))?.archivedAt).toBeNull();
+});
+
+test('archive on missing horse throws NotFoundError', async () => {
+    const { horseService, student } = await seedStudent();
+    await expect(horseService.archive(student.id, 'missing')).rejects.toThrow();
+});
+
+test('archive on already-archived horse is idempotent', async () => {
+    const { horseService, student } = await seedStudent();
+    const h = await horseService.create(student.id, { name: 'X' });
+    await horseService.archive(student.id, h.id);
+    const first = (await horseService.getForStudent(student.id, h.id))?.archivedAt;
+    await horseService.archive(student.id, h.id);
+    const second = (await horseService.getForStudent(student.id, h.id))?.archivedAt;
+    expect(first).toBe(second!);
+});
+
 test('listForStudent returns only own horses sorted by created_at DESC', async () => {
     const ctx = await seedStudent('s1@example.com');
     const s2 = await ctx.userService.register({

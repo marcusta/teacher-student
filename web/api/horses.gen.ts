@@ -15,6 +15,7 @@ export interface HorsesApi {
     list(): Promise<Horse[]>;
     get(input: { id: string }): Promise<Horse>;
     update(input: { name?: string; id: string }): Promise<Horse>;
+    delete(input: { id: string }): Promise<{ ok: boolean }>;
 }
 
 export function createHorsesClient(baseUrl: string): HorsesApi {
@@ -39,6 +40,9 @@ export function createHorsesClient(baseUrl: string): HorsesApi {
             for (const [k, v] of Object.entries(input as any))
                 if (!pathParams.has(k)) body[k] = v;
             return apiFetch({ method: 'PATCH', url: `${baseUrl}/horses/${input.id}`, body });
+        },
+        async delete(input) {
+            return apiFetch({ method: 'DELETE', url: `${baseUrl}/horses/${input.id}` });
         },
     };
 }

@@ -12,6 +12,7 @@ const tpl = template(`
             <input bind="nameInput" type="text" placeholder="Namn" maxlength="200" required>
             <div class="horse-edit__row">
                 <button bind="submit" type="submit">Spara</button>
+                <button bind="archive" type="button" class="horse-edit__archive">Arkivera</button>
                 <div class="error" bind="error"></div>
             </div>
         </form>
@@ -52,6 +53,11 @@ export class HorseEditComponent extends Component {
                 align-items: center;
                 gap: ${s('md')};
                 & button { ${btn()} }
+                & .horse-edit__archive {
+                    background: transparent;
+                    color: ${t('error')};
+                    border: 1px solid ${t('error')};
+                }
             }
 
             & .error {
@@ -108,6 +114,14 @@ export class HorseEditComponent extends Component {
                     const id = this.router.route.get().split('/')[2] ?? '';
                     const updated = await this.svc.update(id, { name });
                     if (updated) this.router.navigate('/hastar');
+                },
+            },
+            archive: {
+                onclick: async () => {
+                    if (!window.confirm('Arkivera hästen?')) return;
+                    const id = this.router.route.get().split('/')[2] ?? '';
+                    const ok = await this.svc.archive(id);
+                    if (ok) this.router.navigate('/hastar');
                 },
             },
             error: { textContent: () => this.svc.error.get()?.message ?? '' },

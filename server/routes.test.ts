@@ -583,3 +583,24 @@ test('PATCH /api/horses/:id empty name returns 400', async () => {
     const res = await req(app, 'PATCH', `/api/horses/${id}`, { name: '' }, cookie);
     expect(res.status).toBe(400);
 });
+
+test('DELETE /api/horses/:id archives own (excluded from list)', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/horses', { name: 'X' }, cookie);
+    const { id } = await created.json();
+    const res = await req(app, 'DELETE', `/api/horses/${id}`, undefined, cookie);
+    expect(res.status).toBe(200);
+    const list = await (await req(app, 'GET', '/api/horses', undefined, cookie)).json();
+    expect(list.length).toBe(0);
+});
+
+test('DELETE /api/horses/:id on other student returns 404', async () => {
+    const { app } = await setup([seedUser]);
+    const annaCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/horses', { name: 'X' }, annaCookie);
+    const { id } = await created.json();
+    const otherCookie = await registerAndLogin(app, 'other@example.com');
+    const res = await req(app, 'DELETE', `/api/horses/${id}`, undefined, otherCookie);
+    expect(res.status).toBe(404);
+});

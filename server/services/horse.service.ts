@@ -89,6 +89,29 @@ export class HorseService {
         return updated;
     }
 
+    /**
+     * Archive a Horse (soft-delete). Idempotent: archiving an already-archived
+     * horse is a no-op success. Throws `NotFoundError` if the horse does not
+     * exist or belongs to a different student (leak-safe).
+     */
+    async archive(studentId: string, horseId: string): Promise<void> {
+        const row = await this.db
+            .selectFrom('horses')
+            .select(['archived_at'])
+            .where('id', '=', horseId)
+            .where('student_id', '=', studentId)
+            .executeTakeFirst();
+        if (!row) throw new NotFoundError('Horse not found');
+        if (row.archived_at !== null) return; // idempotent
+
+        await this.db
+            .updateTable('horses')
+            .set({ archived_at: new Date().toISOString() })
+            .where('id', '=', horseId)
+            .where('student_id', '=', studentId)
+            .execute();
+    }
+
     async listForStudent(studentId: string): Promise<Horse[]> {
         const rows = await this.db
             .selectFrom('horses')
