@@ -9,6 +9,7 @@ const tpl = template(`
         <a bind="invitationsLink" href="/invitations">Inbjudningar</a>
         <a bind="studentsLink" href="/students">Mina elever</a>
         <a bind="libraryLink" href="/library">Bibliotek</a>
+        <a bind="stableLink" href="/hastar">Hästar</a>
         <a bind="inboxLink" href="/inbox">
             Inkorg
             <span bind="inboxBadge" class="nav__badge"></span>
@@ -73,6 +74,7 @@ export class NavComponent extends Component {
             invitationsLink: this.router.link('/invitations'),
             studentsLink: this.router.link('/students'),
             libraryLink: this.router.link('/library'),
+            stableLink: this.router.link('/hastar'),
             inboxLink: this.router.link('/inbox'),
             inboxBadge: {
                 textContent: () => String(this.inbox.pendingCount.get()),

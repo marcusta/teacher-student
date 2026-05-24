@@ -22,3 +22,7 @@ Efter 004 är hela `User ↔ Relation`-grafen på plats. Då kan följande featu
 | [005](005-teacher-creates-and-lists-exercises.md) | Teacher creates and lists Exercises | AFK | 004 |
 | [006](006-teacher-edits-exercise.md) | Teacher edits an Exercise | AFK | 005 |
 | [007](007-teacher-deletes-exercise.md) | Teacher deletes an Exercise | AFK | 005 |
+| [008](008-student-creates-and-lists-horses.md) | Student creates and lists own Horses | AFK | 004 |
+| [009](009-student-edits-horse.md) | Student edits a Horse | AFK | 008 |
+| [010](010-student-archives-horse.md) | Student archives a Horse | AFK | 008 |
+| [011](011-teacher-sees-student-horses.md) | Teacher sees a Student's Horses | AFK | 008 |

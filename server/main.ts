@@ -9,12 +9,13 @@ import { createRegisterApi } from './api/register.api';
 import { createInvitationsApi } from './api/invitations.api';
 import { createStudentsApi } from './api/students.api';
 import { createExercisesApi } from './api/exercises.api';
+import { createHorsesApi } from './api/horses.api';
 
 // --- Composition root ---
 
 const { app, db, bootstrapAuth } = await createApp<Database>(path.join(import.meta.dir, 'db/migrations'));
 
-const { userService, invitationService, relationService, exerciseService } = createServices(db);
+const { userService, invitationService, relationService, exerciseService, horseService } = createServices(db);
 
 const { sessions } = await bootstrapAuth({
     verify: (u, p) => userService.verify(u, p),
@@ -27,6 +28,7 @@ mount(app, '/api', createRegisterApi(userService, sessions));
 mount(app, '/api', createInvitationsApi(invitationService));
 mount(app, '/api', createStudentsApi(relationService));
 mount(app, '/api', createExercisesApi(exerciseService));
+mount(app, '/api', createHorsesApi(horseService));
 
 // --- Dev seed ---
 

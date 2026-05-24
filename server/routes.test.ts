@@ -8,9 +8,10 @@ import { createRegisterApi } from './api/register.api';
 import { createInvitationsApi } from './api/invitations.api';
 import { createStudentsApi } from './api/students.api';
 import { createExercisesApi } from './api/exercises.api';
+import { createHorsesApi } from './api/horses.api';
 
 async function setup(seeds: SeedFn[] = []) {
-    const { userService, invitationService, relationService, exerciseService } = await createTestDb(...seeds);
+    const { userService, invitationService, relationService, exerciseService, horseService } = await createTestDb(...seeds);
 
     const sessions = new SessionStore(':memory:');
     await sessions.init();
@@ -23,6 +24,7 @@ async function setup(seeds: SeedFn[] = []) {
     mount(app, '/api', createInvitationsApi(invitationService));
     mount(app, '/api', createStudentsApi(relationService));
     mount(app, '/api', createExercisesApi(exerciseService));
+    mount(app, '/api', createHorsesApi(horseService));
 
     return { app, sessions };
 }
@@ -493,4 +495,42 @@ test('DELETE /api/exercises/:id without session returns 401', async () => {
     const { app } = await setup();
     const res = await req(app, 'DELETE', '/api/exercises/anything');
     expect(res.status).toBe(401);
+});
+
+// --- Horses ---
+
+test('GET /api/horses without session returns 401', async () => {
+    const { app } = await setup();
+    const res = await req(app, 'GET', '/api/horses');
+    expect(res.status).toBe(401);
+});
+
+test('POST /api/horses happy path returns created Horse', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const res = await req(app, 'POST', '/api/horses', { name: 'Pegasus' }, cookie);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.name).toBe('Pegasus');
+    expect(body.archivedAt).toBeNull();
+});
+
+test('POST /api/horses empty name returns 400', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const res = await req(app, 'POST', '/api/horses', { name: '' }, cookie);
+    expect(res.status).toBe(400);
+});
+
+test('GET /api/horses lists only my horses', async () => {
+    const { app } = await setup([seedUser]);
+    const annaCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    await req(app, 'POST', '/api/horses', { name: 'A1' }, annaCookie);
+    const otherCookie = await registerAndLogin(app, 'other@example.com');
+    await req(app, 'POST', '/api/horses', { name: 'O1' }, otherCookie);
+
+    const res = await req(app, 'GET', '/api/horses', undefined, annaCookie);
+    const list = await res.json();
+    expect(list.length).toBe(1);
+    expect(list[0].name).toBe('A1');
 });

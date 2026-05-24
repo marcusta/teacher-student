@@ -5,6 +5,16 @@ export interface Database {
     invitations: InvitationsTable;
     relations: RelationsTable;
     exercises: ExercisesTable;
+    horses: HorsesTable;
+}
+
+export interface HorsesTable {
+    id: string;
+    student_id: string;
+    name: string;
+    archived_at: string | null;
+    created_at: Generated<string>;
+    updated_at: Generated<string>;
 }
 
 export interface ExercisesTable {
