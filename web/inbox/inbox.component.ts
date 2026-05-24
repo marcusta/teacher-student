@@ -2,7 +2,7 @@ import { Component, template } from '@basics/core/client/core';
 import { t } from '../theme';
 import { s, btn } from '../css';
 import { InboxService } from './inbox.service';
-import type { Invitation } from '../api';
+import type { InboxInvitation } from '../api';
 
 const tpl = template(`
     <div class="inbox" bind="root">
@@ -95,13 +95,13 @@ export class InboxComponent extends Component {
         return frag;
     }
 
-    private renderItem(item: Invitation): HTMLElement {
+    private renderItem(item: InboxInvitation): HTMLElement {
         const li = document.createElement('li');
         li.className = 'inbox__item';
 
         const from = document.createElement('span');
         from.className = 'inbox__from';
-        from.textContent = `Inbjudan från lärare (${item.teacherId.slice(0, 8)}…)`;
+        from.textContent = `Inbjudan från ${item.teacherDisplayName} (${item.teacherEmail})`;
         li.appendChild(from);
 
         const accept = document.createElement('button');

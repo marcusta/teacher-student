@@ -130,6 +130,19 @@ test('listForUser returns pending invitations matching email case-insensitively'
     expect(list[0].status).toBe('pending');
 });
 
+test('listForUser includes inviting teacher display name and email', async () => {
+    const { invitationService, userService } = await seedTeacher();
+    const teacher2 = await userService.register({
+        email: 'mary@example.com', password: 'secret123', displayName: 'Mary Equestrian',
+    });
+    await invitationService.createInvitation(teacher2.id, 'student@example.com');
+
+    const list = await invitationService.listForUser('student@example.com');
+    expect(list.length).toBe(1);
+    expect(list[0].teacherDisplayName).toBe('Mary Equestrian');
+    expect(list[0].teacherEmail).toBe('mary@example.com');
+});
+
 test('listForUser excludes non-pending and other emails', async () => {
     const { invitationService, userService, teacher } = await seedTeacher();
     const other = await userService.register({

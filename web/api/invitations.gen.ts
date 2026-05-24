@@ -11,6 +11,18 @@ export interface Invitation {
     acceptedAt: null | string;
 }
 
+export interface InboxInvitation {
+    teacherDisplayName: string;
+    teacherEmail: string;
+    id: string;
+    teacherId: string;
+    inviteeEmail: string;
+    status: 'pending' | 'accepted' | 'declined' | 'revoked' | 'expired';
+    createdAt: string;
+    expiresAt: string;
+    acceptedAt: null | string;
+}
+
 export interface Relation {
     id: string;
     teacherId: string;
@@ -23,7 +35,7 @@ export interface InvitationsApi {
     create(input: { inviteeEmail: string }): Promise<Invitation>;
     revoke(input: { invitationId: string }): Promise<{ changed: boolean }>;
     list(): Promise<Invitation[]>;
-    inbox(): Promise<Invitation[]>;
+    inbox(): Promise<InboxInvitation[]>;
     accept(input: { invitationId: string }): Promise<Relation>;
     decline(input: { invitationId: string }): Promise<{ ok: boolean }>;
 }

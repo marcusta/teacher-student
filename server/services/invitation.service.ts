@@ -23,6 +23,12 @@ export interface Invitation {
     acceptedAt: string | null;
 }
 
+/** Invitation enriched with inviting teacher's identity for the invitee's inbox. */
+export interface InboxInvitation extends Invitation {
+    teacherDisplayName: string;
+    teacherEmail: string;
+}
+
 const INVITATION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** Thrown when a user tries to act on an invitation they don't own. */
@@ -223,16 +229,31 @@ export class InvitationService {
             .execute();
     }
 
-    async listForUser(userEmail: string): Promise<Invitation[]> {
+    async listForUser(userEmail: string): Promise<InboxInvitation[]> {
         const email = userEmail.trim().toLowerCase();
         const rows = await this.db
             .selectFrom('invitations')
-            .selectAll()
-            .where('invitee_email', '=', email)
-            .where('status', '=', 'pending')
-            .orderBy('created_at', 'desc')
+            .innerJoin('users', 'users.id', 'invitations.teacher_id')
+            .select([
+                'invitations.id as id',
+                'invitations.teacher_id as teacher_id',
+                'invitations.invitee_email as invitee_email',
+                'invitations.status as status',
+                'invitations.created_at as created_at',
+                'invitations.expires_at as expires_at',
+                'invitations.accepted_at as accepted_at',
+                'users.display_name as teacher_display_name',
+                'users.email as teacher_email',
+            ])
+            .where('invitations.invitee_email', '=', email)
+            .where('invitations.status', '=', 'pending')
+            .orderBy('invitations.created_at', 'desc')
             .execute();
-        return rows.map(toInvitation);
+        return rows.map((r) => ({
+            ...toInvitation(r),
+            teacherDisplayName: r.teacher_display_name,
+            teacherEmail: r.teacher_email,
+        }));
     }
 
     async listByTeacher(teacherId: string): Promise<Invitation[]> {

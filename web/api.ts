@@ -4,7 +4,7 @@ import { createStudentsClient } from './api/students.gen';
 import { createExercisesClient } from './api/exercises.gen';
 
 export { ApiError } from '@basics/core/client/api-error';
-export type { Invitation } from './api/invitations.gen';
+export type { Invitation, InboxInvitation } from './api/invitations.gen';
 export type { Student } from './api/students.gen';
 export type { Exercise } from './api/exercises.gen';
 

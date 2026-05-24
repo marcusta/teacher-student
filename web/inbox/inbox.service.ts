@@ -1,6 +1,6 @@
 import { Signal, Computed } from '@basics/core/client/core';
 import { request, type RequestError } from '@basics/core/client/request';
-import { api, type Invitation } from '../api';
+import { api, type InboxInvitation } from '../api';
 
 /**
  * Owns the current user's inbound invitation list as observable state.
@@ -11,7 +11,7 @@ import { api, type Invitation } from '../api';
  * `pendingCount`; the inbox page reads `items`.
  */
 export class InboxService {
-    readonly items = new Signal<Invitation[]>([]);
+    readonly items = new Signal<InboxInvitation[]>([]);
     readonly loading = new Signal(false);
     readonly error = new Signal<RequestError | null>(null);
     readonly pendingCount = new Computed(() => this.items.get().length);
