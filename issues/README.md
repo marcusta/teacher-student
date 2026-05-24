@@ -26,3 +26,7 @@ Efter 004 är hela `User ↔ Relation`-grafen på plats. Då kan följande featu
 | [009](009-student-edits-horse.md) | Student edits a Horse | AFK | 008 |
 | [010](010-student-archives-horse.md) | Student archives a Horse | AFK | 008 |
 | [011](011-teacher-sees-student-horses.md) | Teacher sees a Student's Horses | AFK | 008 |
+| [012](012-teacher-schedules-and-lists-lessons.md) | Teacher schedules and lists own Lessons | AFK | 004 |
+| [013](013-student-sees-own-lessons.md) | Student sees own Lessons | AFK | 012 |
+| [014](014-teacher-attaches-horse-to-lesson.md) | Teacher attaches a Horse to a Lesson | AFK | 012, 008 |
+| [015](015-teacher-transitions-lesson-status.md) | Teacher transitions Lesson status | AFK | 014 |

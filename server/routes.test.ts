@@ -9,9 +9,13 @@ import { createInvitationsApi } from './api/invitations.api';
 import { createStudentsApi } from './api/students.api';
 import { createExercisesApi } from './api/exercises.api';
 import { createHorsesApi } from './api/horses.api';
+import { createLessonsApi } from './api/lessons.api';
 
 async function setup(seeds: SeedFn[] = []) {
-    const { userService, invitationService, relationService, exerciseService, horseService } = await createTestDb(...seeds);
+    const {
+        userService, invitationService, relationService,
+        exerciseService, horseService, lessonService,
+    } = await createTestDb(...seeds);
 
     const sessions = new SessionStore(':memory:');
     await sessions.init();
@@ -25,6 +29,7 @@ async function setup(seeds: SeedFn[] = []) {
     mount(app, '/api', createStudentsApi(relationService, horseService));
     mount(app, '/api', createExercisesApi(exerciseService));
     mount(app, '/api', createHorsesApi(horseService));
+    mount(app, '/api', createLessonsApi(lessonService));
 
     return { app, sessions };
 }
@@ -641,4 +646,67 @@ test('GET /api/students/:id/horses without session returns 401', async () => {
     const { app } = await setup();
     const res = await req(app, 'GET', '/api/students/anyone/horses');
     expect(res.status).toBe(401);
+});
+
+// --- Lessons ---
+
+async function connectStudent(app: Hono, teacherCookie: string, studentEmail: string): Promise<string> {
+    const studentCookie = await registerAndLogin(app, studentEmail);
+    const inv = await (await req(app, 'POST', '/api/invitations',
+        { inviteeEmail: studentEmail }, teacherCookie)).json();
+    await req(app, 'POST', '/api/invitations/accept', { invitationId: inv.id }, studentCookie);
+    const me = await (await req(app, 'GET', '/api/auth/me', undefined, studentCookie)).json();
+    return me.id;
+}
+
+test('GET /api/lessons without session returns 401', async () => {
+    const { app } = await setup();
+    const res = await req(app, 'GET', '/api/lessons');
+    expect(res.status).toBe(401);
+});
+
+test('POST /api/lessons happy path returns created Lesson', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const res = await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: '2026-06-01T10:00:00.000Z' }, teacherCookie);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.studentId).toBe(studentId);
+    expect(body.status).toBe('planned');
+});
+
+test('POST /api/lessons on stranger returns 404', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const strangerCookie = await registerAndLogin(app, 'stranger@example.com');
+    const me = await (await req(app, 'GET', '/api/auth/me', undefined, strangerCookie)).json();
+    const res = await req(app, 'POST', '/api/lessons',
+        { studentId: me.id, scheduledAt: '2026-06-01T10:00:00.000Z' }, teacherCookie);
+    expect(res.status).toBe(404);
+});
+
+test('POST /api/lessons invalid scheduledAt returns 400', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const res = await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: 'not-a-date' }, teacherCookie);
+    expect(res.status).toBe(400);
+});
+
+test('GET /api/lessons returns own lessons sorted by scheduled_at ASC', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: '2026-07-01T10:00:00.000Z' }, teacherCookie);
+    await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: '2026-06-01T10:00:00.000Z' }, teacherCookie);
+
+    const res = await req(app, 'GET', '/api/lessons', undefined, teacherCookie);
+    const list = await res.json();
+    expect(list.length).toBe(2);
+    expect(list[0].scheduledAt < list[1].scheduledAt).toBe(true);
 });

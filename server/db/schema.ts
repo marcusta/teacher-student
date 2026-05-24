@@ -6,6 +6,19 @@ export interface Database {
     relations: RelationsTable;
     exercises: ExercisesTable;
     horses: HorsesTable;
+    lessons: LessonsTable;
+}
+
+export type LessonStatus = 'planned' | 'completed' | 'cancelled';
+
+export interface LessonsTable {
+    id: string;
+    teacher_id: string;
+    student_id: string;
+    scheduled_at: string;
+    status: Generated<LessonStatus>;
+    created_at: Generated<string>;
+    updated_at: Generated<string>;
 }
 
 export interface HorsesTable {
