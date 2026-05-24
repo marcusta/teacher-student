@@ -7,12 +7,13 @@ import { log } from '@basics/core/server/logger';
 import { createServices } from './services/index';
 import { createRegisterApi } from './api/register.api';
 import { createInvitationsApi } from './api/invitations.api';
+import { createStudentsApi } from './api/students.api';
 
 // --- Composition root ---
 
 const { app, db, bootstrapAuth } = await createApp<Database>(path.join(import.meta.dir, 'db/migrations'));
 
-const { userService, invitationService } = createServices(db);
+const { userService, invitationService, relationService } = createServices(db);
 
 const { sessions } = await bootstrapAuth({
     verify: (u, p) => userService.verify(u, p),
@@ -23,6 +24,7 @@ const { sessions } = await bootstrapAuth({
 
 mount(app, '/api', createRegisterApi(userService, sessions));
 mount(app, '/api', createInvitationsApi(invitationService));
+mount(app, '/api', createStudentsApi(relationService));
 
 // --- Dev seed ---
 

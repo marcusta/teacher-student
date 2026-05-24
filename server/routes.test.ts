@@ -6,9 +6,10 @@ import { mount } from '@basics/core/server/mount';
 import { SessionStore, createAuth, createAuthApi } from '@basics/core/server/auth';
 import { createRegisterApi } from './api/register.api';
 import { createInvitationsApi } from './api/invitations.api';
+import { createStudentsApi } from './api/students.api';
 
 async function setup(seeds: SeedFn[] = []) {
-    const { userService, invitationService } = await createTestDb(...seeds);
+    const { userService, invitationService, relationService } = await createTestDb(...seeds);
 
     const sessions = new SessionStore(':memory:');
     await sessions.init();
@@ -19,6 +20,7 @@ async function setup(seeds: SeedFn[] = []) {
     mount(app, '/api', createAuthApi({ verify: (u, p) => userService.verify(u, p), sessions }));
     mount(app, '/api', createRegisterApi(userService, sessions));
     mount(app, '/api', createInvitationsApi(invitationService));
+    mount(app, '/api', createStudentsApi(relationService));
 
     return { app, sessions };
 }
@@ -311,4 +313,61 @@ test('POST /api/invitations/decline happy path returns ok', async () => {
     const studentCookie = await registerAndLogin(app, 'student@example.com');
     const res = await req(app, 'POST', '/api/invitations/decline', { invitationId }, studentCookie);
     expect(res.status).toBe(200);
+});
+
+// --- Students ---
+
+async function acceptInvitationFor(app: Hono, teacherCookie: string, studentEmail: string): Promise<string> {
+    const created = await req(app, 'POST', '/api/invitations', { inviteeEmail: studentEmail }, teacherCookie);
+    const { id: invitationId } = await created.json();
+    const studentCookie = await registerAndLogin(app, studentEmail);
+    await req(app, 'POST', '/api/invitations/accept', { invitationId }, studentCookie);
+    return studentCookie;
+}
+
+test('GET /api/students without session returns 401', async () => {
+    const { app } = await setup();
+    const res = await req(app, 'GET', '/api/students');
+    expect(res.status).toBe(401);
+});
+
+test('GET /api/students returns only my accepted students', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    await acceptInvitationFor(app, teacherCookie, 'student@example.com');
+
+    // Another teacher with another student — must not leak into Anna's list.
+    const otherTeacherCookie = await registerAndLogin(app, 'other-teacher@example.com');
+    await acceptInvitationFor(app, otherTeacherCookie, 'other-student@example.com');
+
+    const res = await req(app, 'GET', '/api/students', undefined, teacherCookie);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.map((s: { email: string }) => s.email)).toEqual(['student@example.com']);
+});
+
+test('GET /api/students/:id returns student when Relation exists', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    await acceptInvitationFor(app, teacherCookie, 'student@example.com');
+
+    const list = await (await req(app, 'GET', '/api/students', undefined, teacherCookie)).json();
+    const studentId = list[0].id;
+
+    const res = await req(app, 'GET', `/api/students/${studentId}`, undefined, teacherCookie);
+    expect(res.status).toBe(200);
+    expect((await res.json()).email).toBe('student@example.com');
+});
+
+test('GET /api/students/:id returns 404 for another teacher\'s student', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const otherTeacherCookie = await registerAndLogin(app, 'other-teacher@example.com');
+    await acceptInvitationFor(app, otherTeacherCookie, 'other-student@example.com');
+
+    const list = await (await req(app, 'GET', '/api/students', undefined, otherTeacherCookie)).json();
+    const studentId = list[0].id;
+
+    const res = await req(app, 'GET', `/api/students/${studentId}`, undefined, teacherCookie);
+    expect(res.status).toBe(404);
 });
