@@ -2,8 +2,10 @@ import * as path from 'node:path';
 import type { Database } from './db/schema';
 import { config } from '@basics/core/server/config';
 import { createApp } from '@basics/core/server/app';
+import { mount } from '@basics/core/server/mount';
 import { log } from '@basics/core/server/logger';
 import { createServices } from './services/index';
+import { createRegisterApi } from './api/register.api';
 
 // --- Composition root ---
 
@@ -11,20 +13,25 @@ const { app, db, bootstrapAuth } = await createApp<Database>(path.join(import.me
 
 const { userService } = createServices(db);
 
-await bootstrapAuth({
+const { sessions } = await bootstrapAuth({
     verify: (u, p) => userService.verify(u, p),
     findUser: (id) => userService.findById(id),
 });
 
-// --- Feature API mounts go here ---
-// mount(app, '/api', createXxxApi(...));
+// --- Feature API mounts ---
+
+mount(app, '/api', createRegisterApi(userService, sessions));
 
 // --- Dev seed ---
 
 if (process.env.NODE_ENV !== 'production') {
     try {
-        await userService.register('alice', 'password123');
-        log.info({ msg: 'dev seed: created user alice' });
+        await userService.register({
+            email: 'anna@example.com',
+            password: 'secret123',
+            displayName: 'Anna Andersson',
+        });
+        log.info({ msg: 'dev seed: created user anna@example.com' });
     } catch {
         // Already exists (unique constraint) — ignore
     }

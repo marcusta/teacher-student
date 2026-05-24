@@ -5,6 +5,7 @@ import { TopBarComponent } from './top-bar.component';
 import { NavComponent } from './nav.component';
 import { HomeComponent } from '../home/home.component';
 import { LoginComponent } from '../auth/auth.component';
+import { RegisterComponent } from '../auth/register.component';
 
 const tpl = template(`
     <div class="app-layout">
@@ -51,6 +52,7 @@ export class AppComponent extends Component {
         this.$swap(this.ref(frag, 'content'), this.router.route, {
             '/home': HomeComponent,
             '/login': LoginComponent,
+            '/register': RegisterComponent,
         }, HomeComponent);
 
         return frag;

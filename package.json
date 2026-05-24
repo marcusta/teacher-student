@@ -16,7 +16,7 @@
     },
     "dependencies": {
         "@basics/core": "file:../mackans-client-fw/core",
-        "@sinclair/typebox": "0.34.49",
+        "@sinclair/typebox": "0.34.48",
         "hono": "4.11.9",
         "kysely": "0.27.6",
         "kysely-bun-sqlite": "0.3.2"

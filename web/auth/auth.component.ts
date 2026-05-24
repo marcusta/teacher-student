@@ -11,6 +11,7 @@ const tpl = template(`
             <input bind="username" type="text" placeholder="Username" autocomplete="username" />
             <input bind="password" type="password" placeholder="Password" autocomplete="current-password" />
             <button type="submit" bind="submit">Sign in</button>
+            <a bind="registerLink" href="/register" class="login__alt">No account? Create one</a>
         </form>
     </div>
 `);
@@ -52,6 +53,14 @@ export class LoginComponent extends Component {
                     font-size: 0.875rem;
                     ${btn()}
                 }
+
+                & .login__alt {
+                    text-align: center;
+                    font-size: 0.875rem;
+                    color: ${t('accent')};
+                    text-decoration: none;
+                    margin-top: ${s('sm')};
+                }
             }
         }
     `;
@@ -87,6 +96,12 @@ export class LoginComponent extends Component {
             },
             submit: {
                 textContent: () => this.auth.loading.get() ? 'Signing in...' : 'Sign in',
+            },
+            registerLink: {
+                onclick: (e: Event) => {
+                    e.preventDefault();
+                    this.router.navigate('/register', true);
+                },
             },
         });
     }

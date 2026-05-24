@@ -15,9 +15,12 @@ await startApp(AppComponent, '#app', {
             pushContext({ type: 'navigation', detail: router.route.get(), timestamp: new Date().toISOString() });
         });
         await auth.load();
+        const route = router.route.get();
         if (!auth.currentUser.get()) {
-            router.navigate('/login', true);
-        } else if (router.route.get() === '/' || router.route.get() === '/login') {
+            if (route !== '/login' && route !== '/register') {
+                router.navigate('/login', true);
+            }
+        } else if (route === '/' || route === '/login' || route === '/register') {
             router.navigate('/home', true);
         }
     },
