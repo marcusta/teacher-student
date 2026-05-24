@@ -5,9 +5,10 @@ import { seedUser } from './db/seeds/users';
 import { mount } from '@basics/core/server/mount';
 import { SessionStore, createAuth, createAuthApi } from '@basics/core/server/auth';
 import { createRegisterApi } from './api/register.api';
+import { createInvitationsApi } from './api/invitations.api';
 
 async function setup(seeds: SeedFn[] = []) {
-    const { userService } = await createTestDb(...seeds);
+    const { userService, invitationService } = await createTestDb(...seeds);
 
     const sessions = new SessionStore(':memory:');
     await sessions.init();
@@ -17,6 +18,7 @@ async function setup(seeds: SeedFn[] = []) {
     app.use(createAuth(sessions, (id) => userService.findById(id)));
     mount(app, '/api', createAuthApi({ verify: (u, p) => userService.verify(u, p), sessions }));
     mount(app, '/api', createRegisterApi(userService, sessions));
+    mount(app, '/api', createInvitationsApi(invitationService));
 
     return { app, sessions };
 }
@@ -157,6 +159,74 @@ test('after register, login with same credentials succeeds', async () => {
     });
     expect(res.status).toBe(200);
     expect(extractSessionCookie(res)).toBeTruthy();
+});
+
+// --- Invitations ---
+
+test('POST /api/invitations without session returns 401', async () => {
+    const { app } = await setup();
+    const res = await req(app, 'POST', '/api/invitations', { inviteeEmail: 'x@example.com' });
+    expect(res.status).toBe(401);
+});
+
+test('POST /api/invitations happy path creates pending invitation', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const res = await req(app, 'POST', '/api/invitations', { inviteeEmail: 'student@example.com' }, cookie);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.inviteeEmail).toBe('student@example.com');
+    expect(data.status).toBe('pending');
+    expect(data.id).toBeString();
+});
+
+test('POST /api/invitations duplicate pending returns 409', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    await req(app, 'POST', '/api/invitations', { inviteeEmail: 'student@example.com' }, cookie);
+    const res = await req(app, 'POST', '/api/invitations', { inviteeEmail: 'student@example.com' }, cookie);
+    expect(res.status).toBe(409);
+});
+
+test('POST /api/invitations/revoke happy path', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/invitations', { inviteeEmail: 'student@example.com' }, cookie);
+    const { id } = await created.json();
+
+    const res = await req(app, 'POST', '/api/invitations/revoke', { invitationId: id }, cookie);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ changed: true });
+});
+
+test('POST /api/invitations/revoke by non-owner returns 403', async () => {
+    const { app } = await setup([seedUser]);
+    // Anna creates invitation
+    const annaCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/invitations', { inviteeEmail: 'student@example.com' }, annaCookie);
+    const { id } = await created.json();
+
+    // Register a second user (Bob) and try to revoke Anna's invitation
+    await req(app, 'POST', '/api/auth/register', {
+        email: 'bob@example.com', password: 'secret123', displayName: 'Bob',
+    });
+    const bobCookie = await loginAs(app, 'bob@example.com', 'secret123');
+    const res = await req(app, 'POST', '/api/invitations/revoke', { invitationId: id }, bobCookie);
+    expect(res.status).toBe(403);
+});
+
+test('GET /api/invitations returns this teacher\'s invitations', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    await req(app, 'POST', '/api/invitations', { inviteeEmail: 'a@example.com' }, cookie);
+    await req(app, 'POST', '/api/invitations', { inviteeEmail: 'b@example.com' }, cookie);
+
+    const res = await req(app, 'GET', '/api/invitations', undefined, cookie);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(Array.isArray(data)).toBe(true);
+    expect(data.length).toBe(2);
+    expect(data.map((i: { inviteeEmail: string }) => i.inviteeEmail).sort()).toEqual(['a@example.com', 'b@example.com']);
 });
 
 test('POST /api/auth/logout clears session', async () => {

@@ -5,6 +5,7 @@ import { s } from '../css';
 const tpl = template(`
     <nav class="nav">
         <a bind="homeLink" href="/home">Hem</a>
+        <a bind="invitationsLink" href="/invitations">Inbjudningar</a>
     </nav>
 `);
 
@@ -44,6 +45,7 @@ export class NavComponent extends Component {
     render(): DocumentFragment {
         return this.wire(tpl, {
             homeLink: this.router.link('/home'),
+            invitationsLink: this.router.link('/invitations'),
         });
     }
 }
