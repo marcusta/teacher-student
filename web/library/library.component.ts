@@ -1,4 +1,4 @@
-import { Component, Signal, template } from '@basics/core/client/core';
+import { Component, Router, Signal, template } from '@basics/core/client/core';
 import { t } from '../theme';
 import { s, btn, input } from '../css';
 import { LibraryService } from './library.service';
@@ -78,9 +78,14 @@ export class LibraryComponent extends Component {
             }
 
             & .library__item {
+                display: block;
                 padding: ${s('sm')} ${s('md')};
                 background: ${t('surface')};
                 border-radius: ${t('radius')};
+                color: ${t('text')};
+                text-decoration: none;
+                transition: background 0.15s;
+                &:hover { background: ${t('hover-bg')}; }
             }
             & .library__item-name { font-weight: 500; }
             & .library__item-desc {
@@ -93,6 +98,7 @@ export class LibraryComponent extends Component {
     `;
 
     private svc = this.inject(LibraryService);
+    private router = this.inject(Router);
     private nameVal = new Signal('');
     private descVal = new Signal('');
 
@@ -137,20 +143,24 @@ export class LibraryComponent extends Component {
 
     private renderItem(item: Exercise): HTMLElement {
         const li = document.createElement('li');
-        li.className = 'library__item';
+        const a = document.createElement('a');
+        a.className = 'library__item';
+        a.href = `/library/${item.id}`;
+        a.onclick = (e) => { e.preventDefault(); this.router.navigate(`/library/${item.id}`); };
 
         const name = document.createElement('div');
         name.className = 'library__item-name';
         name.textContent = item.name;
-        li.appendChild(name);
+        a.appendChild(name);
 
         if (item.description) {
             const desc = document.createElement('div');
             desc.className = 'library__item-desc';
             desc.textContent = item.description;
-            li.appendChild(desc);
+            a.appendChild(desc);
         }
 
+        li.appendChild(a);
         return li;
     }
 }

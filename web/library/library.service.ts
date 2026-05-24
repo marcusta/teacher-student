@@ -27,4 +27,18 @@ export class LibraryService {
         this.items.set([result, ...this.items.get()]);
         return true;
     }
+
+    async get(id: string): Promise<Exercise | null> {
+        const result = await request(this.loading, this.error, () => api.exercises.get({ id }));
+        return result ?? null;
+    }
+
+    async update(id: string, patch: { name?: string; description?: string }): Promise<Exercise | null> {
+        const result = await request(this.loading, this.error, () =>
+            api.exercises.update({ id, ...patch }),
+        );
+        if (!result) return null;
+        this.items.set(this.items.get().map((e) => e.id === id ? result : e));
+        return result;
+    }
 }

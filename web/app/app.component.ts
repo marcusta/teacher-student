@@ -9,7 +9,7 @@ import { RegisterComponent } from '../auth/register.component';
 import { InvitationsComponent } from '../invitations/invitations.component';
 import { InboxComponent } from '../inbox/inbox.component';
 import { StudentsShellComponent } from '../students/students-shell.component';
-import { LibraryComponent } from '../library/library.component';
+import { LibraryShellComponent } from '../library/library-shell.component';
 
 const tpl = template(`
     <div class="app-layout">
@@ -60,7 +60,7 @@ export class AppComponent extends Component {
             '/invitations': InvitationsComponent,
             '/inbox': InboxComponent,
             '/students': StudentsShellComponent,
-            '/library': LibraryComponent,
+            '/library': LibraryShellComponent,
         }, HomeComponent);
 
         return frag;

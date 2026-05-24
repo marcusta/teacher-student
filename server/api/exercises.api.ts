@@ -1,10 +1,16 @@
 import { Type, type Static } from '@sinclair/typebox';
 import type { Context } from 'hono';
-import { requireAuth, requireUser } from '@basics/core/server/auth';
+import { NotFoundError, requireAuth, requireUser } from '@basics/core/server/auth';
 import type { ExerciseService } from '../services/exercise.service';
 
 const CreateInput = Type.Object({
     name: Type.String({ minLength: 1, maxLength: 200 }),
+    description: Type.Optional(Type.String({ maxLength: 4000 })),
+});
+
+const UpdateInput = Type.Object({
+    id: Type.String({ minLength: 1 }),
+    name: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
     description: Type.Optional(Type.String({ maxLength: 4000 })),
 });
 
@@ -27,6 +33,28 @@ export function createExercisesApi(svc: ExerciseService) {
             fn: async (c: Context) => {
                 const user = requireUser(c);
                 return svc.listForTeacher(user.id);
+            },
+        },
+        get: {
+            method: 'GET' as const,
+            path: '/exercises/:id',
+            middleware: [requireAuth()],
+            fn: async (input: { id: string }, c: Context) => {
+                const user = requireUser(c);
+                const ex = await svc.getForTeacher(user.id, input.id);
+                if (!ex) throw new NotFoundError('Exercise not found');
+                return ex;
+            },
+        },
+        update: {
+            method: 'PATCH' as const,
+            path: '/exercises/:id',
+            schema: UpdateInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof UpdateInput>, c: Context) => {
+                const user = requireUser(c);
+                const { id, ...patch } = input;
+                return svc.update(user.id, id, patch);
             },
         },
     };
