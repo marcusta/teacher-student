@@ -19,7 +19,7 @@ export class LessonsService {
         if (result) this.items.set(result);
     }
 
-    async create(input: { studentId: string; scheduledAt: string }): Promise<boolean> {
+    async create(input: { studentId: string; scheduledAt: string; programId?: string }): Promise<boolean> {
         const result = await request(this.loading, this.error, () =>
             api.lessons.create(input),
         );

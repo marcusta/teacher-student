@@ -696,6 +696,42 @@ test('POST /api/lessons on stranger returns 404', async () => {
     expect(res.status).toBe(404);
 });
 
+test('POST /api/lessons with programId snapshots exercises and surfaces programTitle', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const ex1 = await (await req(app, 'POST', '/api/exercises', { name: 'A' }, teacherCookie)).json();
+    const ex2 = await (await req(app, 'POST', '/api/exercises', { name: 'B' }, teacherCookie)).json();
+    const program = await (await req(app, 'POST', '/api/programs',
+        { title: 'Uppvärmning' }, teacherCookie)).json();
+    await req(app, 'POST', `/api/programs/${program.id}/exercises`,
+        { exerciseId: ex1.id }, teacherCookie);
+    await req(app, 'POST', `/api/programs/${program.id}/exercises`,
+        { exerciseId: ex2.id }, teacherCookie);
+
+    const res = await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: '2026-06-01T10:00:00.000Z', programId: program.id },
+        teacherCookie);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.programId).toBe(program.id);
+    expect(body.programTitle).toBe('Uppvärmning');
+    expect(body.exercises.map((e: { name: string }) => e.name)).toEqual(['A', 'B']);
+});
+
+test('POST /api/lessons with foreign programId returns 404', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const otherCookie = await registerAndLogin(app, 'other@example.com', 'secret123', 'O');
+    const foreign = await (await req(app, 'POST', '/api/programs',
+        { title: 'Foreign' }, otherCookie)).json();
+    const res = await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: '2026-06-01T10:00:00.000Z', programId: foreign.id },
+        teacherCookie);
+    expect(res.status).toBe(404);
+});
+
 test('POST /api/lessons invalid scheduledAt returns 400', async () => {
     const { app } = await setup([seedUser]);
     const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');

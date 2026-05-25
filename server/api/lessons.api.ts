@@ -9,6 +9,7 @@ const ISO_DATETIME_PATTERN = '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+
 const CreateInput = Type.Object({
     studentId: Type.String({ minLength: 1 }),
     scheduledAt: Type.String({ pattern: ISO_DATETIME_PATTERN }),
+    programId: Type.Optional(Type.String({ minLength: 1 })),
 });
 
 const AddExerciseInput = Type.Object({

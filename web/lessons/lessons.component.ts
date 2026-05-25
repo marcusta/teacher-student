@@ -4,6 +4,7 @@ import { t } from '../theme';
 import { s, btn, input } from '../css';
 import { LessonsService } from './lessons.service';
 import { StudentsService } from '../students/students.service';
+import { ProgramsService } from '../programs/programs.service';
 import type { Lesson, LessonForUser } from '../api';
 
 const tpl = template(`
@@ -13,6 +14,7 @@ const tpl = template(`
         <form bind="form" class="lessons__form">
             <div bind="studentSelectHost" class="lessons__student-host"></div>
             <input bind="whenInput" type="datetime-local" required>
+            <div bind="programSelectHost" class="lessons__program-host"></div>
             <div class="lessons__form-row">
                 <button bind="submit" type="submit">Boka lektion</button>
                 <div class="error" bind="error"></div>
@@ -66,6 +68,7 @@ export class LessonsComponent extends Component {
                     box-sizing: border-box;
                 }
                 & .lessons__student-host .ui-select { display: block; }
+                & .lessons__program-host .ui-select { display: block; }
             }
 
             & .lessons__form-row {
@@ -133,6 +136,7 @@ export class LessonsComponent extends Component {
             & .lessons__item-when { font-weight: 500; }
             & .lessons__item-who { opacity: 0.7; font-size: 0.8125rem; }
             & .lessons__item-ex { opacity: 0.7; font-size: 0.8125rem; margin-top: ${s('xs')}; }
+            & .lessons__item-program { opacity: 0.7; font-size: 0.8125rem; margin-top: ${s('xs')}; font-style: italic; }
             & .lessons__item-badge {
                 align-self: center;
                 font-size: 0.75rem;
@@ -146,7 +150,9 @@ export class LessonsComponent extends Component {
 
     private lessons = this.inject(LessonsService);
     private students = this.inject(StudentsService);
+    private programs = this.inject(ProgramsService);
     private studentVal = new Signal('');
+    private programVal = new Signal('');
     private whenVal = new Signal('');
     private nowIso = new Signal(new Date().toISOString());
     private upcoming = new Computed(() =>
@@ -160,10 +166,15 @@ export class LessonsComponent extends Component {
     private studentOptions = new Computed<SelectOption[]>(() =>
         this.students.items.get().map((st) => ({ value: st.id, label: st.displayName })),
     );
+    private programOptions = new Computed<SelectOption[]>(() => [
+        { value: '', label: '(inget program)' },
+        ...this.programs.items.get().map((p) => ({ value: p.id, label: p.title })),
+    ]);
 
     onMount(): void {
         void this.lessons.load();
         void this.students.load();
+        void this.programs.load();
         // Default the picker to the first Student once roster loads so the
         // visually-selected option (browser fallback) matches the signal.
         this.track(effect(() => {
@@ -187,11 +198,16 @@ export class LessonsComponent extends Component {
                     const studentId = this.studentVal.get();
                     const when = this.whenVal.get();
                     if (!studentId || !when) return;
+                    const programId = this.programVal.get();
                     const ok = await this.lessons.create({
                         studentId,
                         scheduledAt: fromLocalInput(when),
+                        ...(programId ? { programId } : {}),
                     });
-                    if (ok) this.whenVal.set('');
+                    if (ok) {
+                        this.whenVal.set('');
+                        this.programVal.set('');
+                    }
                 },
             },
             error: { textContent: () => this.lessons.error.get()?.message ?? '' },
@@ -213,6 +229,10 @@ export class LessonsComponent extends Component {
             value: this.studentVal,
             options: this.studentOptions,
             placeholder: 'Välj elev',
+        });
+        this.spawn(SelectComponent, this.ref(frag, 'programSelectHost'), {
+            value: this.programVal,
+            options: this.programOptions,
         });
 
         const upcomingHost = this.ref(frag, 'upcomingList');
@@ -252,6 +272,12 @@ export class LessonsComponent extends Component {
         who.textContent = rolePrefix + item.counterpartyDisplayName + horseSuffix;
         left.appendChild(when);
         left.appendChild(who);
+        if (item.programTitle) {
+            const pr = document.createElement('div');
+            pr.className = 'lessons__item-program';
+            pr.textContent = 'Från program: ' + item.programTitle;
+            left.appendChild(pr);
+        }
         if (item.exercises.length > 0) {
             const ex = document.createElement('div');
             ex.className = 'lessons__item-ex';

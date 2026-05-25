@@ -9,6 +9,8 @@ export interface Lesson {
     status: 'completed' | 'cancelled' | 'planned';
     horseId: null | string;
     horseName: null | string;
+    programId: null | string;
+    programTitle: null | string;
     exercises: LessonExerciseRef[];
     createdAt: string;
     updatedAt: string;
@@ -24,6 +26,8 @@ export interface LessonForUser {
     status: 'completed' | 'cancelled' | 'planned';
     horseId: null | string;
     horseName: null | string;
+    programId: null | string;
+    programTitle: null | string;
     exercises: LessonExerciseRef[];
     createdAt: string;
     updatedAt: string;
@@ -36,7 +40,7 @@ export interface LessonExerciseRef {
 }
 
 export interface LessonsApi {
-    create(input: { studentId: string; scheduledAt: string }): Promise<Lesson>;
+    create(input: { programId?: string; studentId: string; scheduledAt: string }): Promise<Lesson>;
     list(): Promise<LessonForUser[]>;
     addExercise(input: { id: string; exerciseId: string }): Promise<LessonExerciseRef[]>;
     removeExercise(input: { id: string; exerciseId: string }): Promise<LessonExerciseRef[]>;

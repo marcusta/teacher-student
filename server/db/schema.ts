@@ -80,6 +80,7 @@ export interface LessonsTable {
     scheduled_at: string;
     status: Generated<LessonStatus>;
     horse_id: string | null;
+    program_id: string | null;
     created_at: Generated<string>;
     updated_at: Generated<string>;
 }

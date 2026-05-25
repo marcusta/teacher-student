@@ -16,6 +16,8 @@ export interface Lesson {
     status: LessonStatus;
     horseId: string | null;
     horseName: string | null;
+    programId: string | null;
+    programTitle: string | null;
     exercises: LessonExerciseRef[];
     createdAt: string;
     updatedAt: string;
@@ -34,6 +36,7 @@ export interface LessonForUser extends Lesson {
 export interface CreateLessonInput {
     studentId: string;
     scheduledAt: string;
+    programId?: string;
 }
 
 export interface UpdateLessonInput {
@@ -49,6 +52,8 @@ interface LessonRow {
     status: LessonStatus;
     horse_id: string | null;
     horse_name: string | null;
+    program_id: string | null;
+    program_title: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -62,6 +67,8 @@ function toLesson(row: LessonRow, exercises: LessonExerciseRef[]): Lesson {
         status: row.status,
         horseId: row.horse_id,
         horseName: row.horse_name,
+        programId: row.program_id,
+        programTitle: row.program_title,
         exercises,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
@@ -83,6 +90,7 @@ const LESSON_COLUMNS = [
     'lessons.scheduled_at as scheduled_at',
     'lessons.status as status',
     'lessons.horse_id as horse_id',
+    'lessons.program_id as program_id',
     'lessons.created_at as created_at',
     'lessons.updated_at as updated_at',
 ] as const;
@@ -107,31 +115,52 @@ export class LessonService {
             .executeTakeFirst();
         if (!rel) throw new NotFoundError('Student not found');
 
+        let program: { id: string; title: string } | null = null;
+        let programRows: { exercise_id: string; sort_order: number; notes: string | null }[] = [];
+        if (input.programId !== undefined) {
+            const p = await this.db
+                .selectFrom('programs')
+                .select(['id', 'teacher_id', 'title'])
+                .where('id', '=', input.programId)
+                .executeTakeFirst();
+            if (!p || p.teacher_id !== teacherId) {
+                throw new NotFoundError('Program not found');
+            }
+            program = { id: p.id, title: p.title };
+            programRows = await this.db
+                .selectFrom('program_exercise')
+                .select(['exercise_id', 'sort_order', 'notes'])
+                .where('program_id', '=', p.id)
+                .orderBy('sort_order', 'asc')
+                .execute();
+        }
+
         const id = crypto.randomUUID();
         const now = new Date().toISOString();
-        await this.db.insertInto('lessons').values({
-            id,
-            teacher_id: teacherId,
-            student_id: input.studentId,
-            scheduled_at: scheduledAt,
-            status: 'planned',
-            horse_id: null,
-            created_at: now,
-            updated_at: now,
-        }).execute();
+        await this.db.transaction().execute(async (tx) => {
+            await tx.insertInto('lessons').values({
+                id,
+                teacher_id: teacherId,
+                student_id: input.studentId,
+                scheduled_at: scheduledAt,
+                status: 'planned',
+                horse_id: null,
+                program_id: program?.id ?? null,
+                created_at: now,
+                updated_at: now,
+            }).execute();
 
-        return {
-            id,
-            teacherId,
-            studentId: input.studentId,
-            scheduledAt,
-            status: 'planned',
-            horseId: null,
-            horseName: null,
-            exercises: [],
-            createdAt: now,
-            updatedAt: now,
-        };
+            if (programRows.length > 0) {
+                await tx.insertInto('lesson_exercise').values(programRows.map((r) => ({
+                    lesson_id: id,
+                    exercise_id: r.exercise_id,
+                    sort_order: r.sort_order,
+                    notes: r.notes,
+                }))).execute();
+            }
+        });
+
+        return this.loadOne(id);
     }
 
     /**
@@ -216,7 +245,8 @@ export class LessonService {
         const rows = await this.db
             .selectFrom('lessons')
             .leftJoin('horses', 'horses.id', 'lessons.horse_id')
-            .select([...LESSON_COLUMNS, 'horses.name as horse_name'])
+            .leftJoin('programs', 'programs.id', 'lessons.program_id')
+            .select([...LESSON_COLUMNS, 'horses.name as horse_name', 'programs.title as program_title'])
             .where('lessons.teacher_id', '=', teacherId)
             .orderBy('lessons.scheduled_at', 'asc')
             .execute();
@@ -236,9 +266,11 @@ export class LessonService {
             .innerJoin('users as teacher', 'teacher.id', 'lessons.teacher_id')
             .innerJoin('users as student', 'student.id', 'lessons.student_id')
             .leftJoin('horses', 'horses.id', 'lessons.horse_id')
+            .leftJoin('programs', 'programs.id', 'lessons.program_id')
             .select([
                 ...LESSON_COLUMNS,
                 'horses.name as horse_name',
+                'programs.title as program_title',
                 'teacher.display_name as teacher_display_name',
                 'student.display_name as student_display_name',
             ])
@@ -348,7 +380,8 @@ export class LessonService {
         const row = await this.db
             .selectFrom('lessons')
             .leftJoin('horses', 'horses.id', 'lessons.horse_id')
-            .select([...LESSON_COLUMNS, 'horses.name as horse_name'])
+            .leftJoin('programs', 'programs.id', 'lessons.program_id')
+            .select([...LESSON_COLUMNS, 'horses.name as horse_name', 'programs.title as program_title'])
             .where('lessons.id', '=', lessonId)
             .executeTakeFirstOrThrow();
         const map = await this.exercisesByLesson([lessonId]);

@@ -421,3 +421,125 @@ test('listForUser returns [] for user with no lessons', async () => {
     });
     expect(await ctx.lessonService.listForUser(lonely.id)).toEqual([]);
 });
+
+// --- 028: snapshot-copy Program exercises into a Lesson on create ---
+
+async function seedConnectedWithProgram() {
+    const ctx = await seedConnected();
+    const ex1 = await ctx.exerciseService.create(ctx.teacher.id, { name: 'Skritt' });
+    const ex2 = await ctx.exerciseService.create(ctx.teacher.id, { name: 'Trav' });
+    const ex3 = await ctx.exerciseService.create(ctx.teacher.id, { name: 'Galopp' });
+    const program = await ctx.programService.create(ctx.teacher.id, { title: 'Uppvärmning' });
+    await ctx.programService.addExercise(ctx.teacher.id, program.id, ex1.id, { notes: 'lugnt' });
+    await ctx.programService.addExercise(ctx.teacher.id, program.id, ex2.id);
+    await ctx.programService.addExercise(ctx.teacher.id, program.id, ex3.id, { notes: 'sista' });
+    return { ...ctx, program, ex1, ex2, ex3 };
+}
+
+test('create with programId snapshot-copies program exercises in order', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    });
+    expect(lesson.programId).toBe(ctx.program.id);
+    expect(lesson.programTitle).toBe('Uppvärmning');
+    expect(lesson.exercises.map((e) => e.name)).toEqual(['Skritt', 'Trav', 'Galopp']);
+});
+
+test('create with foreign-owned programId throws NotFoundError', async () => {
+    const { NotFoundError } = await import('@basics/core/server/auth');
+    const ctx = await seedConnectedWithProgram();
+    const t2 = await ctx.userService.register({
+        email: 't2@example.com', password: 'secret123', displayName: 'T2',
+    });
+    const inv2 = await ctx.invitationService.createInvitation(t2.id, 'student@example.com');
+    await ctx.invitationService.acceptInvitation(inv2.id, ctx.student.id, 'student@example.com');
+    await expect(ctx.lessonService.create(t2.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    })).rejects.toBeInstanceOf(NotFoundError);
+});
+
+test('create with non-existent programId throws NotFoundError', async () => {
+    const { NotFoundError } = await import('@basics/core/server/auth');
+    const ctx = await seedConnectedWithProgram();
+    await expect(ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: 'does-not-exist',
+    })).rejects.toBeInstanceOf(NotFoundError);
+});
+
+test('create without programId leaves programId null and exercises empty', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    expect(lesson.programId).toBeNull();
+    expect(lesson.programTitle).toBeNull();
+    expect(lesson.exercises).toEqual([]);
+});
+
+test('snapshot is independent of later Program edits', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    });
+    // Mutate source program — remove an exercise and add a new one.
+    await ctx.programService.removeExercise(ctx.teacher.id, ctx.program.id, ctx.ex1.id);
+    const exNew = await ctx.exerciseService.create(ctx.teacher.id, { name: 'Nytt' });
+    await ctx.programService.addExercise(ctx.teacher.id, ctx.program.id, exNew.id);
+
+    const list = await ctx.lessonService.listForTeacher(ctx.teacher.id);
+    const fresh = list.find((l) => l.id === lesson.id)!;
+    expect(fresh.exercises.map((e) => e.name)).toEqual(['Skritt', 'Trav', 'Galopp']);
+});
+
+test('listForTeacher surfaces programId and programTitle', async () => {
+    const ctx = await seedConnectedWithProgram();
+    await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    });
+    const list = await ctx.lessonService.listForTeacher(ctx.teacher.id);
+    expect(list[0].programId).toBe(ctx.program.id);
+    expect(list[0].programTitle).toBe('Uppvärmning');
+});
+
+test('listForUser on student side surfaces programId and programTitle', async () => {
+    const ctx = await seedConnectedWithProgram();
+    await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    });
+    const list = await ctx.lessonService.listForUser(ctx.student.id);
+    expect(list[0].programId).toBe(ctx.program.id);
+    expect(list[0].programTitle).toBe('Uppvärmning');
+});
+
+test('create with programId copies notes and sort_order verbatim into lesson_exercise', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    });
+    const rows = await ctx.db.selectFrom('lesson_exercise')
+        .select(['exercise_id', 'sort_order', 'notes'])
+        .where('lesson_id', '=', lesson.id)
+        .orderBy('sort_order', 'asc')
+        .execute();
+    expect(rows).toEqual([
+        { exercise_id: ctx.ex1.id, sort_order: 0, notes: 'lugnt' },
+        { exercise_id: ctx.ex2.id, sort_order: 1, notes: null },
+        { exercise_id: ctx.ex3.id, sort_order: 2, notes: 'sista' },
+    ]);
+});
