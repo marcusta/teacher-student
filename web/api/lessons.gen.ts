@@ -6,7 +6,7 @@ export interface Lesson {
     teacherId: string;
     studentId: string;
     scheduledAt: string;
-    status: 'planned' | 'completed' | 'cancelled';
+    status: 'completed' | 'cancelled' | 'planned';
     horseId: null | string;
     horseName: null | string;
     createdAt: string;
@@ -20,7 +20,7 @@ export interface LessonForUser {
     teacherId: string;
     studentId: string;
     scheduledAt: string;
-    status: 'planned' | 'completed' | 'cancelled';
+    status: 'completed' | 'cancelled' | 'planned';
     horseId: null | string;
     horseName: null | string;
     createdAt: string;
@@ -30,6 +30,7 @@ export interface LessonForUser {
 export interface LessonsApi {
     create(input: { studentId: string; scheduledAt: string }): Promise<Lesson>;
     list(): Promise<LessonForUser[]>;
+    transition(input: { id: string; target: 'completed' | 'cancelled' }): Promise<Lesson>;
     update(input: { scheduledAt?: string; horseId?: null | string; id: string }): Promise<Lesson>;
 }
 
@@ -40,6 +41,13 @@ export function createLessonsClient(baseUrl: string): LessonsApi {
         },
         async list() {
             return apiFetch({ method: 'GET', url: `${baseUrl}/lessons` });
+        },
+        async transition(input) {
+            const pathParams = new Set(['id']);
+            const body: Record<string, unknown> = {};
+            for (const [k, v] of Object.entries(input as any))
+                if (!pathParams.has(k)) body[k] = v;
+            return apiFetch({ method: 'POST', url: `${baseUrl}/lessons/${input.id}/transition`, body });
         },
         async update(input) {
             const pathParams = new Set(['id']);

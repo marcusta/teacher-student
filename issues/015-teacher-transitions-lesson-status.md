@@ -1,7 +1,7 @@
 # 015 — Teacher transitions Lesson status
 
 **Type:** AFK
-**Status:** open
+**Status:** done
 
 ## What to build
 

@@ -1,5 +1,5 @@
 import type { Kysely } from 'kysely';
-import { NotFoundError } from '@basics/core/server/auth';
+import { ConflictError, NotFoundError } from '@basics/core/server/auth';
 import type { Database, LessonStatus } from '../db/schema';
 
 export interface Lesson {
@@ -169,6 +169,43 @@ export class LessonService {
             .where('id', '=', lessonId)
             .execute();
 
+        const row = await this.db
+            .selectFrom('lessons')
+            .leftJoin('horses', 'horses.id', 'lessons.horse_id')
+            .select([...LESSON_COLUMNS, 'horses.name as horse_name'])
+            .where('lessons.id', '=', lessonId)
+            .executeTakeFirstOrThrow();
+        return toLesson(row as LessonRow);
+    }
+
+    /**
+     * Move a Lesson into a terminal status. Idempotent on same-status calls.
+     * Rejects terminal→other-terminal moves with ConflictError so the UI can
+     * surface a 409 distinct from a generic validation error. NotFoundError
+     * (leak-safe) when the Lesson is missing or owned by another teacher.
+     */
+    async transition(
+        teacherId: string,
+        lessonId: string,
+        target: 'completed' | 'cancelled',
+    ): Promise<Lesson> {
+        const lesson = await this.db
+            .selectFrom('lessons')
+            .select(['id', 'teacher_id', 'status'])
+            .where('id', '=', lessonId)
+            .executeTakeFirst();
+        if (!lesson || lesson.teacher_id !== teacherId) {
+            throw new NotFoundError('Lesson not found');
+        }
+        if (lesson.status !== 'planned' && lesson.status !== target) {
+            throw new ConflictError(`Lesson is already ${lesson.status}`);
+        }
+        if (lesson.status !== target) {
+            await this.db.updateTable('lessons')
+                .set({ status: target, updated_at: new Date().toISOString() })
+                .where('id', '=', lessonId)
+                .execute();
+        }
         const row = await this.db
             .selectFrom('lessons')
             .leftJoin('horses', 'horses.id', 'lessons.horse_id')

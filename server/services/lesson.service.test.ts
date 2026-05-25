@@ -235,6 +235,60 @@ test('listForUser populates horseName when attached', async () => {
     expect(list[0].horseName).toBe('Bella');
 });
 
+// --- transition (015: terminal status moves) ---
+
+test('transition to completed sets status', async () => {
+    const ctx = await seedConnected();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    const moved = await ctx.lessonService.transition(ctx.teacher.id, lesson.id, 'completed');
+    expect(moved.status).toBe('completed');
+});
+
+test('transition to cancelled sets status', async () => {
+    const ctx = await seedConnected();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    const moved = await ctx.lessonService.transition(ctx.teacher.id, lesson.id, 'cancelled');
+    expect(moved.status).toBe('cancelled');
+});
+
+test('transition is idempotent on the same terminal status', async () => {
+    const ctx = await seedConnected();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    await ctx.lessonService.transition(ctx.teacher.id, lesson.id, 'completed');
+    const again = await ctx.lessonService.transition(ctx.teacher.id, lesson.id, 'completed');
+    expect(again.status).toBe('completed');
+});
+
+test('transition from one terminal to the other throws ConflictError', async () => {
+    const { ConflictError } = await import('@basics/core/server/auth');
+    const ctx = await seedConnected();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    await ctx.lessonService.transition(ctx.teacher.id, lesson.id, 'completed');
+    await expect(ctx.lessonService.transition(ctx.teacher.id, lesson.id, 'cancelled'))
+        .rejects.toBeInstanceOf(ConflictError);
+});
+
+test('transition by a different teacher throws NotFoundError', async () => {
+    const { NotFoundError } = await import('@basics/core/server/auth');
+    const ctx = await seedConnected();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    const intruder = await ctx.userService.register({
+        email: 'intruder@example.com', password: 'secret123', displayName: 'I',
+    });
+    await expect(ctx.lessonService.transition(intruder.id, lesson.id, 'completed'))
+        .rejects.toBeInstanceOf(NotFoundError);
+});
+
 test('listForUser returns [] for user with no lessons', async () => {
     const ctx = await seedConnected();
     const lonely = await ctx.userService.register({

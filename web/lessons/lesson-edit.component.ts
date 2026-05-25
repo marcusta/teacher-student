@@ -20,6 +20,8 @@ const tpl = template(`
             </label>
             <div class="lesson-edit__row">
                 <button bind="submit" type="submit">Spara</button>
+                <button bind="complete" type="button" class="lesson-edit__complete">Markera utförd</button>
+                <button bind="cancel" type="button" class="lesson-edit__cancel">Ställ in</button>
                 <div class="error" bind="error"></div>
             </div>
         </form>
@@ -78,7 +80,14 @@ export class LessonEditComponent extends Component {
                 display: flex;
                 align-items: center;
                 gap: ${s('md')};
+                flex-wrap: wrap;
                 & button { ${btn()} }
+                & .lesson-edit__cancel {
+                    background: transparent;
+                    color: ${t('error')};
+                    border: 1px solid ${t('error')};
+                }
+                & .hidden { display: none; }
             }
 
             & .error {
@@ -104,6 +113,12 @@ export class LessonEditComponent extends Component {
     private horses = new Signal<Horse[]>([]);
     private resolved = new Signal(false);
     private found = new Signal(true);
+
+    private terminal(): boolean {
+        const id = this.router.route.get().split('/')[2] ?? '';
+        const lesson = this.svc.get(id);
+        return lesson?.status === 'completed' || lesson?.status === 'cancelled';
+    }
 
     onMount(): void {
         const id = this.router.route.get().split('/')[2] ?? '';
@@ -170,6 +185,21 @@ export class LessonEditComponent extends Component {
                     }
                     const updated = await this.svc.update(id, patch);
                     if (updated) this.router.navigate('/lektioner');
+                },
+            },
+            complete: {
+                className: () => this.terminal() ? 'lesson-edit__complete hidden' : 'lesson-edit__complete',
+                onclick: async () => {
+                    const id = this.router.route.get().split('/')[2] ?? '';
+                    await this.svc.transition(id, 'completed');
+                },
+            },
+            cancel: {
+                className: () => this.terminal() ? 'lesson-edit__cancel hidden' : 'lesson-edit__cancel',
+                onclick: async () => {
+                    if (!window.confirm('Ställ in lektionen?')) return;
+                    const id = this.router.route.get().split('/')[2] ?? '';
+                    await this.svc.transition(id, 'cancelled');
                 },
             },
             error: { textContent: () => this.svc.error.get()?.message ?? '' },

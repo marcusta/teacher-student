@@ -11,6 +11,11 @@ const CreateInput = Type.Object({
     scheduledAt: Type.String({ pattern: ISO_DATETIME_PATTERN }),
 });
 
+const TransitionInput = Type.Object({
+    id: Type.String({ minLength: 1 }),
+    target: Type.Union([Type.Literal('completed'), Type.Literal('cancelled')]),
+});
+
 const UpdateInput = Type.Object({
     id: Type.String({ minLength: 1 }),
     horseId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
@@ -36,6 +41,16 @@ export function createLessonsApi(svc: LessonService) {
             fn: async (c: Context) => {
                 const user = requireUser(c);
                 return svc.listForUser(user.id);
+            },
+        },
+        transition: {
+            method: 'POST' as const,
+            path: '/lessons/:id/transition',
+            schema: TransitionInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof TransitionInput>, c: Context) => {
+                const user = requireUser(c);
+                return svc.transition(user.id, input.id, input.target);
             },
         },
         update: {

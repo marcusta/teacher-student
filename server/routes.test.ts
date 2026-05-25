@@ -764,6 +764,44 @@ test('PATCH /api/lessons/:id with foreign Horse returns 500-or-400', async () =>
     expect(res.status).toBe(500);
 });
 
+test('POST /api/lessons/:id/transition marks completed', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const lesson = await (await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: '2026-06-01T10:00:00.000Z' }, teacherCookie)).json();
+    const res = await req(app, 'POST', `/api/lessons/${lesson.id}/transition`,
+        { target: 'completed' }, teacherCookie);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe('completed');
+});
+
+test('POST /api/lessons/:id/transition terminal→other-terminal returns 409', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const lesson = await (await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: '2026-06-01T10:00:00.000Z' }, teacherCookie)).json();
+    await req(app, 'POST', `/api/lessons/${lesson.id}/transition`,
+        { target: 'completed' }, teacherCookie);
+    const res = await req(app, 'POST', `/api/lessons/${lesson.id}/transition`,
+        { target: 'cancelled' }, teacherCookie);
+    expect(res.status).toBe(409);
+});
+
+test('POST /api/lessons/:id/transition by non-owner teacher returns 404', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const lesson = await (await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: '2026-06-01T10:00:00.000Z' }, teacherCookie)).json();
+    const intruderCookie = await registerAndLogin(app, 'intruder@example.com');
+    const res = await req(app, 'POST', `/api/lessons/${lesson.id}/transition`,
+        { target: 'completed' }, intruderCookie);
+    expect(res.status).toBe(404);
+});
+
 test('GET /api/lessons returns student-side lessons with role + counterparty', async () => {
     const { app } = await setup([seedUser]);
     const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');

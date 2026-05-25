@@ -48,4 +48,13 @@ export class LessonsService {
         await this.load();
         return result;
     }
+
+    async transition(id: string, target: 'completed' | 'cancelled'): Promise<Lesson | null> {
+        const result = await request(this.loading, this.error, () =>
+            api.lessons.transition({ id, target }),
+        );
+        if (!result) return null;
+        await this.load();
+        return result;
+    }
 }

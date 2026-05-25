@@ -115,6 +115,19 @@ export class LessonsComponent extends Component {
 
                 &:hover { background: ${t('hover-bg')}; }
             }
+            & .lessons__item--cancelled {
+                opacity: 0.5;
+                & .lessons__item-when { text-decoration: line-through; }
+            }
+            & .lessons__item--completed {
+                opacity: 0.75;
+            }
+            & .lessons__item-badge--muted {
+                background: transparent;
+                color: ${t('text')};
+                opacity: 0.7;
+                border: 1px solid currentColor;
+            }
             & .lessons__item-when { font-weight: 500; }
             & .lessons__item-who { opacity: 0.7; font-size: 0.8125rem; }
             & .lessons__item-badge {
@@ -213,7 +226,10 @@ export class LessonsComponent extends Component {
         const row: HTMLElement = item.role === 'teacher'
             ? document.createElement('a')
             : document.createElement('div');
-        row.className = 'lessons__item';
+        const statusClass = item.status === 'cancelled'
+            ? ' lessons__item--cancelled'
+            : item.status === 'completed' ? ' lessons__item--completed' : '';
+        row.className = 'lessons__item' + statusClass;
         if (row instanceof HTMLAnchorElement) {
             const href = `/lektioner/${item.id}`;
             row.href = href;
@@ -236,8 +252,10 @@ export class LessonsComponent extends Component {
         left.appendChild(who);
 
         const badge = document.createElement('span');
-        badge.className = 'lessons__item-badge';
-        badge.textContent = statusLabel(item.status);
+        const mutedBadge = item.status === 'planned' ? '' : ' lessons__item-badge--muted';
+        badge.className = 'lessons__item-badge' + mutedBadge;
+        const prefix = item.status === 'completed' ? '✓ ' : '';
+        badge.textContent = prefix + statusLabel(item.status);
 
         row.appendChild(left);
         row.appendChild(badge);
