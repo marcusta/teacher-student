@@ -2,8 +2,13 @@ import type { Context } from 'hono';
 import { NotFoundError, requireAuth, requireUser } from '@basics/core/server/auth';
 import type { RelationService } from '../services/relation.service';
 import type { HorseService } from '../services/horse.service';
+import type { TrainingSessionService } from '../services/training-session.service';
 
-export function createStudentsApi(svc: RelationService, horseService: HorseService) {
+export function createStudentsApi(
+    svc: RelationService,
+    horseService: HorseService,
+    trainingSessionService: TrainingSessionService,
+) {
     return {
         list: {
             method: 'GET' as const,
@@ -33,6 +38,15 @@ export function createStudentsApi(svc: RelationService, horseService: HorseServi
             fn: async (input: { id: string }, c: Context) => {
                 const user = requireUser(c);
                 return horseService.listForStudentAsTeacher(user.id, input.id);
+            },
+        },
+        listTrainingSessions: {
+            method: 'GET' as const,
+            path: '/students/:id/training-sessions',
+            middleware: [requireAuth()],
+            fn: async (input: { id: string }, c: Context) => {
+                const user = requireUser(c);
+                return trainingSessionService.listForTeacherOfStudent(user.id, input.id);
             },
         },
     };

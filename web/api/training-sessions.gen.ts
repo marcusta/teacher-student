@@ -17,6 +17,7 @@ export interface TrainingSession {
 export interface TrainingSessionsApi {
     create(input: { durationMin?: null | number; summary?: null | string; horseId?: null | string; shareWithTeacherIds?: string[]; performedAt: string }): Promise<TrainingSession>;
     list(): Promise<TrainingSession[]>;
+    get(input: { id: string }): Promise<TrainingSession>;
     update(input: { performedAt?: string; durationMin?: null | number; summary?: null | string; horseId?: null | string; shareWithTeacherIds?: string[]; id: string }): Promise<TrainingSession>;
     delete(input: { id: string }): Promise<{ ok: boolean }>;
 }
@@ -28,6 +29,14 @@ export function createTrainingSessionsClient(baseUrl: string): TrainingSessionsA
         },
         async list() {
             return apiFetch({ method: 'GET', url: `${baseUrl}/training-sessions` });
+        },
+        async get(input) {
+            const pathParams = new Set(['id']);
+            const params = new URLSearchParams();
+            for (const [k, v] of Object.entries(input as any))
+                if (!pathParams.has(k) && v !== undefined) params.set(k, String(v));
+            const qs = params.toString();
+            return apiFetch({ method: 'GET', url: `${baseUrl}/training-sessions/${input.id}${qs ? '?' + qs : ''}` });
         },
         async update(input) {
             const pathParams = new Set(['id']);

@@ -166,18 +166,36 @@ export class NoteService {
             return;
         }
         if (parentKind === 'training_session') {
-            // Student-only authoring for the MVP. Teacher access ships in 022.
-            const ts = await this.db
-                .selectFrom('training_sessions')
-                .select(['id', 'student_id'])
-                .where('id', '=', parentId)
-                .executeTakeFirst();
-            if (!ts || ts.student_id !== userId) {
-                throw new NotFoundError('Training Session not found');
-            }
+            await this.assertTrainingSessionViewer(userId, parentId);
             return;
         }
         throw new NotFoundError('Unsupported parent kind');
+    }
+
+    /**
+     * Shared author/read gate for training_session notes. The owning
+     * Student always passes; a connected Teacher passes only when a
+     * `training_session_share` row addresses them. Leak-safe NotFoundError
+     * otherwise.
+     */
+    private async assertTrainingSessionViewer(
+        userId: string,
+        sessionId: string,
+    ): Promise<void> {
+        const ts = await this.db
+            .selectFrom('training_sessions')
+            .select(['id', 'student_id'])
+            .where('id', '=', sessionId)
+            .executeTakeFirst();
+        if (!ts) throw new NotFoundError('Training Session not found');
+        if (ts.student_id === userId) return;
+        const share = await this.db
+            .selectFrom('training_session_share')
+            .select('teacher_id')
+            .where('training_session_id', '=', sessionId)
+            .where('teacher_id', '=', userId)
+            .executeTakeFirst();
+        if (!share) throw new NotFoundError('Training Session not found');
     }
 
     /** Read-side authorization. Lessons: either teacher or student. */
@@ -198,16 +216,7 @@ export class NoteService {
             return;
         }
         if (parentKind === 'training_session') {
-            // For 021 only the owning Student can read. 022 will broaden this
-            // to connected Teachers when a share row exists.
-            const ts = await this.db
-                .selectFrom('training_sessions')
-                .select(['id', 'student_id'])
-                .where('id', '=', parentId)
-                .executeTakeFirst();
-            if (!ts || ts.student_id !== userId) {
-                throw new NotFoundError('Training Session not found');
-            }
+            await this.assertTrainingSessionViewer(userId, parentId);
             return;
         }
         throw new NotFoundError('Unsupported parent kind');

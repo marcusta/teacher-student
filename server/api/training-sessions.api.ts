@@ -45,6 +45,15 @@ export function createTrainingSessionsApi(svc: TrainingSessionService) {
                 return svc.listForStudent(user.id);
             },
         },
+        get: {
+            method: 'GET' as const,
+            path: '/training-sessions/:id',
+            middleware: [requireAuth()],
+            fn: async (input: { id: string }, c: Context) => {
+                const user = requireUser(c);
+                return svc.getForViewer(user.id, input.id);
+            },
+        },
         update: {
             method: 'PATCH' as const,
             path: '/training-sessions/:id',

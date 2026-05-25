@@ -2,8 +2,8 @@ import { Component, Router, Signal, effect, template } from '@basics/core/client
 import { AuthService } from '@basics/core/client/auth';
 import { t } from '../theme';
 import { s, btn, input } from '../css';
-import { TrainingSessionsService } from './training-sessions.service';
 import { NotesService } from '../lessons/notes.service';
+import { api, type TrainingSession } from '../api';
 
 const tpl = template(`
     <div class="tsd" bind="root">
@@ -165,8 +165,8 @@ export class TrainingSessionDetailComponent extends Component {
 
     private auth = this.inject(AuthService);
     private router = this.inject(Router);
-    private sessions = this.inject(TrainingSessionsService);
     private notes = this.inject(NotesService);
+    private ts = new Signal<TrainingSession | null>(null);
     private resolved = new Signal(false);
     private found = new Signal(true);
     private noteBodyVal = new Signal('');
@@ -179,26 +179,23 @@ export class TrainingSessionDetailComponent extends Component {
         return this.router.route.get().split('/')[2] ?? '';
     }
 
-    private session() {
-        return this.sessions.items.get().find((it) => it.id === this.sessionId()) ?? null;
+    private session(): TrainingSession | null {
+        return this.ts.get();
     }
 
     onMount(): void {
         const id = this.sessionId();
-        const ready = this.sessions.items.get().length > 0
-            ? Promise.resolve()
-            : this.sessions.load();
-        void ready.then(() => {
-            const ts = this.session();
-            if (!ts) {
+        void api.trainingSessions.get({ id })
+            .then((ts) => {
+                this.ts.set(ts);
+                this.found.set(true);
+                this.resolved.set(true);
+                void this.notes.load('training_session', id);
+            })
+            .catch(() => {
                 this.found.set(false);
                 this.resolved.set(true);
-                return;
-            }
-            this.found.set(true);
-            this.resolved.set(true);
-            void this.notes.load('training_session', id);
-        });
+            });
     }
 
     private shareSummary(): string {

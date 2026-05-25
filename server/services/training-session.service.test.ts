@@ -223,6 +223,69 @@ test('listForStudent includes resolved horseName', async () => {
     expect(list[1].horseName).toBe('Brunte');
 });
 
+test('listForTeacherOfStudent returns only TS shared with the calling teacher, sorted DESC, with horseName', async () => {
+    const ctx = await seedStudent();
+    const teacher = await connect(ctx, 'tA@example.com');
+    const other = await connect(ctx, 'tB@example.com');
+    const horse = await ctx.horseService.create(ctx.student.id, { name: 'Brunte' });
+
+    const sharedA = await ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+        shareWithTeacherIds: [teacher.id],
+        horseId: horse.id,
+    });
+    const sharedB = await ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-07-01T10:00:00.000Z',
+        shareWithTeacherIds: [teacher.id, other.id],
+    });
+    // Private (no shares) and one shared only with the other teacher.
+    await ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-05-01T10:00:00.000Z',
+    });
+    await ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-04-01T10:00:00.000Z',
+        shareWithTeacherIds: [other.id],
+    });
+
+    const list = await ctx.trainingSessionService.listForTeacherOfStudent(teacher.id, ctx.student.id);
+    expect(list.map((s) => s.id)).toEqual([sharedB.id, sharedA.id]);
+    expect(list[1].horseName).toBe('Brunte');
+});
+
+test('listForTeacherOfStudent throws NotFoundError when not a connected teacher', async () => {
+    const ctx = await seedStudent();
+    const stranger = await ctx.userService.register({
+        email: 'x@example.com', password: 'secret123', displayName: 'X',
+    });
+    await expect(ctx.trainingSessionService.listForTeacherOfStudent(stranger.id, ctx.student.id))
+        .rejects.toThrow();
+});
+
+test('getForViewer resolves for the owning student regardless of share', async () => {
+    const ctx = await seedStudent();
+    const ts = await ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+    });
+    const got = await ctx.trainingSessionService.getForViewer(ctx.student.id, ts.id);
+    expect(got.id).toBe(ts.id);
+});
+
+test('getForViewer resolves for a teacher only when a share row exists', async () => {
+    const ctx = await seedStudent();
+    const teacher = await connect(ctx, 't@example.com');
+    const privateTs = await ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+    });
+    const sharedTs = await ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-07-01T10:00:00.000Z',
+        shareWithTeacherIds: [teacher.id],
+    });
+    await expect(ctx.trainingSessionService.getForViewer(teacher.id, privateTs.id))
+        .rejects.toThrow();
+    const got = await ctx.trainingSessionService.getForViewer(teacher.id, sharedTs.id);
+    expect(got.id).toBe(sharedTs.id);
+});
+
 test('delete removes own session and its shares; stranger throws; missing is idempotent', async () => {
     const ctx = await seedStudent();
     const t1 = await connect(ctx, 't1@example.com');

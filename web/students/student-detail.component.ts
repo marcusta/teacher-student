@@ -2,7 +2,7 @@ import { Component, Router, Signal, template } from '@basics/core/client/core';
 import { t } from '../theme';
 import { s } from '../css';
 import { StudentsService } from './students.service';
-import type { Student, Horse } from '../api';
+import type { Student, Horse, TrainingSession } from '../api';
 
 const tpl = template(`
     <div class="student-detail" bind="root">
@@ -14,6 +14,11 @@ const tpl = template(`
             <h3>Hästar</h3>
             <div bind="horsesEmpty" class="student-detail__empty">Inga hästar.</div>
             <ul bind="horsesList" class="student-detail__horses"></ul>
+        </section>
+        <section class="student-detail__section">
+            <h3>Träningspass</h3>
+            <div bind="tsEmpty" class="student-detail__empty">Inga delade träningspass.</div>
+            <ul bind="tsList" class="student-detail__horses"></ul>
         </section>
     </div>
 `);
@@ -92,15 +97,21 @@ export class StudentDetailComponent extends Component {
     private student = new Signal<Student | null>(null);
     private resolved = new Signal(false);
     private horses = new Signal<Horse[]>([]);
+    private trainingSessions = new Signal<TrainingSession[]>([]);
 
     onMount(): void {
         const id = this.router.route.get().split('/')[2] ?? '';
         void this.svc.get(id).then((s) => {
             this.student.set(s);
             this.resolved.set(true);
-            if (s) void this.svc.listHorses(id).then((list) => {
-                if (list) this.horses.set(list);
-            });
+            if (s) {
+                void this.svc.listHorses(id).then((list) => {
+                    if (list) this.horses.set(list);
+                });
+                void this.svc.listTrainingSessions(id).then((list) => {
+                    if (list) this.trainingSessions.set(list);
+                });
+            }
         });
     }
 
@@ -117,6 +128,10 @@ export class StudentDetailComponent extends Component {
                 className: () => this.horses.get().length === 0
                     ? 'student-detail__empty' : 'student-detail__empty hidden',
             },
+            tsEmpty: {
+                className: () => this.trainingSessions.get().length === 0
+                    ? 'student-detail__empty' : 'student-detail__empty hidden',
+            },
         });
 
         const listHost = this.ref(frag, 'horsesList');
@@ -125,6 +140,24 @@ export class StudentDetailComponent extends Component {
             li.textContent = h.name;
             return li;
         }, (h) => h.id);
+
+        const tsHost = this.ref(frag, 'tsList');
+        const fmt = new Intl.DateTimeFormat('sv-SE', { dateStyle: 'medium', timeStyle: 'short' });
+        this.$each(tsHost, this.trainingSessions, (ts) => {
+            const li = document.createElement('li');
+            const link = document.createElement('a');
+            const path = `/traningspass/${ts.id}`;
+            link.href = path;
+            link.onclick = (e) => { e.preventDefault(); this.router.navigate(path); };
+            const bits = [fmt.format(new Date(ts.performedAt))];
+            if (ts.durationMin != null) bits.push(`${ts.durationMin} min`);
+            if (ts.horseName) bits.push(ts.horseName);
+            link.textContent = bits.join(' · ');
+            link.style.color = 'inherit';
+            link.style.textDecoration = 'none';
+            li.appendChild(link);
+            return li;
+        }, (ts) => ts.id);
 
         return frag;
     }

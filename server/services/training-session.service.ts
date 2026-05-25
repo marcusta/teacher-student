@@ -123,6 +123,71 @@ export class TrainingSessionService {
         ));
     }
 
+    /**
+     * Sessions a Teacher may see for a connected Student. Filters to those
+     * with a share row addressed to this teacher. NotFoundError if the
+     * Relation doesn't exist — leak-safe parity with other teacher-side
+     * lookups.
+     */
+    async listForTeacherOfStudent(teacherId: string, studentId: string): Promise<TrainingSession[]> {
+        const rel = await this.db
+            .selectFrom('relations')
+            .select('id')
+            .where('teacher_id', '=', teacherId)
+            .where('student_id', '=', studentId)
+            .executeTakeFirst();
+        if (!rel) throw new NotFoundError('Student not found');
+
+        const rows = await this.db
+            .selectFrom('training_sessions')
+            .innerJoin('training_session_share', 'training_session_share.training_session_id', 'training_sessions.id')
+            .leftJoin('horses', 'horses.id', 'training_sessions.horse_id')
+            .select([
+                'training_sessions.id as id',
+                'training_sessions.student_id as student_id',
+                'training_sessions.performed_at as performed_at',
+                'training_sessions.duration_min as duration_min',
+                'training_sessions.summary as summary',
+                'training_sessions.horse_id as horse_id',
+                'training_sessions.created_at as created_at',
+                'training_sessions.updated_at as updated_at',
+                'horses.name as horse_name',
+            ])
+            .where('training_sessions.student_id', '=', studentId)
+            .where('training_session_share.teacher_id', '=', teacherId)
+            .orderBy('training_sessions.performed_at', 'desc')
+            .execute();
+        const sharesByTs = await this.sharesByTrainingSession(rows.map((r) => r.id));
+        return rows.map((r) => this.toTrainingSession(
+            r as TrainingSessionRow,
+            sharesByTs.get(r.id) ?? [],
+        ));
+    }
+
+    /**
+     * Single-session lookup for the detail route. Resolves for the owning
+     * Student in all cases, and for a Teacher only when a matching share
+     * row exists. NotFoundError to everyone else.
+     */
+    async getForViewer(userId: string, sessionId: string): Promise<TrainingSession> {
+        const ts = await this.db
+            .selectFrom('training_sessions')
+            .select(['id', 'student_id'])
+            .where('id', '=', sessionId)
+            .executeTakeFirst();
+        if (!ts) throw new NotFoundError('Training Session not found');
+        if (ts.student_id === userId) return this.loadOne(sessionId);
+
+        const share = await this.db
+            .selectFrom('training_session_share')
+            .select('teacher_id')
+            .where('training_session_id', '=', sessionId)
+            .where('teacher_id', '=', userId)
+            .executeTakeFirst();
+        if (!share) throw new NotFoundError('Training Session not found');
+        return this.loadOne(sessionId);
+    }
+
     async update(
         studentId: string,
         sessionId: string,

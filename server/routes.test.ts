@@ -30,7 +30,7 @@ async function setup(seeds: SeedFn[] = []) {
     mount(app, '/api', createAuthApi({ verify: (u, p) => userService.verify(u, p), sessions }));
     mount(app, '/api', createRegisterApi(userService, sessions));
     mount(app, '/api', createInvitationsApi(invitationService));
-    mount(app, '/api', createStudentsApi(relationService, horseService));
+    mount(app, '/api', createStudentsApi(relationService, horseService, trainingSessionService));
     mount(app, '/api', createExercisesApi(exerciseService));
     mount(app, '/api', createHorsesApi(horseService));
     mount(app, '/api', createLessonsApi(lessonService));
@@ -1114,6 +1114,46 @@ test('POST /api/training-sessions attaches own horse and resolves name; foreign 
     const bad = await req(app, 'POST', '/api/training-sessions',
         { performedAt: '2026-06-01T10:00:00.000Z', horseId: foreign.id }, cookie);
     expect(bad.status).toBe(404);
+});
+
+test('GET /api/students/:id/training-sessions returns the student’s sessions shared with the calling teacher', async () => {
+    const { app } = await setup([seedUser]);
+    const studentCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const teacherCookie = await registerAndLogin(app, 'teacher@example.com');
+    const inv = await (await req(app, 'POST', '/api/invitations',
+        { inviteeEmail: 'anna@example.com' }, teacherCookie)).json();
+    await req(app, 'POST', '/api/invitations/accept', { invitationId: inv.id }, studentCookie);
+    const me = await (await req(app, 'GET', '/api/auth/me', undefined, teacherCookie)).json();
+    const student = await (await req(app, 'GET', '/api/auth/me', undefined, studentCookie)).json();
+
+    // One shared with the teacher, one private.
+    await req(app, 'POST', '/api/training-sessions',
+        { performedAt: '2026-06-01T10:00:00.000Z',
+          shareWithTeacherIds: [me.id] }, studentCookie);
+    await req(app, 'POST', '/api/training-sessions',
+        { performedAt: '2026-06-02T10:00:00.000Z' }, studentCookie);
+
+    const list = await (await req(app, 'GET',
+        `/api/students/${student.id}/training-sessions`, undefined, teacherCookie)).json();
+    expect(list.length).toBe(1);
+});
+
+test('GET /api/training-sessions/:id resolves for the owning student and a teacher with a share row', async () => {
+    const { app } = await setup([seedUser]);
+    const studentCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const teacherCookie = await registerAndLogin(app, 'teacher@example.com');
+    const inv = await (await req(app, 'POST', '/api/invitations',
+        { inviteeEmail: 'anna@example.com' }, teacherCookie)).json();
+    await req(app, 'POST', '/api/invitations/accept', { invitationId: inv.id }, studentCookie);
+    const me = await (await req(app, 'GET', '/api/auth/me', undefined, teacherCookie)).json();
+
+    const ts = await (await req(app, 'POST', '/api/training-sessions',
+        { performedAt: '2026-06-01T10:00:00.000Z',
+          shareWithTeacherIds: [me.id] }, studentCookie)).json();
+    const asStudent = await req(app, 'GET', `/api/training-sessions/${ts.id}`, undefined, studentCookie);
+    expect(asStudent.status).toBe(200);
+    const asTeacher = await req(app, 'GET', `/api/training-sessions/${ts.id}`, undefined, teacherCookie);
+    expect(asTeacher.status).toBe(200);
 });
 
 test('DELETE /api/training-sessions/:id removes own session', async () => {

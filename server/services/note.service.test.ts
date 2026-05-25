@@ -213,3 +213,70 @@ test('listFor by stranger throws NotFoundError on a Training Session', async () 
         parentKind: 'training_session', parentId: ts.id,
     })).rejects.toBeInstanceOf(NotFoundError);
 });
+
+// --- 022: Teacher Notes on Training Sessions ---
+
+async function seedSharedTS() {
+    const ctx = await createTestDb();
+    const student = await ctx.userService.register({
+        email: 'student@example.com', password: 'secret123', displayName: 'S',
+    });
+    const teacher = await ctx.userService.register({
+        email: 'teacher@example.com', password: 'secret123', displayName: 'T',
+    });
+    const inv = await ctx.invitationService.createInvitation(teacher.id, 'student@example.com');
+    await ctx.invitationService.acceptInvitation(inv.id, student.id, 'student@example.com');
+    const sharedTs = await ctx.trainingSessionService.create(student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+        shareWithTeacherIds: [teacher.id],
+    });
+    const privateTs = await ctx.trainingSessionService.create(student.id, {
+        performedAt: '2026-06-02T10:00:00.000Z',
+    });
+    return { ...ctx, student, teacher, sharedTs, privateTs };
+}
+
+test('teacher can author a note on a Training Session shared with them', async () => {
+    const { noteService, teacher, sharedTs } = await seedSharedTS();
+    const n = await noteService.create(teacher.id, {
+        parentKind: 'training_session', parentId: sharedTs.id,
+        body: 'Bra jobbat!', visibility: 'shared',
+    });
+    expect(n.authorId).toBe(teacher.id);
+});
+
+test('teacher cannot author a note on a private (unshared) Training Session', async () => {
+    const { noteService, teacher, privateTs } = await seedSharedTS();
+    await expect(noteService.create(teacher.id, {
+        parentKind: 'training_session', parentId: privateTs.id,
+        body: 'nope', visibility: 'shared',
+    })).rejects.toBeInstanceOf(NotFoundError);
+});
+
+test('teacher listFor on a shared TS returns the students shared notes + teachers own private', async () => {
+    const { noteService, teacher, student, sharedTs } = await seedSharedTS();
+    await noteService.create(student.id, {
+        parentKind: 'training_session', parentId: sharedTs.id,
+        body: 'student priv', visibility: 'private',
+    });
+    await noteService.create(student.id, {
+        parentKind: 'training_session', parentId: sharedTs.id,
+        body: 'student shared', visibility: 'shared',
+    });
+    await noteService.create(teacher.id, {
+        parentKind: 'training_session', parentId: sharedTs.id,
+        body: 'teacher prep', visibility: 'private',
+    });
+    const list = await noteService.listFor(teacher.id, {
+        parentKind: 'training_session', parentId: sharedTs.id,
+    });
+    const bodies = list.map((n) => n.body).sort();
+    expect(bodies).toEqual(['student shared', 'teacher prep']);
+});
+
+test('teacher listFor on a private TS throws NotFoundError', async () => {
+    const { noteService, teacher, privateTs } = await seedSharedTS();
+    await expect(noteService.listFor(teacher.id, {
+        parentKind: 'training_session', parentId: privateTs.id,
+    })).rejects.toBeInstanceOf(NotFoundError);
+});
