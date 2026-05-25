@@ -19,6 +19,7 @@ export interface TrainingSessionsTable {
     performed_at: string;
     duration_min: number | null;
     summary: string | null;
+    horse_id: string | null;
     created_at: Generated<string>;
     updated_at: Generated<string>;
 }

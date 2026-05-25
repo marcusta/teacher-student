@@ -42,7 +42,7 @@ export interface LessonsApi {
     removeExercise(input: { id: string; exerciseId: string }): Promise<LessonExerciseRef[]>;
     listExercises(input: { id: string }): Promise<LessonExerciseRef[]>;
     transition(input: { id: string; target: 'completed' | 'cancelled' }): Promise<Lesson>;
-    update(input: { scheduledAt?: string; horseId?: null | string; id: string }): Promise<Lesson>;
+    update(input: { horseId?: null | string; scheduledAt?: string; id: string }): Promise<Lesson>;
 }
 
 export function createLessonsClient(baseUrl: string): LessonsApi {

@@ -7,15 +7,17 @@ export interface TrainingSession {
     performedAt: string;
     durationMin: null | number;
     summary: null | string;
+    horseId: null | string;
+    horseName: null | string;
     sharedWithTeacherIds: string[];
     createdAt: string;
     updatedAt: string;
 }
 
 export interface TrainingSessionsApi {
-    create(input: { durationMin?: null | number; summary?: null | string; shareWithTeacherIds?: string[]; performedAt: string }): Promise<TrainingSession>;
+    create(input: { durationMin?: null | number; summary?: null | string; horseId?: null | string; shareWithTeacherIds?: string[]; performedAt: string }): Promise<TrainingSession>;
     list(): Promise<TrainingSession[]>;
-    update(input: { performedAt?: string; durationMin?: null | number; summary?: null | string; shareWithTeacherIds?: string[]; id: string }): Promise<TrainingSession>;
+    update(input: { performedAt?: string; durationMin?: null | number; summary?: null | string; horseId?: null | string; shareWithTeacherIds?: string[]; id: string }): Promise<TrainingSession>;
     delete(input: { id: string }): Promise<{ ok: boolean }>;
 }
 

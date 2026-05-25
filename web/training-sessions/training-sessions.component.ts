@@ -3,6 +3,7 @@ import { t } from '../theme';
 import { s, btn, input } from '../css';
 import { TrainingSessionsService } from './training-sessions.service';
 import { TeachersService } from './teachers.service';
+import { StableService } from '../stable/stable.service';
 import type { Teacher, TrainingSession } from '../api';
 
 const tpl = template(`
@@ -22,6 +23,10 @@ const tpl = template(`
             <label>
                 <span>Sammanfattning (valfri)</span>
                 <textarea bind="summaryInput" rows="3"></textarea>
+            </label>
+            <label bind="horseLabel" class="ts__horse-label">
+                <span>Häst (valfri)</span>
+                <select bind="horseSelect"></select>
             </label>
 
             <fieldset bind="shareBox" class="ts__share">
@@ -82,11 +87,13 @@ export class TrainingSessionsComponent extends Component {
                     gap: ${s('xs')};
                     font-size: 0.8125rem;
                 }
-                & input[type=datetime-local], & input[type=number], & textarea {
+                & input[type=datetime-local], & input[type=number], & textarea, & select {
                     ${input()}
                     width: 100%;
                     box-sizing: border-box;
                 }
+
+                & .ts__horse-label.hidden { display: none; }
             }
 
             & .ts__share {
@@ -193,9 +200,11 @@ export class TrainingSessionsComponent extends Component {
 
     private sessions = this.inject(TrainingSessionsService);
     private teachers = this.inject(TeachersService);
+    private stable = this.inject(StableService);
     private whenVal = new Signal('');
     private durationVal = new Signal('');
     private summaryVal = new Signal('');
+    private horseIdVal = new Signal<string>('');
     private editingId = new Signal<string | null>(null);
     /** Teacher ids checked in the share UI. Empty = keep private. */
     private shareIds = new Signal<Set<string>>(new Set());
@@ -206,6 +215,7 @@ export class TrainingSessionsComponent extends Component {
     onMount(): void {
         void this.sessions.load();
         void this.teachers.load();
+        void this.stable.load();
     }
 
     render(): DocumentFragment {
@@ -223,6 +233,15 @@ export class TrainingSessionsComponent extends Component {
             summaryInput: {
                 value: () => this.summaryVal.get(),
                 oninput: (e: Event) => this.summaryVal.set((e.target as HTMLTextAreaElement).value),
+            },
+            horseLabel: {
+                className: () =>
+                    this.stable.items.get().length === 0
+                        ? 'ts__horse-label hidden' : 'ts__horse-label',
+            },
+            horseSelect: {
+                value: () => this.horseIdVal.get(),
+                onchange: (e: Event) => this.horseIdVal.set((e.target as HTMLSelectElement).value),
             },
             shareBox: {
                 className: () =>
@@ -246,6 +265,7 @@ export class TrainingSessionsComponent extends Component {
                     const durationRaw = this.durationVal.get().trim();
                     const durationMin = durationRaw === '' ? null : Number(durationRaw);
                     const summary = this.summaryVal.get().trim() || null;
+                    const horseId = this.horseIdVal.get() || null;
                     const shareWithTeacherIds = Array.from(this.shareIds.get());
 
                     const editing = this.editingId.get();
@@ -255,6 +275,7 @@ export class TrainingSessionsComponent extends Component {
                             performedAt: fromLocalInput(when),
                             durationMin,
                             summary,
+                            horseId,
                             shareWithTeacherIds,
                         });
                         ok = updated !== null;
@@ -263,6 +284,7 @@ export class TrainingSessionsComponent extends Component {
                             performedAt: fromLocalInput(when),
                             durationMin,
                             summary,
+                            horseId,
                             shareWithTeacherIds,
                         });
                     }
@@ -293,6 +315,25 @@ export class TrainingSessionsComponent extends Component {
             if (this.teachers.items.get().length <= 1) return document.createElement('span');
             return this.renderShareRow(teacher);
         }, (teacher) => teacher.id);
+
+        // Populate horse <option>s reactively.
+        const sel = this.ref(frag, 'horseSelect') as HTMLSelectElement;
+        this.track(effect(() => {
+            const horses = this.stable.items.get();
+            const current = this.horseIdVal.get();
+            sel.innerHTML = '';
+            const blank = document.createElement('option');
+            blank.value = '';
+            blank.textContent = 'Ingen häst';
+            sel.appendChild(blank);
+            for (const h of horses) {
+                const opt = document.createElement('option');
+                opt.value = h.id;
+                opt.textContent = h.name;
+                sel.appendChild(opt);
+            }
+            sel.value = current;
+        }));
 
         const listHost = this.ref(frag, 'list');
         this.$each(listHost, this.sessions.items, (item) => this.renderItem(item), (item) => `${item.id}:${item.updatedAt}`);
@@ -325,6 +366,7 @@ export class TrainingSessionsComponent extends Component {
         this.whenVal.set('');
         this.durationVal.set('');
         this.summaryVal.set('');
+        this.horseIdVal.set('');
         this.shareIds.set(new Set());
     }
 
@@ -333,6 +375,7 @@ export class TrainingSessionsComponent extends Component {
         this.whenVal.set(toLocalInput(item.performedAt));
         this.durationVal.set(item.durationMin === null ? '' : String(item.durationMin));
         this.summaryVal.set(item.summary ?? '');
+        this.horseIdVal.set(item.horseId ?? '');
         this.shareIds.set(new Set(item.sharedWithTeacherIds));
     }
 
@@ -350,6 +393,7 @@ export class TrainingSessionsComponent extends Component {
         meta.className = 'ts__item-meta';
         const bits: string[] = [];
         if (item.durationMin !== null) bits.push(`${item.durationMin} min`);
+        if (item.horseName) bits.push(item.horseName);
         bits.push(this.shareLabel(item));
         meta.textContent = bits.join(' · ');
         left.appendChild(meta);

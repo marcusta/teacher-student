@@ -11,6 +11,7 @@ const CreateInput = Type.Object({
     performedAt: Type.String({ pattern: ISO_DATETIME_PATTERN }),
     durationMin: Type.Optional(Type.Union([Type.Integer({ minimum: 0 }), Type.Null()])),
     summary: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    horseId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
     shareWithTeacherIds: Type.Optional(ShareIds),
 });
 
@@ -19,6 +20,7 @@ const UpdateInput = Type.Object({
     performedAt: Type.Optional(Type.String({ pattern: ISO_DATETIME_PATTERN })),
     durationMin: Type.Optional(Type.Union([Type.Integer({ minimum: 0 }), Type.Null()])),
     summary: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    horseId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
     shareWithTeacherIds: Type.Optional(ShareIds),
 });
 

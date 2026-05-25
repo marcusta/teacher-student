@@ -22,6 +22,7 @@ export class TrainingSessionsService {
         performedAt: string;
         durationMin?: number | null;
         summary?: string | null;
+        horseId?: string | null;
         shareWithTeacherIds?: string[];
     }): Promise<boolean> {
         const result = await request(this.loading, this.error, () =>
@@ -38,6 +39,7 @@ export class TrainingSessionsService {
             performedAt?: string;
             durationMin?: number | null;
             summary?: string | null;
+            horseId?: string | null;
             shareWithTeacherIds?: string[];
         },
     ): Promise<TrainingSession | null> {

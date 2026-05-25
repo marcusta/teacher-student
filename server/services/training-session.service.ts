@@ -8,6 +8,8 @@ export interface TrainingSession {
     performedAt: string;
     durationMin: number | null;
     summary: string | null;
+    horseId: string | null;
+    horseName: string | null;
     sharedWithTeacherIds: string[];
     createdAt: string;
     updatedAt: string;
@@ -17,6 +19,7 @@ export interface CreateTrainingSessionInput {
     performedAt: string;
     durationMin?: number | null;
     summary?: string | null;
+    horseId?: string | null;
     /**
      * Teacher ids the Student wants this session visible to. Each must be a
      * connected Teacher (NotFoundError otherwise). Omit / empty array =
@@ -29,6 +32,7 @@ export interface UpdateTrainingSessionInput {
     performedAt?: string;
     durationMin?: number | null;
     summary?: string | null;
+    horseId?: string | null;
     /** If supplied, replaces the share set entirely. Omit to leave shares unchanged. */
     shareWithTeacherIds?: string[];
 }
@@ -39,6 +43,8 @@ interface TrainingSessionRow {
     performed_at: string;
     duration_min: number | null;
     summary: string | null;
+    horse_id: string | null;
+    horse_name: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -72,6 +78,7 @@ export class TrainingSessionService {
         const performedAt = assertIsoDate(input.performedAt);
         const durationMin = assertDuration(input.durationMin);
         const summary = input.summary ?? null;
+        const horseId = input.horseId == null ? null : await this.assertOwnUnarchivedHorse(studentId, input.horseId);
         const shareIds = await this.normalizeShareIds(studentId, input.shareWithTeacherIds ?? []);
 
         const id = crypto.randomUUID();
@@ -82,29 +89,32 @@ export class TrainingSessionService {
             performed_at: performedAt,
             duration_min: durationMin,
             summary,
+            horse_id: horseId,
             created_at: now,
             updated_at: now,
         }).execute();
         await this.writeShares(id, shareIds);
 
-        return {
-            id,
-            studentId,
-            performedAt,
-            durationMin,
-            summary,
-            sharedWithTeacherIds: shareIds,
-            createdAt: now,
-            updatedAt: now,
-        };
+        return this.loadOne(id);
     }
 
     async listForStudent(studentId: string): Promise<TrainingSession[]> {
         const rows = await this.db
             .selectFrom('training_sessions')
-            .selectAll()
-            .where('student_id', '=', studentId)
-            .orderBy('performed_at', 'desc')
+            .leftJoin('horses', 'horses.id', 'training_sessions.horse_id')
+            .select([
+                'training_sessions.id as id',
+                'training_sessions.student_id as student_id',
+                'training_sessions.performed_at as performed_at',
+                'training_sessions.duration_min as duration_min',
+                'training_sessions.summary as summary',
+                'training_sessions.horse_id as horse_id',
+                'training_sessions.created_at as created_at',
+                'training_sessions.updated_at as updated_at',
+                'horses.name as horse_name',
+            ])
+            .where('training_sessions.student_id', '=', studentId)
+            .orderBy('training_sessions.performed_at', 'desc')
             .execute();
         const sharesByTs = await this.sharesByTrainingSession(rows.map((r) => r.id));
         return rows.map((r) => this.toTrainingSession(
@@ -133,6 +143,11 @@ export class TrainingSessionService {
         if (input.performedAt !== undefined) patch.performed_at = assertIsoDate(input.performedAt);
         if (input.durationMin !== undefined) patch.duration_min = assertDuration(input.durationMin);
         if (input.summary !== undefined) patch.summary = input.summary;
+        if (input.horseId !== undefined) {
+            patch.horse_id = input.horseId === null
+                ? null
+                : await this.assertOwnUnarchivedHorse(studentId, input.horseId);
+        }
 
         await this.db.updateTable('training_sessions')
             .set(patch)
@@ -147,13 +162,7 @@ export class TrainingSessionService {
             await this.writeShares(sessionId, shareIds);
         }
 
-        const row = await this.db
-            .selectFrom('training_sessions')
-            .selectAll()
-            .where('id', '=', sessionId)
-            .executeTakeFirstOrThrow();
-        const shares = await this.sharesByTrainingSession([sessionId]);
-        return this.toTrainingSession(row as TrainingSessionRow, shares.get(sessionId) ?? []);
+        return this.loadOne(sessionId);
     }
 
     async delete(studentId: string, sessionId: string): Promise<void> {
@@ -171,6 +180,40 @@ export class TrainingSessionService {
             .execute();
     }
 
+    private async loadOne(sessionId: string): Promise<TrainingSession> {
+        const row = await this.db
+            .selectFrom('training_sessions')
+            .leftJoin('horses', 'horses.id', 'training_sessions.horse_id')
+            .select([
+                'training_sessions.id as id',
+                'training_sessions.student_id as student_id',
+                'training_sessions.performed_at as performed_at',
+                'training_sessions.duration_min as duration_min',
+                'training_sessions.summary as summary',
+                'training_sessions.horse_id as horse_id',
+                'training_sessions.created_at as created_at',
+                'training_sessions.updated_at as updated_at',
+                'horses.name as horse_name',
+            ])
+            .where('training_sessions.id', '=', sessionId)
+            .executeTakeFirstOrThrow();
+        const shares = await this.sharesByTrainingSession([sessionId]);
+        return this.toTrainingSession(row as TrainingSessionRow, shares.get(sessionId) ?? []);
+    }
+
+    private async assertOwnUnarchivedHorse(studentId: string, horseId: string): Promise<string> {
+        const horse = await this.db
+            .selectFrom('horses')
+            .select(['id', 'student_id', 'archived_at'])
+            .where('id', '=', horseId)
+            .executeTakeFirst();
+        if (!horse || horse.student_id !== studentId) {
+            throw new NotFoundError('Horse not found');
+        }
+        if (horse.archived_at) throw new NotFoundError('Horse not found');
+        return horseId;
+    }
+
     private toTrainingSession(row: TrainingSessionRow, shareIds: string[]): TrainingSession {
         return {
             id: row.id,
@@ -178,6 +221,8 @@ export class TrainingSessionService {
             performedAt: row.performed_at,
             durationMin: row.duration_min,
             summary: row.summary,
+            horseId: row.horse_id,
+            horseName: row.horse_name,
             sharedWithTeacherIds: shareIds,
             createdAt: row.created_at,
             updatedAt: row.updated_at,

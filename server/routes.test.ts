@@ -1098,6 +1098,24 @@ test('GET /api/teachers lists the calling student’s connected teachers', async
     expect(list[0].displayName).toBe('T');
 });
 
+test('POST /api/training-sessions attaches own horse and resolves name; foreign horse → 404', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const horse = await (await req(app, 'POST', '/api/horses', { name: 'Brunte' }, cookie)).json();
+    const ok = await req(app, 'POST', '/api/training-sessions',
+        { performedAt: '2026-06-01T10:00:00.000Z', horseId: horse.id }, cookie);
+    expect(ok.status).toBe(200);
+    const body = await ok.json();
+    expect(body.horseId).toBe(horse.id);
+    expect(body.horseName).toBe('Brunte');
+
+    const otherCookie = await registerAndLogin(app, 'other@example.com');
+    const foreign = await (await req(app, 'POST', '/api/horses', { name: 'X' }, otherCookie)).json();
+    const bad = await req(app, 'POST', '/api/training-sessions',
+        { performedAt: '2026-06-01T10:00:00.000Z', horseId: foreign.id }, cookie);
+    expect(bad.status).toBe(404);
+});
+
 test('DELETE /api/training-sessions/:id removes own session', async () => {
     const { app } = await setup([seedUser]);
     const cookie = await loginAs(app, 'anna@example.com', 'secret123');

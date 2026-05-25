@@ -157,6 +157,72 @@ test('update by stranger throws NotFoundError', async () => {
     })).rejects.toThrow();
 });
 
+test('create accepts an own non-archived horse and resolves horseName', async () => {
+    const { trainingSessionService, horseService, student } = await seedStudent();
+    const horse = await horseService.create(student.id, { name: 'Brunte' });
+    const ts = await trainingSessionService.create(student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+        horseId: horse.id,
+    });
+    expect(ts.horseId).toBe(horse.id);
+    expect(ts.horseName).toBe('Brunte');
+});
+
+test('create rejects a horse owned by another student', async () => {
+    const ctx = await seedStudent();
+    const other = await ctx.userService.register({
+        email: 'other@example.com', password: 'secret123', displayName: 'O',
+    });
+    const otherHorse = await ctx.horseService.create(other.id, { name: 'NotYours' });
+    await expect(ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+        horseId: otherHorse.id,
+    })).rejects.toThrow();
+});
+
+test('create rejects an archived horse', async () => {
+    const { trainingSessionService, horseService, student } = await seedStudent();
+    const horse = await horseService.create(student.id, { name: 'Old' });
+    await horseService.archive(student.id, horse.id);
+    await expect(trainingSessionService.create(student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+        horseId: horse.id,
+    })).rejects.toThrow();
+});
+
+test('update clears horse via null and replaces with another own horse', async () => {
+    const { trainingSessionService, horseService, student } = await seedStudent();
+    const h1 = await horseService.create(student.id, { name: 'A' });
+    const h2 = await horseService.create(student.id, { name: 'B' });
+    const ts = await trainingSessionService.create(student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+        horseId: h1.id,
+    });
+    const cleared = await trainingSessionService.update(student.id, ts.id, { horseId: null });
+    expect(cleared.horseId).toBeNull();
+    expect(cleared.horseName).toBeNull();
+    const swapped = await trainingSessionService.update(student.id, ts.id, { horseId: h2.id });
+    expect(swapped.horseId).toBe(h2.id);
+    expect(swapped.horseName).toBe('B');
+});
+
+test('listForStudent includes resolved horseName', async () => {
+    const { trainingSessionService, horseService, student } = await seedStudent();
+    const horse = await horseService.create(student.id, { name: 'Brunte' });
+    await trainingSessionService.create(student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+        horseId: horse.id,
+    });
+    await trainingSessionService.create(student.id, {
+        performedAt: '2026-07-01T10:00:00.000Z',
+    });
+    const list = await trainingSessionService.listForStudent(student.id);
+    expect(list[0].horseId).toBeNull();
+    expect(list[0].horseName).toBeNull();
+    expect(list[1].horseId).toBe(horse.id);
+    expect(list[1].horseName).toBe('Brunte');
+});
+
 test('delete removes own session and its shares; stranger throws; missing is idempotent', async () => {
     const ctx = await seedStudent();
     const t1 = await connect(ctx, 't1@example.com');
