@@ -115,6 +115,26 @@ export class ProgramEditComponent extends Component {
                         background: ${t('surface')};
                         border-radius: ${t('radius')};
                     }
+                    & .program-edit__exercise-row {
+                        display: flex;
+                        align-items: center;
+                        gap: ${s('sm')};
+                    }
+                    & .program-edit__exercise-name { flex: 1; }
+                    & .program-edit__exercise-controls {
+                        display: flex;
+                        gap: ${s('xs')};
+                        & button {
+                            ${btn()}
+                            padding: 2px 8px;
+                            font-size: 0.875rem;
+                        }
+                        & .program-edit__exercise-remove {
+                            background: transparent;
+                            color: ${t('error')};
+                            border: 1px solid ${t('error')};
+                        }
+                    }
                     & .program-edit__exercise-notes {
                         margin-top: ${s('xs')};
                         font-size: 0.875rem;
@@ -239,7 +259,8 @@ export class ProgramEditComponent extends Component {
             (item) => `${item.id}:${item.sortOrder}:${item.notes ?? ''}`,
         );
 
-        // Picker options. Recompute when pickableExercises changes.
+        // Picker options. Rebuild only when pickableExercises changes — must NOT
+        // depend on pickedExerciseId, or selecting a value would wipe options.
         const pickerEl = this.ref(frag, 'picker') as HTMLSelectElement;
         this.track(effect(() => {
             const items = this.pickableExercises.get();
@@ -256,7 +277,13 @@ export class ProgramEditComponent extends Component {
                 opt.textContent = ex.name;
                 pickerEl.appendChild(opt);
             }
-            // Reset selection if the previously-picked one is no longer available.
+            // Re-apply current selection after rebuild.
+            pickerEl.value = this.pickedExerciseId.get();
+        }));
+
+        // Reset selection if the picked item disappeared from the available list.
+        this.track(effect(() => {
+            const items = this.pickableExercises.get();
             const current = this.pickedExerciseId.get();
             if (current && !items.some((e) => e.id === current)) {
                 this.pickedExerciseId.set('');
@@ -268,9 +295,43 @@ export class ProgramEditComponent extends Component {
 
     private renderExercise(item: ProgramExerciseRef): HTMLElement {
         const li = document.createElement('li');
+        const row = document.createElement('div');
+        row.className = 'program-edit__exercise-row';
+
         const name = document.createElement('span');
+        name.className = 'program-edit__exercise-name';
         name.textContent = item.name;
-        li.appendChild(name);
+        row.appendChild(name);
+
+        const controls = document.createElement('div');
+        controls.className = 'program-edit__exercise-controls';
+
+        const upBtn = document.createElement('button');
+        upBtn.type = 'button';
+        upBtn.textContent = '↑';
+        upBtn.title = 'Flytta upp';
+        upBtn.onclick = () => this.moveExercise(item.id, -1);
+        controls.appendChild(upBtn);
+
+        const downBtn = document.createElement('button');
+        downBtn.type = 'button';
+        downBtn.textContent = '↓';
+        downBtn.title = 'Flytta ner';
+        downBtn.onclick = () => this.moveExercise(item.id, +1);
+        controls.appendChild(downBtn);
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.textContent = 'Ta bort';
+        removeBtn.className = 'program-edit__exercise-remove';
+        removeBtn.onclick = () => {
+            void this.svc.removeExercise(this.programId, item.id);
+        };
+        controls.appendChild(removeBtn);
+
+        row.appendChild(controls);
+        li.appendChild(row);
+
         if (item.notes) {
             const notes = document.createElement('div');
             notes.className = 'program-edit__exercise-notes';
@@ -278,5 +339,16 @@ export class ProgramEditComponent extends Component {
             li.appendChild(notes);
         }
         return li;
+    }
+
+    private async moveExercise(exerciseId: string, delta: -1 | 1): Promise<void> {
+        const list = this.svc.exercises.get();
+        const idx = list.findIndex((r) => r.id === exerciseId);
+        if (idx === -1) return;
+        const target = idx + delta;
+        if (target < 0 || target >= list.length) return;
+        const order = list.map((r) => r.id);
+        [order[idx], order[target]] = [order[target], order[idx]];
+        await this.svc.reorderExercises(this.programId, order);
     }
 }

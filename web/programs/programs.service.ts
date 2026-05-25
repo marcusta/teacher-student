@@ -76,4 +76,22 @@ export class ProgramsService {
         await this.loadExercises(programId);
         return true;
     }
+
+    async reorderExercises(programId: string, exerciseIds: string[]): Promise<boolean> {
+        const result = await request(this.loading, this.error, () =>
+            api.programs.reorderExercises({ id: programId, exerciseIds }),
+        );
+        if (!result) return false;
+        await this.loadExercises(programId);
+        return true;
+    }
+
+    async removeExercise(programId: string, exerciseId: string): Promise<boolean> {
+        const result = await request(this.loading, this.error, () =>
+            api.programs.removeExercise({ id: programId, exerciseId }),
+        );
+        if (!result) return false;
+        await this.loadExercises(programId);
+        return true;
+    }
 }

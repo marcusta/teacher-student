@@ -25,6 +25,8 @@ export interface ProgramsApi {
     delete(input: { id: string }): Promise<{ ok: boolean }>;
     listExercises(input: { id: string }): Promise<ProgramExerciseRef[]>;
     addExercise(input: { notes?: string; id: string; exerciseId: string }): Promise<{ ok: boolean }>;
+    reorderExercises(input: { id: string; exerciseIds: string[] }): Promise<{ ok: boolean }>;
+    removeExercise(input: { id: string; exerciseId: string }): Promise<{ ok: boolean }>;
 }
 
 export function createProgramsClient(baseUrl: string): ProgramsApi {
@@ -67,6 +69,16 @@ export function createProgramsClient(baseUrl: string): ProgramsApi {
             for (const [k, v] of Object.entries(input as any))
                 if (!pathParams.has(k)) body[k] = v;
             return apiFetch({ method: 'POST', url: `${baseUrl}/programs/${input.id}/exercises`, body });
+        },
+        async reorderExercises(input) {
+            const pathParams = new Set(['id']);
+            const body: Record<string, unknown> = {};
+            for (const [k, v] of Object.entries(input as any))
+                if (!pathParams.has(k)) body[k] = v;
+            return apiFetch({ method: 'PUT', url: `${baseUrl}/programs/${input.id}/exercises/order`, body });
+        },
+        async removeExercise(input) {
+            return apiFetch({ method: 'DELETE', url: `${baseUrl}/programs/${input.id}/exercises/${input.exerciseId}` });
         },
     };
 }

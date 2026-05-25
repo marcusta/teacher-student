@@ -186,6 +186,76 @@ export class ProgramService {
     }
 
     /**
+     * Rewrite the full ordering of Exercises in a Program. `orderedExerciseIds`
+     * must exactly match the current set of attached exercise ids (no missing,
+     * no extra) — otherwise a validation error is thrown (the request is
+     * malformed, not unauthorized). Cross-teacher Program → NotFoundError.
+     */
+    async reorderExercises(
+        teacherId: string,
+        programId: string,
+        orderedExerciseIds: string[],
+    ): Promise<void> {
+        const program = await this.db
+            .selectFrom('programs')
+            .select(['id', 'teacher_id'])
+            .where('id', '=', programId)
+            .executeTakeFirst();
+        if (!program || program.teacher_id !== teacherId) {
+            throw new NotFoundError('Program not found');
+        }
+
+        const current = await this.db
+            .selectFrom('program_exercise')
+            .select('exercise_id')
+            .where('program_id', '=', programId)
+            .execute();
+        const currentSet = new Set(current.map((r) => r.exercise_id));
+        const suppliedSet = new Set(orderedExerciseIds);
+        if (
+            orderedExerciseIds.length !== currentSet.size ||
+            suppliedSet.size !== orderedExerciseIds.length ||
+            [...suppliedSet].some((id) => !currentSet.has(id))
+        ) {
+            throw new Error('Supplied exerciseIds do not match the Program');
+        }
+
+        await this.db.transaction().execute(async (tx) => {
+            for (let i = 0; i < orderedExerciseIds.length; i++) {
+                await tx.updateTable('program_exercise')
+                    .set({ sort_order: i })
+                    .where('program_id', '=', programId)
+                    .where('exercise_id', '=', orderedExerciseIds[i])
+                    .execute();
+            }
+        });
+    }
+
+    /**
+     * Remove an Exercise from a Program. Idempotent: silently no-ops if the
+     * junction row doesn't exist (mirrors LessonService.removeExercise).
+     * Cross-teacher Program → NotFoundError.
+     */
+    async removeExercise(
+        teacherId: string,
+        programId: string,
+        exerciseId: string,
+    ): Promise<void> {
+        const program = await this.db
+            .selectFrom('programs')
+            .select(['id', 'teacher_id'])
+            .where('id', '=', programId)
+            .executeTakeFirst();
+        if (!program || program.teacher_id !== teacherId) {
+            throw new NotFoundError('Program not found');
+        }
+        await this.db.deleteFrom('program_exercise')
+            .where('program_id', '=', programId)
+            .where('exercise_id', '=', exerciseId)
+            .execute();
+    }
+
+    /**
      * Read the ordered list of Exercises attached to a Program. NotFoundError
      * when the Program isn't owned by `teacherId`.
      */

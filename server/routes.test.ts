@@ -1320,3 +1320,61 @@ test('GET /api/programs/:id/exercises on other teacher returns 404', async () =>
     const res = await req(app, 'GET', `/api/programs/${p.id}/exercises`, undefined, otherCookie);
     expect(res.status).toBe(404);
 });
+
+test('PUT /api/programs/:id/exercises/order reorders attached exercises', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const p = await (await req(app, 'POST', '/api/programs', { title: 'P' }, cookie)).json();
+    const e1 = await (await req(app, 'POST', '/api/exercises', { name: 'E1' }, cookie)).json();
+    const e2 = await (await req(app, 'POST', '/api/exercises', { name: 'E2' }, cookie)).json();
+    const e3 = await (await req(app, 'POST', '/api/exercises', { name: 'E3' }, cookie)).json();
+    await req(app, 'POST', `/api/programs/${p.id}/exercises`, { exerciseId: e1.id }, cookie);
+    await req(app, 'POST', `/api/programs/${p.id}/exercises`, { exerciseId: e2.id }, cookie);
+    await req(app, 'POST', `/api/programs/${p.id}/exercises`, { exerciseId: e3.id }, cookie);
+
+    const res = await req(app, 'PUT', `/api/programs/${p.id}/exercises/order`,
+        { exerciseIds: [e3.id, e1.id, e2.id] }, cookie);
+    expect(res.status).toBe(200);
+
+    const list = await (await req(app, 'GET', `/api/programs/${p.id}/exercises`, undefined, cookie)).json();
+    expect(list.map((r: { id: string }) => r.id)).toEqual([e3.id, e1.id, e2.id]);
+});
+
+test('PUT /api/programs/:id/exercises/order on other teacher Program returns 404', async () => {
+    const { app } = await setup([seedUser]);
+    const annaCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const p = await (await req(app, 'POST', '/api/programs', { title: 'P' }, annaCookie)).json();
+
+    const otherCookie = await registerAndLogin(app, 'other@example.com');
+    const res = await req(app, 'PUT', `/api/programs/${p.id}/exercises/order`,
+        { exerciseIds: [] }, otherCookie);
+    expect(res.status).toBe(404);
+});
+
+test('DELETE /api/programs/:id/exercises/:exerciseId removes the row', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const p = await (await req(app, 'POST', '/api/programs', { title: 'P' }, cookie)).json();
+    const e1 = await (await req(app, 'POST', '/api/exercises', { name: 'E1' }, cookie)).json();
+    const e2 = await (await req(app, 'POST', '/api/exercises', { name: 'E2' }, cookie)).json();
+    await req(app, 'POST', `/api/programs/${p.id}/exercises`, { exerciseId: e1.id }, cookie);
+    await req(app, 'POST', `/api/programs/${p.id}/exercises`, { exerciseId: e2.id }, cookie);
+
+    const res = await req(app, 'DELETE', `/api/programs/${p.id}/exercises/${e1.id}`, undefined, cookie);
+    expect(res.status).toBe(200);
+
+    const list = await (await req(app, 'GET', `/api/programs/${p.id}/exercises`, undefined, cookie)).json();
+    expect(list.map((r: { id: string }) => r.id)).toEqual([e2.id]);
+});
+
+test('DELETE /api/programs/:id/exercises/:exerciseId on other teacher Program returns 404', async () => {
+    const { app } = await setup([seedUser]);
+    const annaCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const p = await (await req(app, 'POST', '/api/programs', { title: 'P' }, annaCookie)).json();
+    const e = await (await req(app, 'POST', '/api/exercises', { name: 'E' }, annaCookie)).json();
+    await req(app, 'POST', `/api/programs/${p.id}/exercises`, { exerciseId: e.id }, annaCookie);
+
+    const otherCookie = await registerAndLogin(app, 'other@example.com');
+    const res = await req(app, 'DELETE', `/api/programs/${p.id}/exercises/${e.id}`, undefined, otherCookie);
+    expect(res.status).toBe(404);
+});

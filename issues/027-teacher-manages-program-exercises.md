@@ -1,7 +1,7 @@
 # 027 — Teacher reorders and removes Exercises in a Program
 
 **Type:** AFK
-**Status:** open
+**Status:** done
 
 ## What to build
 
@@ -11,11 +11,11 @@ Both operations are scoped to the actor; stranger Program or non-member Exercise
 
 ## Acceptance criteria
 
-- [ ] `ProgramService.reorderExercises(actorId, programId, orderedExerciseIds)` verifies ownership of Program; verifies the supplied set exactly matches the current set of `exerciseId`s in that Program (no missing, no extra) — else throws a clear validation error (not `NotFoundError`, since the request is malformed, not unauthorized); rewrites `sort_order` in one transaction (`0..n-1` in supplied order).
-- [ ] `ProgramService.removeExercise(actorId, programId, exerciseId)` verifies Program ownership; deletes the junction row; returns silently if the row didn't exist (idempotent) **or** throws `NotFoundError` — pick the same idiom used by `LessonService` for `removeExercise` in 016 to stay consistent.
-- [ ] API: `PUT /api/programs/:id/exercises/order` (body: `{ exerciseIds: string[] }`), `DELETE /api/programs/:id/exercises/:exerciseId`. Codegen run.
-- [ ] Web: drag-to-reorder UI on Program detail (or up/down buttons — match whatever 016/Lesson-exercise UI does); remove button per row. `$each` keys must change when order changes — use `${exerciseId}:${sort_order}`.
-- [ ] Integration tests: reorder rewrites `sort_order` to `0..n-1`; mismatched id set (missing, extra, or different) rejected with validation error; cross-teacher Program → `NotFoundError`; remove deletes the row and leaves siblings intact; remove of nonexistent row behaves per chosen idiom.
+- [x] `ProgramService.reorderExercises(actorId, programId, orderedExerciseIds)` verifies ownership of Program; verifies the supplied set exactly matches the current set of `exerciseId`s in that Program (no missing, no extra) — else throws a clear validation error (not `NotFoundError`, since the request is malformed, not unauthorized); rewrites `sort_order` in one transaction (`0..n-1` in supplied order).
+- [x] `ProgramService.removeExercise(actorId, programId, exerciseId)` verifies Program ownership; deletes the junction row; returns silently if the row didn't exist (idempotent) **or** throws `NotFoundError` — pick the same idiom used by `LessonService` for `removeExercise` in 016 to stay consistent.
+- [x] API: `PUT /api/programs/:id/exercises/order` (body: `{ exerciseIds: string[] }`), `DELETE /api/programs/:id/exercises/:exerciseId`. Codegen run.
+- [x] Web: drag-to-reorder UI on Program detail (or up/down buttons — match whatever 016/Lesson-exercise UI does); remove button per row. `$each` keys must change when order changes — use `${exerciseId}:${sort_order}`.
+- [x] Integration tests: reorder rewrites `sort_order` to `0..n-1`; mismatched id set (missing, extra, or different) rejected with validation error; cross-teacher Program → `NotFoundError`; remove deletes the row and leaves siblings intact; remove of nonexistent row behaves per chosen idiom.
 
 ## Blocked by
 

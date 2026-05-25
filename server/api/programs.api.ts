@@ -20,6 +20,16 @@ const AddExerciseInput = Type.Object({
     notes: Type.Optional(Type.String({ maxLength: 2000 })),
 });
 
+const ReorderExercisesInput = Type.Object({
+    id: Type.String({ minLength: 1 }),
+    exerciseIds: Type.Array(Type.String({ minLength: 1 })),
+});
+
+const RemoveExerciseInput = Type.Object({
+    id: Type.String({ minLength: 1 }),
+    exerciseId: Type.String({ minLength: 1 }),
+});
+
 export function createProgramsApi(svc: ProgramService) {
     return {
         create: {
@@ -91,6 +101,28 @@ export function createProgramsApi(svc: ProgramService) {
                 const user = requireUser(c);
                 const { id, exerciseId, notes } = input;
                 await svc.addExercise(user.id, id, exerciseId, notes !== undefined ? { notes } : {});
+                return { ok: true };
+            },
+        },
+        reorderExercises: {
+            method: 'PUT' as const,
+            path: '/programs/:id/exercises/order',
+            schema: ReorderExercisesInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof ReorderExercisesInput>, c: Context) => {
+                const user = requireUser(c);
+                await svc.reorderExercises(user.id, input.id, input.exerciseIds);
+                return { ok: true };
+            },
+        },
+        removeExercise: {
+            method: 'DELETE' as const,
+            path: '/programs/:id/exercises/:exerciseId',
+            schema: RemoveExerciseInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof RemoveExerciseInput>, c: Context) => {
+                const user = requireUser(c);
+                await svc.removeExercise(user.id, input.id, input.exerciseId);
                 return { ok: true };
             },
         },
