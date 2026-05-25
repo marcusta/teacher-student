@@ -11,6 +11,15 @@ export interface Database {
     notes: NotesTable;
     training_sessions: TrainingSessionsTable;
     training_session_share: TrainingSessionShareTable;
+    programs: ProgramsTable;
+}
+
+export interface ProgramsTable {
+    id: string;
+    teacher_id: string;
+    title: string;
+    description: string;
+    created_at: Generated<string>;
 }
 
 export interface TrainingSessionsTable {

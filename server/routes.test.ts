@@ -13,12 +13,13 @@ import { createLessonsApi } from './api/lessons.api';
 import { createNotesApi } from './api/notes.api';
 import { createTrainingSessionsApi } from './api/training-sessions.api';
 import { createTeachersApi } from './api/teachers.api';
+import { createProgramsApi } from './api/programs.api';
 
 async function setup(seeds: SeedFn[] = []) {
     const {
         userService, invitationService, relationService,
         exerciseService, horseService, lessonService, noteService,
-        trainingSessionService,
+        trainingSessionService, programService,
     } = await createTestDb(...seeds);
 
     const sessions = new SessionStore(':memory:');
@@ -37,6 +38,7 @@ async function setup(seeds: SeedFn[] = []) {
     mount(app, '/api', createNotesApi(noteService));
     mount(app, '/api', createTrainingSessionsApi(trainingSessionService));
     mount(app, '/api', createTeachersApi(relationService));
+    mount(app, '/api', createProgramsApi(programService));
 
     return { app, sessions };
 }
@@ -1165,4 +1167,45 @@ test('DELETE /api/training-sessions/:id removes own session', async () => {
     expect(res.status).toBe(200);
     const list = await (await req(app, 'GET', '/api/training-sessions', undefined, cookie)).json();
     expect(list).toEqual([]);
+});
+
+// --- Programs ---
+
+test('GET /api/programs without session returns 401', async () => {
+    const { app } = await setup();
+    const res = await req(app, 'GET', '/api/programs');
+    expect(res.status).toBe(401);
+});
+
+test('POST /api/programs happy path returns created Program', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const res = await req(app, 'POST', '/api/programs',
+        { title: 'Uppvärmning', description: 'Standardprogram.' }, cookie);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.id).toBeString();
+    expect(data.title).toBe('Uppvärmning');
+    expect(data.description).toBe('Standardprogram.');
+});
+
+test('POST /api/programs empty title returns 400', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const res = await req(app, 'POST', '/api/programs', { title: '' }, cookie);
+    expect(res.status).toBe(400);
+});
+
+test('GET /api/programs lists only my programs', async () => {
+    const { app } = await setup([seedUser]);
+    const annaCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    await req(app, 'POST', '/api/programs', { title: 'A1' }, annaCookie);
+
+    const otherCookie = await registerAndLogin(app, 'other@example.com');
+    await req(app, 'POST', '/api/programs', { title: 'O1' }, otherCookie);
+
+    const res = await req(app, 'GET', '/api/programs', undefined, annaCookie);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.map((p: { title: string }) => p.title)).toEqual(['A1']);
 });

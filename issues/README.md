@@ -37,3 +37,13 @@ Efter 004 är hela `User ↔ Relation`-grafen på plats. Då kan följande featu
 | [020](020-student-attaches-horse-to-training-session.md) | Student attaches a Horse to a Training Session | AFK | 019, 008 |
 | [021](021-student-writes-notes-on-training-session.md) | Student writes Notes on own Training Session | AFK | 019, 017 |
 | [022](022-teacher-sees-and-notes-shared-training-sessions.md) | Teacher sees and writes Notes on shared Training Sessions | AFK | 021 |
+
+### Group A — Program (reusable exercise routine / "ridprogram" in teacher's library)
+
+| # | Titel | Type | Blocked by |
+|---|-------|------|------------|
+| [023](023-teacher-creates-and-lists-programs.md) | Teacher creates and lists own Programs in library | AFK | — |
+| [024](024-teacher-edits-program.md) | Teacher edits a Program | AFK | 023 |
+| [025](025-teacher-deletes-program.md) | Teacher deletes a Program | AFK | 023 |
+| [026](026-teacher-adds-exercise-to-program.md) | Teacher adds an Exercise to a Program | AFK | 023, 005 |
+| [027](027-teacher-manages-program-exercises.md) | Teacher reorders and removes Exercises in a Program | AFK | 026 |

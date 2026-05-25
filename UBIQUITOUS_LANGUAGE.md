@@ -35,9 +35,11 @@ Canonical terms are English (matches code, DB columns, API). The Swedish column 
 
 | Term | Swedish | Definition | Aliases to avoid |
 |------|---------|------------|------------------|
-| **Lesson** (`lesson`) | Lektion | A planned or completed instructional event between a **Teacher** and a **Student**, optionally tied to a **Horse** and a **Program**. Status: `planned`, `completed`, `cancelled`. | Session, class |
-| **Training Session** (`training_session`) | Träningspass | A self-directed practice event a **Student** logs without a teacher present. | Self-practice, home training |
-| **Program** (`program`) | Program | An umbrella a **Teacher** sets up for a **Student**: contains both scheduled **Lessons** and **Exercises** to perform independently. | Plan, course, schedule, curriculum |
+| **Lesson** (`lesson`) | Lektion | A planned or completed instructional event between a **Teacher** and a **Student**, optionally tied to a **Horse**, a **Plan**, and a **Program** (routine). Status: `planned`, `completed`, `cancelled`. Carries its own ordered **Exercises** via `lesson_exercise`. | Session, class |
+| **Training Session** (`training_session`) | Träningspass | A practice event for a **Student**, either logged by the student or prescribed by a **Teacher** in a **Relation** with that student. Carries its own ordered **Exercises** via `training_session_exercise`. May reference a **Plan** and a **Program** (routine). | Self-practice, home training |
+| **Program** (`program`) | Program / Ridprogram | A **Teacher**'s reusable named sequence of **Exercises** — a routine or "ridprogram". Lives in the teacher's **Library**, independent of any student or date. When attached to a **Lesson** or **Training Session**, its exercises are **snapshot-copied** into that occasion's exercise list; later edits to the Program do not affect past occasions. | Plan, curriculum, umbrella |
+| **Plan** (`plan`) | Plan / Träningsplan | A **Student**'s long-running umbrella for development over weeks or months. Contains **Lessons**, **Training Sessions**, and **Goals** via `plan_id` references. Owned by the student; any **Teacher** in an active **Relation** with the student can contribute their own authored content. Optionally designates one **Primary Teacher**. Status: `active`, `archived`. | Program, course, schedule, curriculum |
+| **Primary Teacher** (`plan.primary_teacher_id`) | Huvudtränare | A soft designation on a **Plan** marking one **Teacher** as the student's main coach for that plan. Must be a teacher in an active **Relation** with the plan owner. In MVP, no elevated permissions — purely a label. | Main coach, head trainer |
 
 ## Reflection and communication
 
@@ -62,10 +64,12 @@ Canonical terms are English (matches code, DB columns, API). The Swedish column 
 - An **Invitation** results in at most one **Relation**.
 - A **Student** owns zero or more **Horses**.
 - A **Teacher** owns zero or more **Exercises** in their **Library**.
-- A **Lesson** has exactly one **Teacher**, exactly one **Student**, zero or one **Horse**, zero or one **Program**.
-- A **Lesson** contains zero or more **Exercises** (ordered).
-- A **Program** belongs to exactly one **Teacher**–**Student** **Relation** and contains zero or more **Lessons** plus zero or more **Exercises** (home training).
-- A **Training Session** belongs to exactly one **Student**, optionally to one **Horse** and optionally to one **Program**.
+- A **Lesson** has exactly one **Teacher**, exactly one **Student**, zero or one **Horse**, zero or one **Plan**, zero or one **Program** (routine).
+- A **Lesson** contains zero or more **Exercises** (ordered, inline).
+- A **Training Session** belongs to exactly one **Student**, has exactly one creator (**User**: the student or a contributing **Teacher**), optionally one **Horse**, optionally one **Plan**, optionally one **Program** (routine).
+- A **Training Session** contains zero or more **Exercises** (ordered, inline).
+- A **Program** (routine) belongs to exactly one **Teacher** and contains one or more **Exercises** (ordered). It is reusable across many **Lessons** and **Training Sessions**.
+- A **Plan** belongs to exactly one **Student**, optionally designates one **Primary Teacher**, and contains zero or more **Lessons**, **Training Sessions**, and **Goals**.
 - A **Note** has exactly one author (**User**) and exactly one parent entity.
 
 ## Example dialogue
@@ -85,7 +89,7 @@ Canonical terms are English (matches code, DB columns, API). The Swedish column 
 ## Flagged ambiguities
 
 - **"Trainer" vs "Teacher"** were used interchangeably during design (Swedish: tränare vs lärare). Canonical term is **Teacher** (matches `teacher_id`). Avoid "trainer", "instructor", "coach" in code, docs and UI.
-- **"Program"** is overloaded in everyday language. In this domain a **Program** is strictly *the umbrella of scheduled **Lessons** + home **Exercises** for one specific **Student***. Do not use the word loosely for other planning constructs.
-- **"Lesson" vs "Training Session"** — distinct entities. **Lesson** = teacher present (planned or completed). **Training Session** = student practices alone and logs it. Never use "session" as a synonym for "lesson".
+- **"Program" vs "Plan"** — these are deliberately distinct and easy to confuse. **Program** is a *reusable named exercise routine* in a teacher's library ("ridprogram") — no student, no date. **Plan** is *one student's long-term umbrella* ("träningsplan") — contains lessons, training sessions, and goals over weeks or months. Never use "program" to mean an umbrella or "plan" to mean a routine.
+- **"Lesson" vs "Training Session"** — distinct entities by *teacher presence*, not by who creates them. **Lesson** = teacher present at the event (planned or completed). **Training Session** = no teacher present at the event, but the session itself may be either student-logged (after the fact) or teacher-prescribed (planned home work). Both carry their own ordered exercises. Never use "session" as a synonym for "lesson".
 - **"User" vs "Teacher" vs "Student"** — **User** is an authentication identity. **Teacher** and **Student** are *roles* a user holds inside a specific **Relation**, not types of user. The same **User** can be both at the same time in different **Relations**.
 - **"Invitation"** refers only to a teacher's request to an email address to establish a **Relation**. Not to be confused with future notifications or calendar invites for lessons.

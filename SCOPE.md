@@ -9,18 +9,22 @@ En användare kan vara både lärare och elev samtidigt (rollen är kontextuell 
 ### Lärare kan
 - Se sina elever
 - Skapa övningar (lärarens privata bibliotek, ej knutna till elev) med beskrivning och senare video
+- Skapa **program** (återanvändbara övningssekvenser/ridprogram) i sitt bibliotek
 - Per elev:
-  - Planera lektioner med innehåll och övningar
+  - Planera lektioner med innehåll och övningar (valfritt välja ett program som mall)
   - Anteckna kring lektioner (privat eller delat med elev)
   - Allmänna anteckningar om eleven
-  - Lägga upp träningsprogram (innehåller både planerade lektioner och hemma-övningar)
-  - Se elevens anteckningar och kommentera
+  - Föreslå/skapa träningspass åt eleven att utföra på egen hand
+  - Bidra med innehåll till elevens **plan** (lektioner, träningspass) — om läraren är "huvudtränare" markeras detta
+  - Se elevens anteckningar, träningspass och kommentera
 
 ### Elever kan
-- Se träningsprogram, övningar, lektioner från sina lärare
+- Se övningar, program, lektioner från sina lärare
+- Logga egna träningspass (med valfria övningar) och få respons
 - Ställa frågor om övningar
 - Anteckna kring lektioner och egna träningspass
 - Lägga upp långsiktiga mål
+- Skapa egen **plan** (paraply för lektioner, träningspass, mål över tid) och utse en huvudtränare
 
 ## Avgränsningar (Sverige, MVP)
 
@@ -83,36 +87,53 @@ exercise                           [lärarens privata bibliotek]
   tags (json array), created_at
 
 lesson
-  id, teacher_id, student_id, horse_id?, program_id?,
+  id, teacher_id, student_id, horse_id?, plan_id?, program_id?,
   scheduled_at, duration_min?, status, created_at
   status: planned | completed | cancelled
+  program_id: valfri referens till program (ridprogram-mall) som
+  snapshot-kopierades till lesson_exercise vid skapande
 
 lesson_exercise
-  lesson_id, exercise_id, sort_order, notes?
-  PK(lesson_id, exercise_id)
+  id, lesson_id, exercise_id, sort_order, notes?
+  unique(lesson_id, exercise_id)
+  (surface id krävs för note.parent_kind=lesson_exercise)
 
-program                            [paraply: lektioner + hemma-övningar]
-  id, teacher_id, student_id, title, description?,
-  start_date?, end_date?, created_at
+program                            [återanvändbart ridprogram i lärarens bibliotek]
+  id, teacher_id, title, description?, created_at
 
-program_exercise                   [hemma-övningar i programmet]
+program_exercise                   [övningar i programmet, ordnade]
   program_id, exercise_id, sort_order, notes?
   PK(program_id, exercise_id)
 
-training_session                   [elevens egen logg]
-  id, student_id, horse_id?, program_id?, performed_at,
-  duration_min?, summary?, created_at
+plan                               [elevens paraply över tid]
+  id, student_id, primary_teacher_id?, title, description?,
+  start_date?, end_date?, status, created_at
+  status: active | archived
+  primary_teacher_id: mjuk märkning av huvudtränare; måste vara
+  en lärare i en aktiv relation med eleven; ger inga
+  utökade rättigheter i MVP
+
+training_session                   [träningspass — eleven loggar eller läraren föreslår]
+  id, student_id, horse_id?, plan_id?, program_id?,
+  created_by_id, performed_at, duration_min?, summary?, created_at
+  created_by_id: user_id för den som skapade (eleven själv eller en
+  lärare i en relation med eleven)
+
+training_session_exercise          [övningar i ett träningspass]
+  id, training_session_id, exercise_id, sort_order, notes?
+  unique(training_session_id, exercise_id)
 
 note                               [unifierad, polymorf parent]
   id, author_id, parent_kind, parent_id, body,
   visibility, created_at
-  parent_kind: lesson | student | training_session | exercise_question
+  parent_kind: lesson | lesson_exercise | student | training_session |
+               training_session_exercise | goal | exercise_question
   visibility:  private | shared
 
 goal                               [elevens långsiktiga mål]
-  id, student_id, title, description?, target_date?,
+  id, student_id, plan_id?, title, description?, target_date?,
   status, created_at
-  status: active | achieved | abandoned
+  status: active | archived | achieved | abandoned
 
 question                           [elev frågar om övning]
   id, student_id, exercise_id, body, status, created_at
@@ -127,6 +148,13 @@ question                           [elev frågar om övning]
 - **`teacher_student.invitation_id`** spårar härkomst.
 - **Inbjudningsflöde**: lärare anger e-post → invitation skapas oavsett om kontot finns → vid registrering matchas mot pending invitations → eleven accepterar → relation skapas.
 - **Soft-delete**: bara `horse.archived_at` initialt.
+- **Tre-lagers planering**:
+  1. **Program** = återanvändbar övningssekvens (mall) i lärarens bibliotek. Ej knuten till elev eller datum.
+  2. **Lesson** / **Training Session** = en datum-bunden tillfälle. Har egen ordnad övningslista (`lesson_exercise` / `training_session_exercise`). Kan valfritt referera ett `program` — vid skapande **snapshot-kopieras** programmets övningar till tillfället. Senare ändringar i programmet påverkar inte historik.
+  3. **Plan** = elevens långsiktiga paraply. Innehåller lektioner, träningspass, mål via `plan_id`-referenser. Ägs av eleven; alla lärare i aktiva relationer kan bidra med eget innehåll. `primary_teacher_id` är mjuk märkning av huvudtränare utan utökade rättigheter i MVP.
+- **Symmetri Lesson ↔ Training Session**: båda är "ett tillfälle" med övningar. Skillnad: Lesson skapas av lärare och förutsätter lärarens närvaro; Training Session kan skapas av eleven (egenlogg) eller av en lärare i en relation (förskrivet hemma-pass).
+- **Auktorisation Plan**: elev äger (skapa/redigera/arkivera, ändra `primary_teacher_id`). Lärare i en aktiv relation kan koppla egna `lesson`/`training_session` till elevens `plan` via `plan_id`. Avkoppling (sätta `plan_id = null`) tillåts av planens ägare och av raden's författare. Avkoppling ≠ radering.
+- **Per-övning-anteckningar**: `lesson_exercise` och `training_session_exercise` har egen `id` så `note` kan referera dem polymorft. Junction-kolumnen `notes?` är förskriven kommentar (en författare); flera författares reflektion kring samma övning på samma tillfälle går via `note`.
 
 ## Media-modell (fas 2)
 
@@ -170,7 +198,7 @@ Säkerhet i presign: max-storleksgräns, `Content-Type` och checksum låsta i si
 1. Scaffolda `server/` och `web/` från `mackans-client-fw/apps/starter`.
 2. Migrations för MVP-tabellerna.
 3. Bygg feature-för-feature med tester:
-   auth → invitations → relations → horses → exercises → lessons → programs → notes → goals → questions.
+   auth → invitations → relations → horses → exercises → lessons → training sessions → programs (ridprogram-mallar) → plans → notes → goals → questions.
 4. Minimal webbtestklient parallellt (en sida per feature).
 5. Iterera tills backend känns stabil.
 6. Lägg till Swift-codegen i `mackans-client-fw`.

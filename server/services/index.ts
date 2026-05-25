@@ -8,6 +8,7 @@ import { HorseService } from './horse.service';
 import { LessonService } from './lesson.service';
 import { NoteService } from './note.service';
 import { TrainingSessionService } from './training-session.service';
+import { ProgramService } from './program.service';
 
 export function createServices(db: Kysely<Database>) {
     const userService = new UserService(db);
@@ -18,9 +19,10 @@ export function createServices(db: Kysely<Database>) {
     const lessonService = new LessonService(db);
     const noteService = new NoteService(db);
     const trainingSessionService = new TrainingSessionService(db);
+    const programService = new ProgramService(db);
     return {
         db, userService, invitationService, relationService,
         exerciseService, horseService, lessonService, noteService,
-        trainingSessionService,
+        trainingSessionService, programService,
     };
 }

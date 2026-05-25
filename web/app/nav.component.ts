@@ -9,6 +9,7 @@ const tpl = template(`
         <a bind="invitationsLink" href="/invitations">Inbjudningar</a>
         <a bind="studentsLink" href="/students">Mina elever</a>
         <a bind="libraryLink" href="/library">Bibliotek</a>
+        <a bind="programsLink" href="/program">Program</a>
         <a bind="stableLink" href="/hastar">Hästar</a>
         <a bind="lessonsLink" href="/lektioner">Lektioner</a>
         <a bind="trainingSessionsLink" href="/traningspass">Träningspass</a>
@@ -76,6 +77,7 @@ export class NavComponent extends Component {
             invitationsLink: this.router.link('/invitations'),
             studentsLink: this.router.link('/students'),
             libraryLink: this.router.link('/library'),
+            programsLink: this.router.link('/program'),
             stableLink: this.router.link('/hastar'),
             lessonsLink: this.router.link('/lektioner'),
             trainingSessionsLink: this.router.link('/traningspass'),
