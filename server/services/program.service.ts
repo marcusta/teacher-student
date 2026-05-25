@@ -20,6 +20,18 @@ export interface UpdateProgramInput {
     description?: string;
 }
 
+export interface ProgramExerciseRef {
+    id: string;
+    name: string;
+    description: string;
+    sortOrder: number;
+    notes: string | null;
+}
+
+export interface AddProgramExerciseInput {
+    notes?: string;
+}
+
 function toProgram(row: Selectable<ProgramsTable>): Program {
     return {
         id: row.id,
@@ -111,5 +123,100 @@ export class ProgramService {
             .returning('id')
             .execute();
         if (rows.length === 0) throw new NotFoundError('Program not found');
+    }
+
+    /**
+     * Append an Exercise to a Program. Both the Program and the Exercise must
+     * be owned by `teacherId` — NotFoundError otherwise (leak-safe). A
+     * duplicate `(program_id, exercise_id)` is rejected with a clear error;
+     * snapshot-on-attach semantics mean the same routine should not contain
+     * the same exercise twice.
+     *
+     * Sort order is 0-indexed: 0 for the first row, `max + 1` thereafter.
+     */
+    async addExercise(
+        teacherId: string,
+        programId: string,
+        exerciseId: string,
+        input: AddProgramExerciseInput = {},
+    ): Promise<void> {
+        const program = await this.db
+            .selectFrom('programs')
+            .select(['id', 'teacher_id'])
+            .where('id', '=', programId)
+            .executeTakeFirst();
+        if (!program || program.teacher_id !== teacherId) {
+            throw new NotFoundError('Program not found');
+        }
+        const exercise = await this.db
+            .selectFrom('exercises')
+            .select(['id', 'teacher_id'])
+            .where('id', '=', exerciseId)
+            .executeTakeFirst();
+        if (!exercise || exercise.teacher_id !== teacherId) {
+            throw new NotFoundError('Exercise not found');
+        }
+
+        const existing = await this.db
+            .selectFrom('program_exercise')
+            .select(['program_id'])
+            .where('program_id', '=', programId)
+            .where('exercise_id', '=', exerciseId)
+            .executeTakeFirst();
+        if (existing) {
+            throw new Error('Exercise is already in this Program');
+        }
+
+        const max = await this.db
+            .selectFrom('program_exercise')
+            .select(({ fn }) => fn.max('sort_order').as('m'))
+            .where('program_id', '=', programId)
+            .executeTakeFirst();
+        const currentMax = (max?.m as number | null | undefined) ?? null;
+        const nextOrder = currentMax === null ? 0 : currentMax + 1;
+
+        const notes = input.notes !== undefined ? input.notes.trim() : null;
+
+        await this.db.insertInto('program_exercise').values({
+            program_id: programId,
+            exercise_id: exerciseId,
+            sort_order: nextOrder,
+            notes: notes && notes.length > 0 ? notes : null,
+        }).execute();
+    }
+
+    /**
+     * Read the ordered list of Exercises attached to a Program. NotFoundError
+     * when the Program isn't owned by `teacherId`.
+     */
+    async listExercises(teacherId: string, programId: string): Promise<ProgramExerciseRef[]> {
+        const program = await this.db
+            .selectFrom('programs')
+            .select(['id', 'teacher_id'])
+            .where('id', '=', programId)
+            .executeTakeFirst();
+        if (!program || program.teacher_id !== teacherId) {
+            throw new NotFoundError('Program not found');
+        }
+        const rows = await this.db
+            .selectFrom('program_exercise')
+            .innerJoin('exercises', 'exercises.id', 'program_exercise.exercise_id')
+            .select([
+                'exercises.id as id',
+                'exercises.name as name',
+                'exercises.description as description',
+                'program_exercise.sort_order as sort_order',
+                'program_exercise.notes as notes',
+            ])
+            .where('program_exercise.program_id', '=', programId)
+            .orderBy('program_exercise.sort_order', 'asc')
+            .execute();
+        return rows.map((r) => ({
+            id: r.id,
+            name: r.name,
+            description: r.description,
+            sortOrder: r.sort_order,
+            notes: r.notes,
+        }));
     }
 }

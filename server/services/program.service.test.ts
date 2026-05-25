@@ -132,3 +132,98 @@ test('delete on missing program throws NotFoundError', async () => {
     const { programService, teacher } = await seedTeacher();
     await expect(programService.delete(teacher.id, 'missing')).rejects.toThrow();
 });
+
+test('addExercise on empty Program inserts row with sort_order = 0', async () => {
+    const { programService, exerciseService, teacher } = await seedTeacher();
+    const p = await programService.create(teacher.id, { title: 'P' });
+    const e = await exerciseService.create(teacher.id, { name: 'E' });
+
+    await programService.addExercise(teacher.id, p.id, e.id);
+
+    const list = await programService.listExercises(teacher.id, p.id);
+    expect(list).toEqual([{
+        id: e.id, name: 'E', description: '', sortOrder: 0, notes: null,
+    }]);
+});
+
+test('addExercise on non-empty Program appends with sort_order = max + 1', async () => {
+    const { programService, exerciseService, teacher } = await seedTeacher();
+    const p = await programService.create(teacher.id, { title: 'P' });
+    const e1 = await exerciseService.create(teacher.id, { name: 'E1' });
+    const e2 = await exerciseService.create(teacher.id, { name: 'E2' });
+    const e3 = await exerciseService.create(teacher.id, { name: 'E3' });
+
+    await programService.addExercise(teacher.id, p.id, e1.id);
+    await programService.addExercise(teacher.id, p.id, e2.id);
+    await programService.addExercise(teacher.id, p.id, e3.id);
+
+    const list = await programService.listExercises(teacher.id, p.id);
+    expect(list.map((r) => [r.id, r.sortOrder])).toEqual([
+        [e1.id, 0], [e2.id, 1], [e3.id, 2],
+    ]);
+});
+
+test('addExercise stores trimmed notes when provided', async () => {
+    const { programService, exerciseService, teacher } = await seedTeacher();
+    const p = await programService.create(teacher.id, { title: 'P' });
+    const e = await exerciseService.create(teacher.id, { name: 'E' });
+    await programService.addExercise(teacher.id, p.id, e.id, { notes: '  3 varv  ' });
+    const list = await programService.listExercises(teacher.id, p.id);
+    expect(list[0].notes).toBe('3 varv');
+});
+
+test('addExercise on cross-teacher Program throws NotFoundError', async () => {
+    const ctx = await seedTeacher('t1@example.com');
+    const p = await ctx.programService.create(ctx.teacher.id, { title: 'P' });
+    const t2 = await ctx.userService.register({
+        email: 't2@example.com', password: 'secret123', displayName: 'T2',
+    });
+    const e2 = await ctx.exerciseService.create(t2.id, { name: 'E' });
+    await expect(ctx.programService.addExercise(t2.id, p.id, e2.id))
+        .rejects.toThrow();
+});
+
+test('addExercise on cross-teacher Exercise throws NotFoundError', async () => {
+    const ctx = await seedTeacher('t1@example.com');
+    const p = await ctx.programService.create(ctx.teacher.id, { title: 'P' });
+    const t2 = await ctx.userService.register({
+        email: 't2@example.com', password: 'secret123', displayName: 'T2',
+    });
+    const otherExercise = await ctx.exerciseService.create(t2.id, { name: 'E' });
+    await expect(ctx.programService.addExercise(ctx.teacher.id, p.id, otherExercise.id))
+        .rejects.toThrow();
+});
+
+test('addExercise duplicate is rejected', async () => {
+    const { programService, exerciseService, teacher } = await seedTeacher();
+    const p = await programService.create(teacher.id, { title: 'P' });
+    const e = await exerciseService.create(teacher.id, { name: 'E' });
+    await programService.addExercise(teacher.id, p.id, e.id);
+    await expect(programService.addExercise(teacher.id, p.id, e.id))
+        .rejects.toThrow();
+});
+
+test('listExercises on empty Program returns []', async () => {
+    const { programService, teacher } = await seedTeacher();
+    const p = await programService.create(teacher.id, { title: 'P' });
+    expect(await programService.listExercises(teacher.id, p.id)).toEqual([]);
+});
+
+test('listExercises on cross-teacher Program throws NotFoundError', async () => {
+    const ctx = await seedTeacher('t1@example.com');
+    const p = await ctx.programService.create(ctx.teacher.id, { title: 'P' });
+    const t2 = await ctx.userService.register({
+        email: 't2@example.com', password: 'secret123', displayName: 'T2',
+    });
+    await expect(ctx.programService.listExercises(t2.id, p.id)).rejects.toThrow();
+});
+
+test('deleting a Program cascades to program_exercise rows', async () => {
+    const { programService, exerciseService, teacher, db } = await seedTeacher();
+    const p = await programService.create(teacher.id, { title: 'P' });
+    const e = await exerciseService.create(teacher.id, { name: 'E' });
+    await programService.addExercise(teacher.id, p.id, e.id);
+    await programService.delete(teacher.id, p.id);
+    const rows = await db.selectFrom('program_exercise').selectAll().execute();
+    expect(rows).toEqual([]);
+});

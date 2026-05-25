@@ -1,17 +1,23 @@
 import { Signal } from '@basics/core/client/core';
 import { request, type RequestError } from '@basics/core/client/request';
-import { api, type Program } from '../api';
+import { api, type Exercise, type Program, type ProgramExerciseRef } from '../api';
 
 /**
  * Owns the current Teacher's Programs (reusable Exercise routines /
  * "ridprogram") as observable state. Deep module: exposes `items`,
- * `loading`, `error` signals and `load` / `create`. Mirrors LibraryService
- * for Exercises — same pattern, distinct entity.
+ * `loading`, `error` signals and `load` / `create` plus per-program
+ * exercise composition signals. Mirrors LibraryService for Exercises —
+ * same pattern, distinct entity.
  */
 export class ProgramsService {
     readonly items = new Signal<Program[]>([]);
     readonly loading = new Signal(false);
     readonly error = new Signal<RequestError | null>(null);
+
+    /** Exercises attached to the currently-edited Program, sort_order ASC. */
+    readonly exercises = new Signal<ProgramExerciseRef[]>([]);
+    /** Teacher's full Exercise library, used as the picker source. */
+    readonly availableExercises = new Signal<Exercise[]>([]);
 
     async load(): Promise<void> {
         const result = await request(this.loading, this.error, () => api.programs.list());
@@ -46,6 +52,28 @@ export class ProgramsService {
         const result = await request(this.loading, this.error, () => api.programs.delete({ id }));
         if (!result) return false;
         this.items.set(this.items.get().filter((p) => p.id !== id));
+        return true;
+    }
+
+    async loadExercises(programId: string): Promise<void> {
+        const result = await request(this.loading, this.error, () =>
+            api.programs.listExercises({ id: programId }),
+        );
+        this.exercises.set(result ?? []);
+    }
+
+    async loadAvailableExercises(): Promise<void> {
+        const result = await request(this.loading, this.error, () => api.exercises.list());
+        this.availableExercises.set(result ?? []);
+    }
+
+    /** Returns true on success; refreshes the exercises signal so the UI updates. */
+    async addExerciseToProgram(programId: string, exerciseId: string): Promise<boolean> {
+        const result = await request(this.loading, this.error, () =>
+            api.programs.addExercise({ id: programId, exerciseId }),
+        );
+        if (!result) return false;
+        await this.loadExercises(programId);
         return true;
     }
 }

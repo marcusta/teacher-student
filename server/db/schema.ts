@@ -12,6 +12,7 @@ export interface Database {
     training_sessions: TrainingSessionsTable;
     training_session_share: TrainingSessionShareTable;
     programs: ProgramsTable;
+    program_exercise: ProgramExerciseTable;
 }
 
 export interface ProgramsTable {
@@ -19,6 +20,14 @@ export interface ProgramsTable {
     teacher_id: string;
     title: string;
     description: string;
+    created_at: Generated<string>;
+}
+
+export interface ProgramExerciseTable {
+    program_id: string;
+    exercise_id: string;
+    sort_order: number;
+    notes: string | null;
     created_at: Generated<string>;
 }
 

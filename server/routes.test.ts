@@ -1283,3 +1283,40 @@ test('DELETE /api/programs/:id on other teacher returns 404', async () => {
     const res = await req(app, 'DELETE', `/api/programs/${id}`, undefined, otherCookie);
     expect(res.status).toBe(404);
 });
+
+test('POST /api/programs/:id/exercises happy path appends', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const p = await (await req(app, 'POST', '/api/programs', { title: 'P' }, cookie)).json();
+    const e = await (await req(app, 'POST', '/api/exercises', { name: 'E' }, cookie)).json();
+
+    const res = await req(app, 'POST', `/api/programs/${p.id}/exercises`,
+        { exerciseId: e.id }, cookie);
+    expect(res.status).toBe(200);
+
+    const list = await (await req(app, 'GET', `/api/programs/${p.id}/exercises`, undefined, cookie)).json();
+    expect(list.length).toBe(1);
+    expect(list[0]).toMatchObject({ id: e.id, name: 'E', sortOrder: 0 });
+});
+
+test('POST /api/programs/:id/exercises on other teacher Program returns 404', async () => {
+    const { app } = await setup([seedUser]);
+    const annaCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const p = await (await req(app, 'POST', '/api/programs', { title: 'P' }, annaCookie)).json();
+
+    const otherCookie = await registerAndLogin(app, 'other@example.com');
+    const e = await (await req(app, 'POST', '/api/exercises', { name: 'E' }, otherCookie)).json();
+    const res = await req(app, 'POST', `/api/programs/${p.id}/exercises`,
+        { exerciseId: e.id }, otherCookie);
+    expect(res.status).toBe(404);
+});
+
+test('GET /api/programs/:id/exercises on other teacher returns 404', async () => {
+    const { app } = await setup([seedUser]);
+    const annaCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const p = await (await req(app, 'POST', '/api/programs', { title: 'P' }, annaCookie)).json();
+
+    const otherCookie = await registerAndLogin(app, 'other@example.com');
+    const res = await req(app, 'GET', `/api/programs/${p.id}/exercises`, undefined, otherCookie);
+    expect(res.status).toBe(404);
+});

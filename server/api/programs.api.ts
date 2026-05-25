@@ -14,6 +14,12 @@ const UpdateInput = Type.Object({
     description: Type.Optional(Type.String({ maxLength: 4000 })),
 });
 
+const AddExerciseInput = Type.Object({
+    id: Type.String({ minLength: 1 }),
+    exerciseId: Type.String({ minLength: 1 }),
+    notes: Type.Optional(Type.String({ maxLength: 2000 })),
+});
+
 export function createProgramsApi(svc: ProgramService) {
     return {
         create: {
@@ -64,6 +70,27 @@ export function createProgramsApi(svc: ProgramService) {
             fn: async (input: { id: string }, c: Context) => {
                 const user = requireUser(c);
                 await svc.delete(user.id, input.id);
+                return { ok: true };
+            },
+        },
+        listExercises: {
+            method: 'GET' as const,
+            path: '/programs/:id/exercises',
+            middleware: [requireAuth()],
+            fn: async (input: { id: string }, c: Context) => {
+                const user = requireUser(c);
+                return svc.listExercises(user.id, input.id);
+            },
+        },
+        addExercise: {
+            method: 'POST' as const,
+            path: '/programs/:id/exercises',
+            schema: AddExerciseInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof AddExerciseInput>, c: Context) => {
+                const user = requireUser(c);
+                const { id, exerciseId, notes } = input;
+                await svc.addExercise(user.id, id, exerciseId, notes !== undefined ? { notes } : {});
                 return { ok: true };
             },
         },
