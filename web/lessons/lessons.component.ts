@@ -1,4 +1,4 @@
-import { Component, Computed, Signal, template } from '@basics/core/client/core';
+import { Component, Computed, Router, Signal, template } from '@basics/core/client/core';
 import { t } from '../theme';
 import { s, btn, input } from '../css';
 import { LessonsService } from './lessons.service';
@@ -110,6 +110,10 @@ export class LessonsComponent extends Component {
                 background: ${t('surface')};
                 border-radius: ${t('radius')};
                 font-size: 0.875rem;
+                text-decoration: none;
+                color: inherit;
+
+                &:hover { background: ${t('hover-bg')}; }
             }
             & .lessons__item-when { font-weight: 500; }
             & .lessons__item-who { opacity: 0.7; font-size: 0.8125rem; }
@@ -201,9 +205,23 @@ export class LessonsComponent extends Component {
         return frag;
     }
 
+    private router = this.inject(Router);
+
     private renderItem(item: LessonForUser): HTMLElement {
         const li = document.createElement('li');
-        li.className = 'lessons__item';
+        // Teachers click through to the edit page; students see read-only.
+        const row: HTMLElement = item.role === 'teacher'
+            ? document.createElement('a')
+            : document.createElement('div');
+        row.className = 'lessons__item';
+        if (row instanceof HTMLAnchorElement) {
+            const href = `/lektioner/${item.id}`;
+            row.href = href;
+            row.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.router.navigate(href);
+            });
+        }
 
         const left = document.createElement('div');
         const when = document.createElement('div');
@@ -212,7 +230,8 @@ export class LessonsComponent extends Component {
         const who = document.createElement('div');
         who.className = 'lessons__item-who';
         const rolePrefix = item.role === 'teacher' ? 'Elev: ' : 'Lärare: ';
-        who.textContent = rolePrefix + item.counterpartyDisplayName;
+        const horseSuffix = item.horseName ? ` · ${item.horseName}` : '';
+        who.textContent = rolePrefix + item.counterpartyDisplayName + horseSuffix;
         left.appendChild(when);
         left.appendChild(who);
 
@@ -220,8 +239,9 @@ export class LessonsComponent extends Component {
         badge.className = 'lessons__item-badge';
         badge.textContent = statusLabel(item.status);
 
-        li.appendChild(left);
-        li.appendChild(badge);
+        row.appendChild(left);
+        row.appendChild(badge);
+        li.appendChild(row);
         return li;
     }
 }

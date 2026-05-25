@@ -11,7 +11,7 @@ import { InboxComponent } from '../inbox/inbox.component';
 import { StudentsShellComponent } from '../students/students-shell.component';
 import { LibraryShellComponent } from '../library/library-shell.component';
 import { StableShellComponent } from '../stable/stable-shell.component';
-import { LessonsComponent } from '../lessons/lessons.component';
+import { LessonsShellComponent } from '../lessons/lessons-shell.component';
 
 const tpl = template(`
     <div class="app-layout">
@@ -64,7 +64,7 @@ export class AppComponent extends Component {
             '/students': StudentsShellComponent,
             '/library': LibraryShellComponent,
             '/hastar': StableShellComponent,
-            '/lektioner': LessonsComponent,
+            '/lektioner': LessonsShellComponent,
         }, HomeComponent);
 
         return frag;

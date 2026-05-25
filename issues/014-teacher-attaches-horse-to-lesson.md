@@ -1,7 +1,7 @@
 # 014 — Teacher attaches a Horse to a Lesson
 
 **Type:** AFK
-**Status:** open
+**Status:** done
 
 ## What to build
 

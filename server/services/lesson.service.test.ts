@@ -130,6 +130,111 @@ test('listForUser merges both sides sorted by scheduled_at ASC', async () => {
     expect(list[1].counterpartyDisplayName).toBe('S');
 });
 
+// --- update (014: attach Horse + reschedule) ---
+
+async function seedConnectedWithHorse() {
+    const ctx = await seedConnected();
+    const horse = await ctx.horseService.create(ctx.student.id, { name: 'Bella' });
+    return { ...ctx, horse };
+}
+
+test('update attaches a Horse owned by the lesson Student', async () => {
+    const ctx = await seedConnectedWithHorse();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+
+    const updated = await ctx.lessonService.update(ctx.teacher.id, lesson.id, {
+        horseId: ctx.horse.id,
+    });
+
+    expect(updated.horseId).toBe(ctx.horse.id);
+    expect(updated.horseName).toBe('Bella');
+});
+
+test('update detaches the Horse when horseId is null', async () => {
+    const ctx = await seedConnectedWithHorse();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    await ctx.lessonService.update(ctx.teacher.id, lesson.id, { horseId: ctx.horse.id });
+
+    const cleared = await ctx.lessonService.update(ctx.teacher.id, lesson.id, {
+        horseId: null,
+    });
+    expect(cleared.horseId).toBeNull();
+    expect(cleared.horseName).toBeNull();
+});
+
+test('update reschedules without touching horse', async () => {
+    const ctx = await seedConnectedWithHorse();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    await ctx.lessonService.update(ctx.teacher.id, lesson.id, { horseId: ctx.horse.id });
+
+    const updated = await ctx.lessonService.update(ctx.teacher.id, lesson.id, {
+        scheduledAt: '2026-07-15T09:30:00.000Z',
+    });
+    expect(updated.scheduledAt).toBe('2026-07-15T09:30:00.000Z');
+    expect(updated.horseId).toBe(ctx.horse.id);
+});
+
+test('update by a different teacher throws NotFoundError', async () => {
+    const ctx = await seedConnectedWithHorse();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    const intruder = await ctx.userService.register({
+        email: 'intruder@example.com', password: 'secret123', displayName: 'I',
+    });
+    await expect(ctx.lessonService.update(intruder.id, lesson.id, {
+        horseId: ctx.horse.id,
+    })).rejects.toThrow();
+});
+
+test('update rejects a Horse owned by a different Student', async () => {
+    const ctx = await seedConnectedWithHorse();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    // A second student with their own horse, connected to the same teacher.
+    const other = await ctx.userService.register({
+        email: 'other@example.com', password: 'secret123', displayName: 'O',
+    });
+    const inv = await ctx.invitationService.createInvitation(ctx.teacher.id, 'other@example.com');
+    await ctx.invitationService.acceptInvitation(inv.id, other.id, 'other@example.com');
+    const otherHorse = await ctx.horseService.create(other.id, { name: 'Foreign' });
+
+    await expect(ctx.lessonService.update(ctx.teacher.id, lesson.id, {
+        horseId: otherHorse.id,
+    })).rejects.toThrow();
+});
+
+test('update rejects an archived Horse', async () => {
+    const ctx = await seedConnectedWithHorse();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    await ctx.horseService.archive(ctx.student.id, ctx.horse.id);
+
+    await expect(ctx.lessonService.update(ctx.teacher.id, lesson.id, {
+        horseId: ctx.horse.id,
+    })).rejects.toThrow();
+});
+
+test('listForUser populates horseName when attached', async () => {
+    const ctx = await seedConnectedWithHorse();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    await ctx.lessonService.update(ctx.teacher.id, lesson.id, { horseId: ctx.horse.id });
+
+    const list = await ctx.lessonService.listForUser(ctx.student.id);
+    expect(list[0].horseId).toBe(ctx.horse.id);
+    expect(list[0].horseName).toBe('Bella');
+});
+
 test('listForUser returns [] for user with no lessons', async () => {
     const ctx = await seedConnected();
     const lonely = await ctx.userService.register({

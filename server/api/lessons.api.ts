@@ -11,6 +11,12 @@ const CreateInput = Type.Object({
     scheduledAt: Type.String({ pattern: ISO_DATETIME_PATTERN }),
 });
 
+const UpdateInput = Type.Object({
+    id: Type.String({ minLength: 1 }),
+    horseId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
+    scheduledAt: Type.Optional(Type.String({ pattern: ISO_DATETIME_PATTERN })),
+});
+
 export function createLessonsApi(svc: LessonService) {
     return {
         create: {
@@ -30,6 +36,17 @@ export function createLessonsApi(svc: LessonService) {
             fn: async (c: Context) => {
                 const user = requireUser(c);
                 return svc.listForUser(user.id);
+            },
+        },
+        update: {
+            method: 'PATCH' as const,
+            path: '/lessons/:id',
+            schema: UpdateInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof UpdateInput>, c: Context) => {
+                const user = requireUser(c);
+                const { id, ...patch } = input;
+                return svc.update(user.id, id, patch);
             },
         },
     };

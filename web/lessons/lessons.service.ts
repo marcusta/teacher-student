@@ -1,6 +1,6 @@
 import { Signal } from '@basics/core/client/core';
 import { request, type RequestError } from '@basics/core/client/request';
-import { api, type LessonForUser } from '../api';
+import { api, type Lesson, type LessonForUser } from '../api';
 
 /**
  * Owns the current user's Lessons as observable state. Deep module:
@@ -28,5 +28,24 @@ export class LessonsService {
         // role + counterparty fields the unified GET /api/lessons supplies.
         await this.load();
         return true;
+    }
+
+    /** Resolve a single Lesson from the loaded list — no extra round-trip. */
+    get(id: string): LessonForUser | null {
+        return this.items.get().find((l) => l.id === id) ?? null;
+    }
+
+    async update(
+        id: string,
+        patch: { horseId?: string | null; scheduledAt?: string },
+    ): Promise<Lesson | null> {
+        const result = await request(this.loading, this.error, () =>
+            api.lessons.update({ id, ...patch }),
+        );
+        if (!result) return null;
+        // The PATCH response is a plain Lesson (no role/counterparty); reload
+        // to keep the list rows consistent with what GET /api/lessons returns.
+        await this.load();
+        return result;
     }
 }
