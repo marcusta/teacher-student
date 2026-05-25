@@ -15,7 +15,7 @@ export interface Lesson {
 }
 
 export interface LessonForUser {
-    role: 'teacher' | 'student';
+    role: 'student' | 'teacher';
     counterpartyDisplayName: string;
     id: string;
     teacherId: string;

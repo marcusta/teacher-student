@@ -4,6 +4,7 @@ import { createStudentsClient } from './api/students.gen';
 import { createExercisesClient } from './api/exercises.gen';
 import { createHorsesClient } from './api/horses.gen';
 import { createLessonsClient } from './api/lessons.gen';
+import { createNotesClient } from './api/notes.gen';
 
 export { ApiError } from '@basics/core/client/api-error';
 export type { Invitation, InboxInvitation } from './api/invitations.gen';
@@ -11,6 +12,7 @@ export type { Student } from './api/students.gen';
 export type { Exercise } from './api/exercises.gen';
 export type { Horse } from './api/horses.gen';
 export type { Lesson, LessonForUser, LessonExerciseRef } from './api/lessons.gen';
+export type { Note } from './api/notes.gen';
 
 export const api = {
     register: createRegisterClient('/api'),
@@ -19,4 +21,5 @@ export const api = {
     exercises: createExercisesClient('/api'),
     horses: createHorsesClient('/api'),
     lessons: createLessonsClient('/api'),
+    notes: createNotesClient('/api'),
 };

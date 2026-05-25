@@ -1,8 +1,10 @@
 import { Component, Router, Signal, effect, template } from '@basics/core/client/core';
+import { AuthService } from '@basics/core/client/auth';
 import { t } from '../theme';
 import { s, btn, input } from '../css';
 import { api, type Exercise, type Horse } from '../api';
 import { LessonsService } from './lessons.service';
+import { NotesService } from './notes.service';
 
 const tpl = template(`
     <div class="lesson-edit" bind="root">
@@ -34,6 +36,23 @@ const tpl = template(`
                 <select bind="exerciseSelect"></select>
                 <button bind="addExercise" type="button">Lägg till</button>
             </div>
+        </section>
+
+        <section bind="notesSection" class="lesson-edit__notes">
+            <h3>Anteckningar</h3>
+            <ul bind="noteList" class="lesson-edit__note-list"></ul>
+            <div bind="noteEmpty" class="lesson-edit__note-empty">Inga anteckningar än.</div>
+            <form bind="noteForm" class="lesson-edit__note-form">
+                <textarea bind="noteBody" placeholder="Skriv en anteckning…" rows="3"></textarea>
+                <div class="lesson-edit__note-row">
+                    <label class="lesson-edit__note-vis">
+                        <input bind="noteShared" type="checkbox">
+                        <span>Delad med eleven</span>
+                    </label>
+                    <button bind="noteSubmit" type="submit">Spara anteckning</button>
+                </div>
+                <div class="error" bind="noteError"></div>
+            </form>
         </section>
     </div>
 `);
@@ -165,11 +184,115 @@ export class LessonEditComponent extends Component {
                 }
                 & button { ${btn()} }
             }
+
+            & .lesson-edit__notes {
+                margin-top: ${s('xl')};
+                & h3 { margin: 0 0 ${s('sm')}; font-size: 1rem; }
+            }
+            &.missing .lesson-edit__notes { display: none; }
+
+            & .lesson-edit__note-list {
+                list-style: none;
+                margin: 0 0 ${s('sm')};
+                padding: 0;
+                display: flex;
+                flex-direction: column;
+                gap: ${s('sm')};
+            }
+
+            & .lesson-edit__note-item {
+                padding: ${s('sm')};
+                background: ${t('surface')};
+                border-radius: ${t('radius')};
+                font-size: 0.875rem;
+                display: flex;
+                flex-direction: column;
+                gap: ${s('xs')};
+
+                & .lesson-edit__note-meta {
+                    display: flex;
+                    gap: ${s('sm')};
+                    font-size: 0.75rem;
+                    opacity: 0.7;
+                    align-items: center;
+                }
+
+                & .lesson-edit__note-badge {
+                    padding: 0 ${s('xs')};
+                    border-radius: ${t('radius')};
+                    border: 1px solid currentColor;
+                    font-size: 0.6875rem;
+                }
+
+                & .lesson-edit__note-body {
+                    white-space: pre-wrap;
+                }
+
+                & textarea {
+                    ${input()}
+                    width: 100%;
+                    box-sizing: border-box;
+                    resize: vertical;
+                }
+
+                & .lesson-edit__note-actions {
+                    display: flex;
+                    gap: ${s('sm')};
+                    & button {
+                        background: transparent;
+                        border: none;
+                        color: ${t('text')};
+                        opacity: 0.7;
+                        cursor: pointer;
+                        font-size: 0.8125rem;
+                        padding: 0;
+                        &:hover { opacity: 1; text-decoration: underline; }
+                        &.lesson-edit__note-delete { color: ${t('error')}; opacity: 0.9; }
+                    }
+                }
+            }
+
+            & .lesson-edit__note-empty {
+                padding: ${s('sm')};
+                opacity: 0.6;
+                font-size: 0.875rem;
+            }
+            & .lesson-edit__note-empty.hidden { display: none; }
+
+            & .lesson-edit__note-form {
+                display: flex;
+                flex-direction: column;
+                gap: ${s('xs')};
+                & textarea {
+                    ${input()}
+                    width: 100%;
+                    box-sizing: border-box;
+                    resize: vertical;
+                }
+            }
+
+            & .lesson-edit__note-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: ${s('md')};
+                & button { ${btn()} }
+            }
+
+            & .lesson-edit__note-vis {
+                display: flex;
+                align-items: center;
+                gap: ${s('xs')};
+                font-size: 0.875rem;
+            }
         }
     `;
 
+    private auth = this.inject(AuthService);
+
     private router = this.inject(Router);
     private svc = this.inject(LessonsService);
+    private notes = this.inject(NotesService);
     private horseVal = new Signal('');
     private whenVal = new Signal('');
     private horses = new Signal<Horse[]>([]);
@@ -177,6 +300,11 @@ export class LessonEditComponent extends Component {
     private exerciseVal = new Signal('');
     private resolved = new Signal(false);
     private found = new Signal(true);
+    private noteBodyVal = new Signal('');
+    private noteSharedVal = new Signal(false);
+    private editingNoteId = new Signal<string | null>(null);
+    private editingBodyVal = new Signal('');
+    private editingSharedVal = new Signal(false);
 
     private terminal(): boolean {
         const id = this.router.route.get().split('/')[2] ?? '';
@@ -209,6 +337,7 @@ export class LessonEditComponent extends Component {
                 api.students.listHorses({ id: lesson.studentId }),
                 api.exercises.list(),
             ]);
+            void this.notes.load('lesson', id);
             this.horses.set(horses);
             this.library.set(library);
             this.found.set(true);
@@ -298,6 +427,34 @@ export class LessonEditComponent extends Component {
                     ? 'lesson-edit__ex-empty' : 'lesson-edit__ex-empty hidden',
             },
             error: { textContent: () => this.svc.error.get()?.message ?? '' },
+            noteBody: {
+                value: () => this.noteBodyVal.get(),
+                oninput: (e: Event) => this.noteBodyVal.set((e.target as HTMLTextAreaElement).value),
+            },
+            noteShared: {
+                checked: () => this.noteSharedVal.get(),
+                onchange: (e: Event) => this.noteSharedVal.set((e.target as HTMLInputElement).checked),
+            },
+            noteForm: {
+                onsubmit: async (e: Event) => {
+                    e.preventDefault();
+                    const body = this.noteBodyVal.get().trim();
+                    if (!body) return;
+                    const ok = await this.notes.create(
+                        body,
+                        this.noteSharedVal.get() ? 'shared' : 'private',
+                    );
+                    if (ok) {
+                        this.noteBodyVal.set('');
+                        this.noteSharedVal.set(false);
+                    }
+                },
+            },
+            noteEmpty: {
+                className: () => this.notes.items.get().length === 0
+                    ? 'lesson-edit__note-empty' : 'lesson-edit__note-empty hidden',
+            },
+            noteError: { textContent: () => this.notes.error.get()?.message ?? '' },
         });
 
         // Render the attached-exercises list reactively.
@@ -368,6 +525,101 @@ export class LessonEditComponent extends Component {
             this.horses.get();
             this.horseVal.get();
             renderOptions();
+        }));
+
+        // Render notes list reactively.
+        const noteHost = this.ref(frag, 'noteList');
+        this.track(effect(() => {
+            const me = this.auth.currentUser.get()?.id;
+            const editing = this.editingNoteId.get();
+            const items = this.notes.items.get();
+            noteHost.replaceChildren();
+            for (const note of items) {
+                const li = document.createElement('li');
+                li.className = 'lesson-edit__note-item';
+
+                const meta = document.createElement('div');
+                meta.className = 'lesson-edit__note-meta';
+                const who = document.createElement('span');
+                who.textContent = note.authorDisplayName;
+                const when = document.createElement('span');
+                when.textContent = new Date(note.createdAt).toLocaleString('sv-SE');
+                const badge = document.createElement('span');
+                badge.className = 'lesson-edit__note-badge';
+                badge.textContent = note.visibility === 'shared' ? 'Delad' : 'Prep';
+                meta.append(who, when, badge);
+                li.appendChild(meta);
+
+                if (editing === note.id) {
+                    const ta = document.createElement('textarea');
+                    ta.rows = 3;
+                    ta.value = this.editingBodyVal.get();
+                    ta.oninput = (e) => this.editingBodyVal.set((e.target as HTMLTextAreaElement).value);
+                    li.appendChild(ta);
+
+                    const visLabel = document.createElement('label');
+                    visLabel.className = 'lesson-edit__note-vis';
+                    const visCb = document.createElement('input');
+                    visCb.type = 'checkbox';
+                    visCb.checked = this.editingSharedVal.get();
+                    visCb.onchange = (e) => this.editingSharedVal.set((e.target as HTMLInputElement).checked);
+                    const visTxt = document.createElement('span');
+                    visTxt.textContent = 'Delad med eleven';
+                    visLabel.append(visCb, visTxt);
+                    li.appendChild(visLabel);
+
+                    const actions = document.createElement('div');
+                    actions.className = 'lesson-edit__note-actions';
+                    const save = document.createElement('button');
+                    save.type = 'button';
+                    save.textContent = 'Spara';
+                    save.onclick = async () => {
+                        const body = this.editingBodyVal.get().trim();
+                        if (!body) return;
+                        const ok = await this.notes.update(note.id, {
+                            body,
+                            visibility: this.editingSharedVal.get() ? 'shared' : 'private',
+                        });
+                        if (ok) this.editingNoteId.set(null);
+                    };
+                    const cancel = document.createElement('button');
+                    cancel.type = 'button';
+                    cancel.textContent = 'Avbryt';
+                    cancel.onclick = () => this.editingNoteId.set(null);
+                    actions.append(save, cancel);
+                    li.appendChild(actions);
+                } else {
+                    const body = document.createElement('div');
+                    body.className = 'lesson-edit__note-body';
+                    body.textContent = note.body;
+                    li.appendChild(body);
+
+                    if (note.authorId === me) {
+                        const actions = document.createElement('div');
+                        actions.className = 'lesson-edit__note-actions';
+                        const edit = document.createElement('button');
+                        edit.type = 'button';
+                        edit.textContent = 'Redigera';
+                        edit.onclick = () => {
+                            this.editingBodyVal.set(note.body);
+                            this.editingSharedVal.set(note.visibility === 'shared');
+                            this.editingNoteId.set(note.id);
+                        };
+                        const del = document.createElement('button');
+                        del.type = 'button';
+                        del.className = 'lesson-edit__note-delete';
+                        del.textContent = 'Ta bort';
+                        del.onclick = async () => {
+                            if (!window.confirm('Ta bort anteckningen?')) return;
+                            await this.notes.delete(note.id);
+                        };
+                        actions.append(edit, del);
+                        li.appendChild(actions);
+                    }
+                }
+
+                noteHost.appendChild(li);
+            }
         }));
 
         return frag;

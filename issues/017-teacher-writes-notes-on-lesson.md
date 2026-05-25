@@ -1,7 +1,7 @@
 # 017 — Teacher writes Notes on a Lesson
 
 **Type:** AFK
-**Status:** open
+**Status:** done
 
 ## What to build
 

@@ -10,11 +10,12 @@ import { createStudentsApi } from './api/students.api';
 import { createExercisesApi } from './api/exercises.api';
 import { createHorsesApi } from './api/horses.api';
 import { createLessonsApi } from './api/lessons.api';
+import { createNotesApi } from './api/notes.api';
 
 async function setup(seeds: SeedFn[] = []) {
     const {
         userService, invitationService, relationService,
-        exerciseService, horseService, lessonService,
+        exerciseService, horseService, lessonService, noteService,
     } = await createTestDb(...seeds);
 
     const sessions = new SessionStore(':memory:');
@@ -30,6 +31,7 @@ async function setup(seeds: SeedFn[] = []) {
     mount(app, '/api', createExercisesApi(exerciseService));
     mount(app, '/api', createHorsesApi(horseService));
     mount(app, '/api', createLessonsApi(lessonService));
+    mount(app, '/api', createNotesApi(noteService));
 
     return { app, sessions };
 }
@@ -876,4 +878,81 @@ test('GET /api/lessons returns student-side lessons with role + counterparty', a
     const teacherList = await (await req(app, 'GET', '/api/lessons', undefined, teacherCookie)).json();
     expect(teacherList[0].role).toBe('teacher');
     expect(teacherList[0].counterpartyDisplayName).toBe('Stina Studentsson');
+});
+
+// --- Notes ---
+
+test('POST /api/notes creates a note on own Lesson', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const lesson = await (await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: '2026-06-01T10:00:00.000Z' }, teacherCookie)).json();
+
+    const res = await req(app, 'POST', '/api/notes', {
+        parentKind: 'lesson', parentId: lesson.id,
+        body: 'prep', visibility: 'private',
+    }, teacherCookie);
+    expect(res.status).toBe(200);
+    const note = await res.json();
+    expect(note.body).toBe('prep');
+});
+
+test('GET /api/notes hides private notes from the other side', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentCookie = await registerAndLogin(app, 'student@example.com');
+    const inv = await (await req(app, 'POST', '/api/invitations',
+        { inviteeEmail: 'student@example.com' }, teacherCookie)).json();
+    await req(app, 'POST', '/api/invitations/accept', { invitationId: inv.id }, studentCookie);
+    const me = await (await req(app, 'GET', '/api/auth/me', undefined, studentCookie)).json();
+    const lesson = await (await req(app, 'POST', '/api/lessons',
+        { studentId: me.id, scheduledAt: '2026-06-01T10:00:00.000Z' }, teacherCookie)).json();
+    await req(app, 'POST', '/api/notes', {
+        parentKind: 'lesson', parentId: lesson.id,
+        body: 'prep', visibility: 'private',
+    }, teacherCookie);
+    await req(app, 'POST', '/api/notes', {
+        parentKind: 'lesson', parentId: lesson.id,
+        body: 'rapport', visibility: 'shared',
+    }, teacherCookie);
+
+    const qs = `parentKind=lesson&parentId=${lesson.id}`;
+    const teacherList = await (await req(app, 'GET', `/api/notes?${qs}`,
+        undefined, teacherCookie)).json();
+    expect(teacherList.length).toBe(2);
+
+    const studentList = await (await req(app, 'GET', `/api/notes?${qs}`,
+        undefined, studentCookie)).json();
+    expect(studentList.length).toBe(1);
+    expect(studentList[0].body).toBe('rapport');
+});
+
+test('POST /api/notes on a stranger Lesson returns 404', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const lesson = await (await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: '2026-06-01T10:00:00.000Z' }, teacherCookie)).json();
+    const intruderCookie = await registerAndLogin(app, 'intruder@example.com');
+    const res = await req(app, 'POST', '/api/notes', {
+        parentKind: 'lesson', parentId: lesson.id,
+        body: 'nope', visibility: 'shared',
+    }, intruderCookie);
+    expect(res.status).toBe(404);
+});
+
+test('DELETE /api/notes/:id removes own note', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const lesson = await (await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: '2026-06-01T10:00:00.000Z' }, teacherCookie)).json();
+    const note = await (await req(app, 'POST', '/api/notes', {
+        parentKind: 'lesson', parentId: lesson.id,
+        body: 'gone', visibility: 'shared',
+    }, teacherCookie)).json();
+
+    const res = await req(app, 'DELETE', `/api/notes/${note.id}`, undefined, teacherCookie);
+    expect(res.status).toBe(200);
 });

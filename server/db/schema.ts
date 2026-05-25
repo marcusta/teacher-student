@@ -8,6 +8,22 @@ export interface Database {
     horses: HorsesTable;
     lessons: LessonsTable;
     lesson_exercise: LessonExerciseTable;
+    notes: NotesTable;
+}
+
+/** SCOPE.md: unified Note table. MVP wires only parent_kind='lesson'. */
+export type NoteParentKind = 'lesson' | 'student' | 'training_session' | 'exercise_question';
+export type NoteVisibility = 'private' | 'shared';
+
+export interface NotesTable {
+    id: string;
+    author_id: string;
+    parent_kind: NoteParentKind;
+    parent_id: string;
+    body: string;
+    visibility: NoteVisibility;
+    created_at: Generated<string>;
+    updated_at: Generated<string>;
 }
 
 export interface LessonExerciseTable {
