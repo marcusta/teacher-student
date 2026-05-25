@@ -102,4 +102,14 @@ export class ProgramService {
         if (!updated) throw new NotFoundError('Program not found');
         return updated;
     }
+
+    async delete(teacherId: string, programId: string): Promise<void> {
+        const rows = await this.db
+            .deleteFrom('programs')
+            .where('id', '=', programId)
+            .where('teacher_id', '=', teacherId)
+            .returning('id')
+            .execute();
+        if (rows.length === 0) throw new NotFoundError('Program not found');
+    }
 }

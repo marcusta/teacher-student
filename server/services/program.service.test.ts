@@ -109,3 +109,26 @@ test('update rejects empty title when provided', async () => {
     await expect(programService.update(teacher.id, p.id, { title: '   ' }))
         .rejects.toThrow();
 });
+
+test('delete removes own program', async () => {
+    const { programService, teacher } = await seedTeacher();
+    const p = await programService.create(teacher.id, { title: 'X' });
+    await programService.delete(teacher.id, p.id);
+    expect(await programService.getForTeacher(teacher.id, p.id)).toBeNull();
+});
+
+test('delete on other teacher\'s program throws NotFoundError', async () => {
+    const ctx = await seedTeacher('t1@example.com');
+    const p = await ctx.programService.create(ctx.teacher.id, { title: 'X' });
+    const t2 = await ctx.userService.register({
+        email: 't2@example.com', password: 'secret123', displayName: 'T2',
+    });
+    await expect(ctx.programService.delete(t2.id, p.id)).rejects.toThrow();
+    // Still exists for original owner.
+    expect(await ctx.programService.getForTeacher(ctx.teacher.id, p.id)).not.toBeNull();
+});
+
+test('delete on missing program throws NotFoundError', async () => {
+    const { programService, teacher } = await seedTeacher();
+    await expect(programService.delete(teacher.id, 'missing')).rejects.toThrow();
+});

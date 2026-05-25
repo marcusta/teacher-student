@@ -41,4 +41,11 @@ export class ProgramsService {
         this.items.set(this.items.get().map((p) => p.id === id ? result : p));
         return result;
     }
+
+    async delete(id: string): Promise<boolean> {
+        const result = await request(this.loading, this.error, () => api.programs.delete({ id }));
+        if (!result) return false;
+        this.items.set(this.items.get().filter((p) => p.id !== id));
+        return true;
+    }
 }

@@ -13,6 +13,7 @@ const tpl = template(`
             <textarea bind="descInput" placeholder="Beskrivning" maxlength="4000" rows="5"></textarea>
             <div class="program-edit__row">
                 <button bind="submit" type="submit">Spara</button>
+                <button bind="del" type="button" class="program-edit__delete">Ta bort</button>
                 <div class="error" bind="error"></div>
             </div>
         </form>
@@ -54,6 +55,11 @@ export class ProgramEditComponent extends Component {
                 align-items: center;
                 gap: ${s('md')};
                 & button { ${btn()} }
+                & .program-edit__delete {
+                    background: transparent;
+                    color: ${t('error')};
+                    border: 1px solid ${t('error')};
+                }
             }
 
             & .error {
@@ -119,6 +125,14 @@ export class ProgramEditComponent extends Component {
                         description: this.descVal.get(),
                     });
                     if (updated) this.router.navigate('/program');
+                },
+            },
+            del: {
+                onclick: async () => {
+                    if (!window.confirm('Ta bort programmet?')) return;
+                    const id = this.router.route.get().split('/')[2] ?? '';
+                    const ok = await this.svc.delete(id);
+                    if (ok) this.router.navigate('/program');
                 },
             },
             error: { textContent: () => this.svc.error.get()?.message ?? '' },

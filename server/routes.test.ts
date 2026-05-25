@@ -1260,3 +1260,26 @@ test('PATCH /api/programs/:id empty title returns 400', async () => {
     const res = await req(app, 'PATCH', `/api/programs/${id}`, { title: '' }, cookie);
     expect(res.status).toBe(400);
 });
+
+test('DELETE /api/programs/:id removes own', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/programs', { title: 'X' }, cookie);
+    const { id } = await created.json();
+    const res = await req(app, 'DELETE', `/api/programs/${id}`, undefined, cookie);
+    expect(res.status).toBe(200);
+
+    const list = await (await req(app, 'GET', '/api/programs', undefined, cookie)).json();
+    expect(list.length).toBe(0);
+});
+
+test('DELETE /api/programs/:id on other teacher returns 404', async () => {
+    const { app } = await setup([seedUser]);
+    const annaCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/programs', { title: 'X' }, annaCookie);
+    const { id } = await created.json();
+
+    const otherCookie = await registerAndLogin(app, 'other@example.com');
+    const res = await req(app, 'DELETE', `/api/programs/${id}`, undefined, otherCookie);
+    expect(res.status).toBe(404);
+});

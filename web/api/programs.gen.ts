@@ -14,6 +14,7 @@ export interface ProgramsApi {
     list(): Promise<Program[]>;
     get(input: { id: string }): Promise<Program>;
     update(input: { title?: string; description?: string; id: string }): Promise<Program>;
+    delete(input: { id: string }): Promise<{ ok: boolean }>;
 }
 
 export function createProgramsClient(baseUrl: string): ProgramsApi {
@@ -38,6 +39,9 @@ export function createProgramsClient(baseUrl: string): ProgramsApi {
             for (const [k, v] of Object.entries(input as any))
                 if (!pathParams.has(k)) body[k] = v;
             return apiFetch({ method: 'PATCH', url: `${baseUrl}/programs/${input.id}`, body });
+        },
+        async delete(input) {
+            return apiFetch({ method: 'DELETE', url: `${baseUrl}/programs/${input.id}` });
         },
     };
 }
