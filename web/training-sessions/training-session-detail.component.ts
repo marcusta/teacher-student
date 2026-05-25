@@ -30,7 +30,7 @@ const tpl = template(`
                 <div class="tsd__note-row">
                     <label class="tsd__note-vis">
                         <input bind="noteShared" type="checkbox">
-                        <span>Delad med lärare</span>
+                        <span bind="noteSharedLabel">Delad med lärare</span>
                     </label>
                     <button bind="noteSubmit" type="submit">Spara anteckning</button>
                 </div>
@@ -198,6 +198,13 @@ export class TrainingSessionDetailComponent extends Component {
             });
     }
 
+    private sharedLabel(): string {
+        const ts = this.ts.get();
+        const me = this.auth.currentUser.get()?.id;
+        if (ts && me && ts.studentId !== me) return 'Delad med elev';
+        return 'Delad med lärare';
+    }
+
     private shareSummary(): string {
         const ts = this.session();
         if (!ts) return '';
@@ -254,6 +261,7 @@ export class TrainingSessionDetailComponent extends Component {
                     ? 'tsd__note-empty' : 'tsd__note-empty hidden',
             },
             noteError: { textContent: () => this.notes.error.get()?.message ?? '' },
+            noteSharedLabel: { textContent: () => this.sharedLabel() },
         });
 
         const noteHost = this.ref(frag, 'noteList');
@@ -292,7 +300,7 @@ export class TrainingSessionDetailComponent extends Component {
                     visCb.checked = this.editingSharedVal.get();
                     visCb.onchange = (e) => this.editingSharedVal.set((e.target as HTMLInputElement).checked);
                     const visTxt = document.createElement('span');
-                    visTxt.textContent = 'Delad med lärare';
+                    visTxt.textContent = this.sharedLabel();
                     visLabel.append(visCb, visTxt);
                     li.appendChild(visLabel);
 
