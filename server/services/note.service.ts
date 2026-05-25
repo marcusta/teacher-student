@@ -165,6 +165,18 @@ export class NoteService {
             }
             return;
         }
+        if (parentKind === 'training_session') {
+            // Student-only authoring for the MVP. Teacher access ships in 022.
+            const ts = await this.db
+                .selectFrom('training_sessions')
+                .select(['id', 'student_id'])
+                .where('id', '=', parentId)
+                .executeTakeFirst();
+            if (!ts || ts.student_id !== userId) {
+                throw new NotFoundError('Training Session not found');
+            }
+            return;
+        }
         throw new NotFoundError('Unsupported parent kind');
     }
 
@@ -182,6 +194,19 @@ export class NoteService {
                 .executeTakeFirst();
             if (!lesson || (lesson.teacher_id !== userId && lesson.student_id !== userId)) {
                 throw new NotFoundError('Lesson not found');
+            }
+            return;
+        }
+        if (parentKind === 'training_session') {
+            // For 021 only the owning Student can read. 022 will broaden this
+            // to connected Teachers when a share row exists.
+            const ts = await this.db
+                .selectFrom('training_sessions')
+                .select(['id', 'student_id'])
+                .where('id', '=', parentId)
+                .executeTakeFirst();
+            if (!ts || ts.student_id !== userId) {
+                throw new NotFoundError('Training Session not found');
             }
             return;
         }

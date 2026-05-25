@@ -152,3 +152,64 @@ test('delete by author removes the note; non-author throws NotFoundError', async
     // Idempotent on already-gone.
     await noteService.delete(teacher.id, n.id);
 });
+
+// --- 021: Notes on Training Sessions ---
+
+async function seedTrainingSession() {
+    const ctx = await createTestDb();
+    const student = await ctx.userService.register({
+        email: 'student@example.com', password: 'secret123', displayName: 'S',
+    });
+    const ts = await ctx.trainingSessionService.create(student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+    });
+    return { ...ctx, student, ts };
+}
+
+test('student creates a note on own Training Session', async () => {
+    const { noteService, student, ts } = await seedTrainingSession();
+    const n = await noteService.create(student.id, {
+        parentKind: 'training_session', parentId: ts.id,
+        body: 'Reflektion', visibility: 'shared',
+    });
+    expect(n.authorId).toBe(student.id);
+    expect(n.parentKind).toBe('training_session');
+    expect(n.parentId).toBe(ts.id);
+});
+
+test('stranger cannot create a note on someone elses Training Session', async () => {
+    const { noteService, userService, ts } = await seedTrainingSession();
+    const stranger = await userService.register({
+        email: 'x@example.com', password: 'secret123', displayName: 'X',
+    });
+    await expect(noteService.create(stranger.id, {
+        parentKind: 'training_session', parentId: ts.id,
+        body: 'no', visibility: 'shared',
+    })).rejects.toBeInstanceOf(NotFoundError);
+});
+
+test('listFor as the author shows private + shared notes on own Training Session', async () => {
+    const { noteService, student, ts } = await seedTrainingSession();
+    await noteService.create(student.id, {
+        parentKind: 'training_session', parentId: ts.id,
+        body: 'priv', visibility: 'private',
+    });
+    await noteService.create(student.id, {
+        parentKind: 'training_session', parentId: ts.id,
+        body: 'shared', visibility: 'shared',
+    });
+    const list = await noteService.listFor(student.id, {
+        parentKind: 'training_session', parentId: ts.id,
+    });
+    expect(list.length).toBe(2);
+});
+
+test('listFor by stranger throws NotFoundError on a Training Session', async () => {
+    const { noteService, userService, ts } = await seedTrainingSession();
+    const stranger = await userService.register({
+        email: 'x@example.com', password: 'secret123', displayName: 'X',
+    });
+    await expect(noteService.listFor(stranger.id, {
+        parentKind: 'training_session', parentId: ts.id,
+    })).rejects.toBeInstanceOf(NotFoundError);
+});

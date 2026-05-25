@@ -1,4 +1,4 @@
-import { Component, Computed, Signal, effect, template } from '@basics/core/client/core';
+import { Component, Computed, Router, Signal, effect, template } from '@basics/core/client/core';
 import { t } from '../theme';
 import { s, btn, input } from '../css';
 import { TrainingSessionsService } from './training-sessions.service';
@@ -165,7 +165,12 @@ export class TrainingSessionsComponent extends Component {
                 border-radius: ${t('radius')};
                 font-size: 0.875rem;
             }
-            & .ts__item-when { font-weight: 500; }
+            & .ts__item-when {
+                font-weight: 500;
+                color: inherit;
+                text-decoration: none;
+                &:hover { text-decoration: underline; }
+            }
             & .ts__item-meta { opacity: 0.7; font-size: 0.8125rem; }
             & .ts__item-summary {
                 margin-top: ${s('xs')};
@@ -201,6 +206,7 @@ export class TrainingSessionsComponent extends Component {
     private sessions = this.inject(TrainingSessionsService);
     private teachers = this.inject(TeachersService);
     private stable = this.inject(StableService);
+    private router = this.inject(Router);
     private whenVal = new Signal('');
     private durationVal = new Signal('');
     private summaryVal = new Signal('');
@@ -384,10 +390,13 @@ export class TrainingSessionsComponent extends Component {
         li.className = 'ts__item';
 
         const left = document.createElement('div');
-        const when = document.createElement('div');
-        when.className = 'ts__item-when';
-        when.textContent = DATETIME_FORMAT.format(new Date(item.performedAt));
-        left.appendChild(when);
+        const whenLink = document.createElement('a');
+        whenLink.className = 'ts__item-when';
+        const path = `/traningspass/${item.id}`;
+        whenLink.href = path;
+        whenLink.onclick = (e) => { e.preventDefault(); this.router.navigate(path); };
+        whenLink.textContent = DATETIME_FORMAT.format(new Date(item.performedAt));
+        left.appendChild(whenLink);
 
         const meta = document.createElement('div');
         meta.className = 'ts__item-meta';
