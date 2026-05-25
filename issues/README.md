@@ -33,3 +33,7 @@ Efter 004 är hela `User ↔ Relation`-grafen på plats. Då kan följande featu
 | [016](016-teacher-links-exercises-to-lesson.md) | Teacher links Exercises to a Lesson | AFK | 014, 005 |
 | [017](017-teacher-writes-notes-on-lesson.md) | Teacher writes Notes on a Lesson | AFK | 012 |
 | [018](018-student-writes-notes-on-shared-lesson.md) | Student writes Notes on a shared Lesson | AFK | 017, 013 |
+| [019](019-student-logs-and-lists-training-sessions.md) | Student logs and lists own Training Sessions | AFK | 004 |
+| [020](020-student-attaches-horse-to-training-session.md) | Student attaches a Horse to a Training Session | AFK | 019, 008 |
+| [021](021-student-writes-notes-on-training-session.md) | Student writes Notes on own Training Session | AFK | 019, 017 |
+| [022](022-teacher-sees-and-notes-shared-training-sessions.md) | Teacher sees and writes Notes on shared Training Sessions | AFK | 021 |
