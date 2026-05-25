@@ -27,4 +27,18 @@ export class ProgramsService {
         this.items.set([result, ...this.items.get()]);
         return true;
     }
+
+    async get(id: string): Promise<Program | null> {
+        const result = await request(this.loading, this.error, () => api.programs.get({ id }));
+        return result ?? null;
+    }
+
+    async update(id: string, patch: { title?: string; description?: string }): Promise<Program | null> {
+        const result = await request(this.loading, this.error, () =>
+            api.programs.update({ id, ...patch }),
+        );
+        if (!result) return null;
+        this.items.set(this.items.get().map((p) => p.id === id ? result : p));
+        return result;
+    }
 }

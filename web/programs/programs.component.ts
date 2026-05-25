@@ -1,4 +1,4 @@
-import { Component, Signal, template } from '@basics/core/client/core';
+import { Component, Router, Signal, template } from '@basics/core/client/core';
 import { t } from '../theme';
 import { s, btn, input } from '../css';
 import { ProgramsService } from './programs.service';
@@ -92,6 +92,9 @@ export class ProgramsComponent extends Component {
                 background: ${t('surface')};
                 border-radius: ${t('radius')};
                 color: ${t('text')};
+                text-decoration: none;
+                transition: background 0.15s;
+                &:hover { background: ${t('hover-bg')}; }
             }
             & .programs__item-title { font-weight: 500; }
             & .programs__item-desc {
@@ -104,6 +107,7 @@ export class ProgramsComponent extends Component {
     `;
 
     private svc = this.inject(ProgramsService);
+    private router = this.inject(Router);
     private titleVal = new Signal('');
     private descVal = new Signal('');
 
@@ -141,29 +145,38 @@ export class ProgramsComponent extends Component {
         });
 
         const listHost = this.ref(frag, 'list');
-        // Items only gain new rows in 023; createdAt is enough to key.
-        // When edit/reorder lands in 024+, switch to `${id}:${updatedAt}` or include sort_order.
-        this.$each(listHost, this.svc.items, (item) => this.renderItem(item), (item) => `${item.id}:${item.createdAt}`);
+        // Edit (024) mutates title/description in place; key includes both
+        // so the framework re-renders the row when content changes.
+        this.$each(
+            listHost,
+            this.svc.items,
+            (item) => this.renderItem(item),
+            (item) => `${item.id}:${item.title}:${item.description}`,
+        );
 
         return frag;
     }
 
     private renderItem(item: Program): HTMLElement {
         const li = document.createElement('li');
-        li.className = 'programs__item';
+        const a = document.createElement('a');
+        a.className = 'programs__item';
+        a.href = `/program/${item.id}`;
+        a.onclick = (e) => { e.preventDefault(); this.router.navigate(`/program/${item.id}`); };
 
         const title = document.createElement('div');
         title.className = 'programs__item-title';
         title.textContent = item.title;
-        li.appendChild(title);
+        a.appendChild(title);
 
         if (item.description) {
             const desc = document.createElement('div');
             desc.className = 'programs__item-desc';
             desc.textContent = item.description;
-            li.appendChild(desc);
+            a.appendChild(desc);
         }
 
+        li.appendChild(a);
         return li;
     }
 }

@@ -1209,3 +1209,54 @@ test('GET /api/programs lists only my programs', async () => {
     const data = await res.json();
     expect(data.map((p: { title: string }) => p.title)).toEqual(['A1']);
 });
+
+test('GET /api/programs/:id returns 200 for own', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/programs', { title: 'X' }, cookie);
+    const { id } = await created.json();
+    const res = await req(app, 'GET', `/api/programs/${id}`, undefined, cookie);
+    expect(res.status).toBe(200);
+    expect((await res.json()).title).toBe('X');
+});
+
+test('GET /api/programs/:id returns 404 for other teacher', async () => {
+    const { app } = await setup([seedUser]);
+    const annaCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/programs', { title: 'X' }, annaCookie);
+    const { id } = await created.json();
+
+    const otherCookie = await registerAndLogin(app, 'other@example.com');
+    const res = await req(app, 'GET', `/api/programs/${id}`, undefined, otherCookie);
+    expect(res.status).toBe(404);
+});
+
+test('PATCH /api/programs/:id updates own', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/programs', { title: 'Old' }, cookie);
+    const { id } = await created.json();
+    const res = await req(app, 'PATCH', `/api/programs/${id}`, { title: 'New' }, cookie);
+    expect(res.status).toBe(200);
+    expect((await res.json()).title).toBe('New');
+});
+
+test('PATCH /api/programs/:id on other teacher returns 404', async () => {
+    const { app } = await setup([seedUser]);
+    const annaCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/programs', { title: 'X' }, annaCookie);
+    const { id } = await created.json();
+
+    const otherCookie = await registerAndLogin(app, 'other@example.com');
+    const res = await req(app, 'PATCH', `/api/programs/${id}`, { title: 'Hack' }, otherCookie);
+    expect(res.status).toBe(404);
+});
+
+test('PATCH /api/programs/:id empty title returns 400', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/programs', { title: 'X' }, cookie);
+    const { id } = await created.json();
+    const res = await req(app, 'PATCH', `/api/programs/${id}`, { title: '' }, cookie);
+    expect(res.status).toBe(400);
+});

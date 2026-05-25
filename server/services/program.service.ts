@@ -1,4 +1,5 @@
 import type { Kysely, Selectable } from 'kysely';
+import { NotFoundError } from '@basics/core/server/auth';
 import type { Database, ProgramsTable } from '../db/schema';
 
 export interface Program {
@@ -11,6 +12,11 @@ export interface Program {
 
 export interface CreateProgramInput {
     title: string;
+    description?: string;
+}
+
+export interface UpdateProgramInput {
+    title?: string;
     description?: string;
 }
 
@@ -60,5 +66,40 @@ export class ProgramService {
             .orderBy('created_at', 'desc')
             .execute();
         return rows.map(toProgram);
+    }
+
+    async getForTeacher(teacherId: string, programId: string): Promise<Program | null> {
+        const row = await this.db
+            .selectFrom('programs')
+            .selectAll()
+            .where('id', '=', programId)
+            .where('teacher_id', '=', teacherId)
+            .executeTakeFirst();
+        return row ? toProgram(row) : null;
+    }
+
+    async update(teacherId: string, programId: string, input: UpdateProgramInput): Promise<Program> {
+        const patch: Partial<{ title: string; description: string }> = {};
+        if (input.title !== undefined) {
+            const title = input.title.trim();
+            if (title.length === 0) throw new Error('Program title must not be empty');
+            patch.title = title;
+        }
+        if (input.description !== undefined) {
+            patch.description = input.description.trim();
+        }
+
+        const rows = await this.db
+            .updateTable('programs')
+            .set(patch)
+            .where('id', '=', programId)
+            .where('teacher_id', '=', teacherId)
+            .returning('id')
+            .execute();
+        if (rows.length === 0) throw new NotFoundError('Program not found');
+
+        const updated = await this.getForTeacher(teacherId, programId);
+        if (!updated) throw new NotFoundError('Program not found');
+        return updated;
     }
 }
