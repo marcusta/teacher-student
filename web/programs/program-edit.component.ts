@@ -1,4 +1,5 @@
-import { Component, Computed, Router, Signal, effect, template } from '@basics/core/client/core';
+import { Component, Computed, Router, Signal, template } from '@basics/core/client/core';
+import { SelectComponent, type SelectOption } from '@basics/core/client/ui/select';
 import { t } from '../theme';
 import { s, btn, input } from '../css';
 import { ProgramsService } from './programs.service';
@@ -25,7 +26,7 @@ const tpl = template(`
             <ol bind="exercisesList" class="program-edit__exercises-list"></ol>
 
             <form bind="addForm" class="program-edit__add">
-                <select bind="picker"></select>
+                <div bind="pickerHost" class="program-edit__picker-host"></div>
                 <button bind="addBtn" type="submit">Lägg till</button>
             </form>
         </section>
@@ -148,9 +149,9 @@ export class ProgramEditComponent extends Component {
                     gap: ${s('sm')};
                     align-items: center;
 
-                    & select {
-                        ${input()}
+                    & .program-edit__picker-host {
                         flex: 1;
+                        & .ui-select { display: block; }
                     }
                     & button { ${btn()} }
                 }
@@ -171,6 +172,11 @@ export class ProgramEditComponent extends Component {
         const attached = new Set(this.svc.exercises.get().map((e) => e.id));
         return this.svc.availableExercises.get().filter((e) => !attached.has(e.id));
     });
+
+    /** SelectOption shape for SelectComponent. */
+    private pickerOptions = new Computed<SelectOption[]>(() =>
+        this.pickableExercises.get().map((e) => ({ value: e.id, label: e.name })),
+    );
 
     private get programId(): string {
         return this.router.route.get().split('/')[2] ?? '';
@@ -232,10 +238,6 @@ export class ProgramEditComponent extends Component {
                     ? 'program-edit__exercises-empty'
                     : 'program-edit__exercises-empty hidden',
             },
-            picker: {
-                value: () => this.pickedExerciseId.get(),
-                onchange: (e: Event) => this.pickedExerciseId.set((e.target as HTMLSelectElement).value),
-            },
             addBtn: {
                 disabled: () => this.pickedExerciseId.get() === '' || this.pickableExercises.get().length === 0,
             },
@@ -259,36 +261,12 @@ export class ProgramEditComponent extends Component {
             (item) => `${item.id}:${item.sortOrder}:${item.notes ?? ''}`,
         );
 
-        // Picker options. Rebuild only when pickableExercises changes — must NOT
-        // depend on pickedExerciseId, or selecting a value would wipe options.
-        const pickerEl = this.ref(frag, 'picker') as HTMLSelectElement;
-        this.track(effect(() => {
-            const items = this.pickableExercises.get();
-            pickerEl.replaceChildren();
-            const placeholder = document.createElement('option');
-            placeholder.value = '';
-            placeholder.textContent = items.length === 0
-                ? 'Inga fler övningar att lägga till'
-                : 'Välj övning…';
-            pickerEl.appendChild(placeholder);
-            for (const ex of items) {
-                const opt = document.createElement('option');
-                opt.value = ex.id;
-                opt.textContent = ex.name;
-                pickerEl.appendChild(opt);
-            }
-            // Re-apply current selection after rebuild.
-            pickerEl.value = this.pickedExerciseId.get();
-        }));
-
-        // Reset selection if the picked item disappeared from the available list.
-        this.track(effect(() => {
-            const items = this.pickableExercises.get();
-            const current = this.pickedExerciseId.get();
-            if (current && !items.some((e) => e.id === current)) {
-                this.pickedExerciseId.set('');
-            }
-        }));
+        // Picker — SelectComponent handles its own reactivity.
+        this.spawn(SelectComponent, this.ref(frag, 'pickerHost'), {
+            value: this.pickedExerciseId,
+            options: this.pickerOptions,
+            placeholder: 'Välj övning…',
+        });
 
         return frag;
     }

@@ -1,5 +1,6 @@
-import { Component, Router, Signal, effect, template } from '@basics/core/client/core';
+import { Component, Computed, Router, Signal, effect, template } from '@basics/core/client/core';
 import { AuthService } from '@basics/core/client/auth';
+import { SelectComponent, type SelectOption } from '@basics/core/client/ui/select';
 import { t } from '../theme';
 import { s, btn, input } from '../css';
 import { api, type Exercise, type Horse } from '../api';
@@ -26,7 +27,7 @@ const tpl = template(`
         <form bind="form" class="lesson-edit__form">
             <label>
                 <span>Häst</span>
-                <select bind="horseSelect"></select>
+                <div bind="horseSelectHost" class="lesson-edit__select-host"></div>
             </label>
             <label>
                 <span>Tidpunkt</span>
@@ -45,7 +46,7 @@ const tpl = template(`
             <ul bind="exerciseList" class="lesson-edit__ex-list"></ul>
             <div bind="exerciseEmpty" class="lesson-edit__ex-empty">Inga övningar kopplade än.</div>
             <div class="lesson-edit__ex-add">
-                <select bind="exerciseSelect"></select>
+                <div bind="exerciseSelectHost" class="lesson-edit__select-host"></div>
                 <button bind="addExercise" type="button">Lägg till</button>
             </div>
         </section>
@@ -110,11 +111,12 @@ export class LessonEditComponent extends Component {
                     font-size: 0.875rem;
                 }
 
-                & select, & input {
+                & input {
                     ${input()}
                     width: 100%;
                     box-sizing: border-box;
                 }
+                & .lesson-edit__select-host .ui-select { display: block; }
             }
 
             & .lesson-edit__row {
@@ -228,9 +230,10 @@ export class LessonEditComponent extends Component {
             & .lesson-edit__ex-add {
                 display: flex;
                 gap: ${s('sm')};
-                & select {
-                    ${input()}
+                align-items: center;
+                & .lesson-edit__select-host {
                     flex: 1;
+                    & .ui-select { display: block; }
                 }
                 & button { ${btn()} }
             }
@@ -357,6 +360,16 @@ export class LessonEditComponent extends Component {
     private editingBodyVal = new Signal('');
     private editingSharedVal = new Signal(false);
 
+    private horseOptions = new Computed<SelectOption[]>(() =>
+        this.horses.get().map((h) => ({ value: h.id, label: h.name })),
+    );
+    private exerciseOptions = new Computed<SelectOption[]>(() => {
+        const linked = new Set(this.currentExercises().map((e) => e.id));
+        return this.library.get()
+            .filter((e) => !linked.has(e.id))
+            .map((e) => ({ value: e.id, label: e.name }));
+    });
+
     private terminal(): boolean {
         const id = this.router.route.get().split('/')[2] ?? '';
         const lesson = this.svc.get(id);
@@ -444,10 +457,6 @@ export class LessonEditComponent extends Component {
                     ? 'lesson-edit__summary-ex-label hidden'
                     : 'lesson-edit__summary-ex-label',
             },
-            horseSelect: {
-                value: () => this.horseVal.get(),
-                onchange: (e: Event) => this.horseVal.set((e.target as HTMLSelectElement).value),
-            },
             whenInput: {
                 value: () => this.whenVal.get(),
                 oninput: (e: Event) => this.whenVal.set((e.target as HTMLInputElement).value),
@@ -490,10 +499,6 @@ export class LessonEditComponent extends Component {
                     const id = this.router.route.get().split('/')[2] ?? '';
                     await this.svc.transition(id, 'cancelled');
                 },
-            },
-            exerciseSelect: {
-                value: () => this.exerciseVal.get(),
-                onchange: (e: Event) => this.exerciseVal.set((e.target as HTMLSelectElement).value),
             },
             addExercise: {
                 onclick: async () => {
@@ -562,53 +567,27 @@ export class LessonEditComponent extends Component {
             }
         }));
 
-        // Library dropdown: keep in sync with what's not yet attached. Drop
-        // the current selection if it became attached.
-        const exSelect = this.ref(frag, 'exerciseSelect') as HTMLSelectElement;
+        // Library dropdown — SelectComponent handles its own reactivity.
+        this.spawn(SelectComponent, this.ref(frag, 'exerciseSelectHost'), {
+            value: this.exerciseVal,
+            options: this.exerciseOptions,
+            placeholder: '(välj övning)',
+        });
+        // Drop the current selection if it became attached.
         this.track(effect(() => {
-            const available = this.unattachedLibrary();
-            exSelect.replaceChildren();
-            const none = document.createElement('option');
-            none.value = '';
-            none.textContent = available.length === 0
-                ? '(inga övningar i biblioteket)'
-                : '(välj övning)';
-            exSelect.appendChild(none);
-            for (const ex of available) {
-                const opt = document.createElement('option');
-                opt.value = ex.id;
-                opt.textContent = ex.name;
-                exSelect.appendChild(opt);
-            }
-            if (!available.some((e) => e.id === this.exerciseVal.get())) {
+            const opts = this.exerciseOptions.get();
+            const current = this.exerciseVal.get();
+            if (current && !opts.some((o) => o.value === current)) {
                 this.exerciseVal.set('');
             }
-            exSelect.value = this.exerciseVal.get();
         }));
 
-        // Populate horse <select> from the loaded list with a clear option.
-        const select = this.ref(frag, 'horseSelect') as HTMLSelectElement;
-        const renderOptions = () => {
-            select.replaceChildren();
-            const none = document.createElement('option');
-            none.value = '';
-            none.textContent = '(ingen häst)';
-            select.appendChild(none);
-            for (const h of this.horses.get()) {
-                const opt = document.createElement('option');
-                opt.value = h.id;
-                opt.textContent = h.name;
-                select.appendChild(opt);
-            }
-            select.value = this.horseVal.get();
-        };
-        // The framework's $each is keyed against a Signal; for a one-shot
-        // resolve we just re-render whenever horses change.
-        this.track(effect(() => {
-            this.horses.get();
-            this.horseVal.get();
-            renderOptions();
-        }));
+        // Horse picker.
+        this.spawn(SelectComponent, this.ref(frag, 'horseSelectHost'), {
+            value: this.horseVal,
+            options: this.horseOptions,
+            placeholder: '(ingen häst)',
+        });
 
         // Read-only exercises summary (student view).
         const sumExHost = this.ref(frag, 'sumExList');

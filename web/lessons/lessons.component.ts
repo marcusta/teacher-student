@@ -1,16 +1,17 @@
 import { Component, Computed, Router, Signal, effect, template } from '@basics/core/client/core';
+import { SelectComponent, type SelectOption } from '@basics/core/client/ui/select';
 import { t } from '../theme';
 import { s, btn, input } from '../css';
 import { LessonsService } from './lessons.service';
 import { StudentsService } from '../students/students.service';
-import type { Lesson, LessonForUser, Student } from '../api';
+import type { Lesson, LessonForUser } from '../api';
 
 const tpl = template(`
     <div class="lessons" bind="root">
         <h2>Lektioner</h2>
 
         <form bind="form" class="lessons__form">
-            <select bind="studentSelect" required></select>
+            <div bind="studentSelectHost" class="lessons__student-host"></div>
             <input bind="whenInput" type="datetime-local" required>
             <div class="lessons__form-row">
                 <button bind="submit" type="submit">Boka lektion</button>
@@ -59,11 +60,12 @@ export class LessonsComponent extends Component {
                 background: ${t('surface')};
                 border-radius: ${t('radius')};
 
-                & select, & input {
+                & input {
                     ${input()}
                     width: 100%;
                     box-sizing: border-box;
                 }
+                & .lessons__student-host .ui-select { display: block; }
             }
 
             & .lessons__form-row {
@@ -155,6 +157,9 @@ export class LessonsComponent extends Component {
             .filter((l) => l.scheduledAt < this.nowIso.get())
             .slice().reverse(), // most-recent past first
     );
+    private studentOptions = new Computed<SelectOption[]>(() =>
+        this.students.items.get().map((st) => ({ value: st.id, label: st.displayName })),
+    );
 
     onMount(): void {
         void this.lessons.load();
@@ -170,10 +175,6 @@ export class LessonsComponent extends Component {
     render(): DocumentFragment {
         const frag = this.wire(tpl, {
             root: { inert: () => this.lessons.loading.get() },
-            studentSelect: {
-                value: () => this.studentVal.get(),
-                onchange: (e: Event) => this.studentVal.set((e.target as HTMLSelectElement).value),
-            },
             whenInput: {
                 value: () => this.whenVal.get(),
                 oninput: (e: Event) => this.whenVal.set((e.target as HTMLInputElement).value),
@@ -208,14 +209,11 @@ export class LessonsComponent extends Component {
             },
         });
 
-        // Populate the student <select> from the roster signal.
-        const select = this.ref(frag, 'studentSelect') as HTMLSelectElement;
-        this.$each(select, this.students.items, (st: Student) => {
-            const opt = document.createElement('option');
-            opt.value = st.id;
-            opt.textContent = st.displayName;
-            return opt;
-        }, (st) => st.id);
+        this.spawn(SelectComponent, this.ref(frag, 'studentSelectHost'), {
+            value: this.studentVal,
+            options: this.studentOptions,
+            placeholder: 'Välj elev',
+        });
 
         const upcomingHost = this.ref(frag, 'upcomingList');
         this.$each(upcomingHost, this.upcoming, (l) => this.renderItem(l), (l) => l.id);

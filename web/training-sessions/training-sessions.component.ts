@@ -1,4 +1,5 @@
 import { Component, Computed, Router, Signal, effect, template } from '@basics/core/client/core';
+import { SelectComponent, type SelectOption } from '@basics/core/client/ui/select';
 import { t } from '../theme';
 import { s, btn, input } from '../css';
 import { TrainingSessionsService } from './training-sessions.service';
@@ -26,7 +27,7 @@ const tpl = template(`
             </label>
             <label bind="horseLabel" class="ts__horse-label">
                 <span>Häst (valfri)</span>
-                <select bind="horseSelect"></select>
+                <div bind="horseSelectHost" class="ts__select-host"></div>
             </label>
 
             <fieldset bind="shareBox" class="ts__share">
@@ -87,11 +88,13 @@ export class TrainingSessionsComponent extends Component {
                     gap: ${s('xs')};
                     font-size: 0.8125rem;
                 }
-                & input[type=datetime-local], & input[type=number], & textarea, & select {
+                & input[type=datetime-local], & input[type=number], & textarea {
                     ${input()}
                     width: 100%;
                     box-sizing: border-box;
                 }
+
+                & .ts__select-host .ui-select { display: block; }
 
                 & .ts__horse-label.hidden { display: none; }
             }
@@ -217,6 +220,9 @@ export class TrainingSessionsComponent extends Component {
     private formTitle = new Computed(() =>
         this.editingId.get() ? 'Redigera pass' : 'Logga pass',
     );
+    private horseOptions = new Computed<SelectOption[]>(() =>
+        this.stable.items.get().map((h) => ({ value: h.id, label: h.name })),
+    );
 
     onMount(): void {
         void this.sessions.load();
@@ -244,10 +250,6 @@ export class TrainingSessionsComponent extends Component {
                 className: () =>
                     this.stable.items.get().length === 0
                         ? 'ts__horse-label hidden' : 'ts__horse-label',
-            },
-            horseSelect: {
-                value: () => this.horseIdVal.get(),
-                onchange: (e: Event) => this.horseIdVal.set((e.target as HTMLSelectElement).value),
             },
             shareBox: {
                 className: () =>
@@ -322,24 +324,11 @@ export class TrainingSessionsComponent extends Component {
             return this.renderShareRow(teacher);
         }, (teacher) => teacher.id);
 
-        // Populate horse <option>s reactively.
-        const sel = this.ref(frag, 'horseSelect') as HTMLSelectElement;
-        this.track(effect(() => {
-            const horses = this.stable.items.get();
-            const current = this.horseIdVal.get();
-            sel.innerHTML = '';
-            const blank = document.createElement('option');
-            blank.value = '';
-            blank.textContent = 'Ingen häst';
-            sel.appendChild(blank);
-            for (const h of horses) {
-                const opt = document.createElement('option');
-                opt.value = h.id;
-                opt.textContent = h.name;
-                sel.appendChild(opt);
-            }
-            sel.value = current;
-        }));
+        this.spawn(SelectComponent, this.ref(frag, 'horseSelectHost'), {
+            value: this.horseIdVal,
+            options: this.horseOptions,
+            placeholder: 'Ingen häst',
+        });
 
         const listHost = this.ref(frag, 'list');
         this.$each(listHost, this.sessions.items, (item) => this.renderItem(item), (item) => `${item.id}:${item.updatedAt}`);
