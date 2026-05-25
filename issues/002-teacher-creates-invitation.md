@@ -1,7 +1,7 @@
 # 002 — Teacher creates Invitation
 
 **Type:** AFK
-**Status:** open
+**Status:** done
 
 ## What to build
 

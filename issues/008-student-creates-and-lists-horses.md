@@ -1,7 +1,7 @@
 # 008 — Student creates and lists own Horses
 
 **Type:** AFK
-**Status:** open
+**Status:** done
 
 ## What to build
 

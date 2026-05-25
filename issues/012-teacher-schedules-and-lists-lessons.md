@@ -1,7 +1,7 @@
 # 012 — Teacher schedules and lists own Lessons
 
 **Type:** AFK
-**Status:** open
+**Status:** done
 
 ## What to build
 

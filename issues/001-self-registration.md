@@ -1,7 +1,7 @@
 # 001 — Self-registration
 
 **Type:** HITL (small)
-**Status:** open
+**Status:** done
 
 ## What to build
 

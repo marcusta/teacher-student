@@ -1,7 +1,7 @@
 # 007 — Teacher deletes an Exercise
 
 **Type:** AFK
-**Status:** open
+**Status:** done
 
 ## What to build
 

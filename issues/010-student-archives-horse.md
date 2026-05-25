@@ -1,7 +1,7 @@
 # 010 — Student archives a Horse
 
 **Type:** AFK
-**Status:** open
+**Status:** done
 
 ## What to build
 

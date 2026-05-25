@@ -1,7 +1,7 @@
 # 004 — Teacher sees Students list
 
 **Type:** AFK
-**Status:** open
+**Status:** done
 
 ## What to build
 

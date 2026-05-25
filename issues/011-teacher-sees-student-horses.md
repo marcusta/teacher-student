@@ -1,7 +1,7 @@
 # 011 — Teacher sees a Student's Horses
 
 **Type:** AFK
-**Status:** open
+**Status:** done
 
 ## What to build
 

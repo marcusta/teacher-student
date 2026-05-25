@@ -1,7 +1,7 @@
 # 009 — Student edits a Horse
 
 **Type:** AFK
-**Status:** open
+**Status:** done
 
 ## What to build
 

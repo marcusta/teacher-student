@@ -1,7 +1,7 @@
 # 003 — Student sees and responds to Invitation
 
 **Type:** AFK
-**Status:** open
+**Status:** done
 
 ## What to build
 
