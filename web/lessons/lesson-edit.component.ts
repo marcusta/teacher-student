@@ -59,7 +59,7 @@ const tpl = template(`
                 <div class="lesson-edit__note-row">
                     <label class="lesson-edit__note-vis">
                         <input bind="noteShared" type="checkbox">
-                        <span>Delad med eleven</span>
+                        <span bind="noteSharedLabel">Delad med eleven</span>
                     </label>
                     <button bind="noteSubmit" type="submit">Spara anteckning</button>
                 </div>
@@ -397,6 +397,10 @@ export class LessonEditComponent extends Component {
         });
     }
 
+    private sharedLabel(): string {
+        return this.role.get() === 'student' ? 'Delad med läraren' : 'Delad med eleven';
+    }
+
     private lessonId(): string {
         return this.router.route.get().split('/')[2] ?? '';
     }
@@ -533,6 +537,7 @@ export class LessonEditComponent extends Component {
                     ? 'lesson-edit__note-empty' : 'lesson-edit__note-empty hidden',
             },
             noteError: { textContent: () => this.notes.error.get()?.message ?? '' },
+            noteSharedLabel: { textContent: () => this.sharedLabel() },
         });
 
         // Render the attached-exercises list reactively.
@@ -657,7 +662,7 @@ export class LessonEditComponent extends Component {
                     visCb.checked = this.editingSharedVal.get();
                     visCb.onchange = (e) => this.editingSharedVal.set((e.target as HTMLInputElement).checked);
                     const visTxt = document.createElement('span');
-                    visTxt.textContent = 'Delad med eleven';
+                    visTxt.textContent = this.sharedLabel();
                     visLabel.append(visCb, visTxt);
                     li.appendChild(visLabel);
 
