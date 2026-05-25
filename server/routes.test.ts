@@ -11,11 +11,14 @@ import { createExercisesApi } from './api/exercises.api';
 import { createHorsesApi } from './api/horses.api';
 import { createLessonsApi } from './api/lessons.api';
 import { createNotesApi } from './api/notes.api';
+import { createTrainingSessionsApi } from './api/training-sessions.api';
+import { createTeachersApi } from './api/teachers.api';
 
 async function setup(seeds: SeedFn[] = []) {
     const {
         userService, invitationService, relationService,
         exerciseService, horseService, lessonService, noteService,
+        trainingSessionService,
     } = await createTestDb(...seeds);
 
     const sessions = new SessionStore(':memory:');
@@ -32,6 +35,8 @@ async function setup(seeds: SeedFn[] = []) {
     mount(app, '/api', createHorsesApi(horseService));
     mount(app, '/api', createLessonsApi(lessonService));
     mount(app, '/api', createNotesApi(noteService));
+    mount(app, '/api', createTrainingSessionsApi(trainingSessionService));
+    mount(app, '/api', createTeachersApi(relationService));
 
     return { app, sessions };
 }
@@ -997,4 +1002,109 @@ test('DELETE /api/notes/:id removes own note', async () => {
 
     const res = await req(app, 'DELETE', `/api/notes/${note.id}`, undefined, teacherCookie);
     expect(res.status).toBe(200);
+});
+
+// --- Training Sessions (019) ---
+
+test('GET /api/training-sessions without session returns 401', async () => {
+    const { app } = await setup();
+    const res = await req(app, 'GET', '/api/training-sessions');
+    expect(res.status).toBe(401);
+});
+
+test('POST /api/training-sessions happy path returns created session with empty share set', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const res = await req(app, 'POST', '/api/training-sessions',
+        { performedAt: '2026-06-01T10:00:00.000Z', durationMin: 30, summary: 'Easy hack.' }, cookie);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.performedAt).toBe('2026-06-01T10:00:00.000Z');
+    expect(body.durationMin).toBe(30);
+    expect(body.summary).toBe('Easy hack.');
+    expect(body.sharedWithTeacherIds).toEqual([]);
+});
+
+test('POST /api/training-sessions with non-connected teacher in share set returns 404', async () => {
+    const { app } = await setup([seedUser]);
+    const studentCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const strangerCookie = await registerAndLogin(app, 'stranger@example.com');
+    const stranger = await (await req(app, 'GET', '/api/auth/me', undefined, strangerCookie)).json();
+    const res = await req(app, 'POST', '/api/training-sessions',
+        { performedAt: '2026-06-01T10:00:00.000Z', shareWithTeacherIds: [stranger.id] }, studentCookie);
+    expect(res.status).toBe(404);
+});
+
+test('POST /api/training-sessions invalid performedAt returns 400', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const res = await req(app, 'POST', '/api/training-sessions',
+        { performedAt: 'not-a-date' }, cookie);
+    expect(res.status).toBe(400);
+});
+
+test('GET /api/training-sessions returns own sessions newest first', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    await req(app, 'POST', '/api/training-sessions',
+        { performedAt: '2026-06-01T10:00:00.000Z' }, cookie);
+    await req(app, 'POST', '/api/training-sessions',
+        { performedAt: '2026-07-01T10:00:00.000Z' }, cookie);
+    const res = await req(app, 'GET', '/api/training-sessions', undefined, cookie);
+    const list = await res.json();
+    expect(list.length).toBe(2);
+    expect(list[0].performedAt > list[1].performedAt).toBe(true);
+});
+
+test('PATCH /api/training-sessions/:id updates own session and replaces shares; stranger gets 404', async () => {
+    const { app } = await setup([seedUser]);
+    // anna is the student; register a teacher and connect them so we have a valid share target.
+    const studentCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const teacherCookie = await registerAndLogin(app, 'teacher@example.com');
+    const inv = await (await req(app, 'POST', '/api/invitations',
+        { inviteeEmail: 'anna@example.com' }, teacherCookie)).json();
+    await req(app, 'POST', '/api/invitations/accept', { invitationId: inv.id }, studentCookie);
+    const teacher = await (await req(app, 'GET', '/api/auth/me', undefined, teacherCookie)).json();
+
+    const ts = await (await req(app, 'POST', '/api/training-sessions',
+        { performedAt: '2026-06-01T10:00:00.000Z' }, studentCookie)).json();
+    const ok = await req(app, 'PATCH', `/api/training-sessions/${ts.id}`,
+        { summary: 'Updated', shareWithTeacherIds: [teacher.id] }, studentCookie);
+    expect(ok.status).toBe(200);
+    const body = await ok.json();
+    expect(body.summary).toBe('Updated');
+    expect(body.sharedWithTeacherIds).toEqual([teacher.id]);
+
+    const strangerCookie = await registerAndLogin(app, 'stranger@example.com');
+    const bad = await req(app, 'PATCH', `/api/training-sessions/${ts.id}`,
+        { summary: 'hijack' }, strangerCookie);
+    expect(bad.status).toBe(404);
+});
+
+test('GET /api/teachers lists the calling student’s connected teachers', async () => {
+    const { app } = await setup([seedUser]);
+    const studentCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    // No teachers yet → empty.
+    const empty = await (await req(app, 'GET', '/api/teachers', undefined, studentCookie)).json();
+    expect(empty).toEqual([]);
+
+    const teacherCookie = await registerAndLogin(app, 'teacher@example.com', 'secret123', 'T');
+    const inv = await (await req(app, 'POST', '/api/invitations',
+        { inviteeEmail: 'anna@example.com' }, teacherCookie)).json();
+    await req(app, 'POST', '/api/invitations/accept', { invitationId: inv.id }, studentCookie);
+
+    const list = await (await req(app, 'GET', '/api/teachers', undefined, studentCookie)).json();
+    expect(list.length).toBe(1);
+    expect(list[0].displayName).toBe('T');
+});
+
+test('DELETE /api/training-sessions/:id removes own session', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const ts = await (await req(app, 'POST', '/api/training-sessions',
+        { performedAt: '2026-06-01T10:00:00.000Z' }, cookie)).json();
+    const res = await req(app, 'DELETE', `/api/training-sessions/${ts.id}`, undefined, cookie);
+    expect(res.status).toBe(200);
+    const list = await (await req(app, 'GET', '/api/training-sessions', undefined, cookie)).json();
+    expect(list).toEqual([]);
 });

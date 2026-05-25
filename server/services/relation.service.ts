@@ -27,6 +27,17 @@ export class RelationService {
         return rows.map((r) => ({ id: r.id, email: r.email, displayName: r.display_name }));
     }
 
+    async listTeachersForStudent(studentId: string): Promise<Student[]> {
+        const rows = await this.db
+            .selectFrom('relations')
+            .innerJoin('users', 'users.id', 'relations.teacher_id')
+            .where('relations.student_id', '=', studentId)
+            .select(['users.id', 'users.email', 'users.display_name'])
+            .orderBy('users.display_name', 'asc')
+            .execute();
+        return rows.map((r) => ({ id: r.id, email: r.email, displayName: r.display_name }));
+    }
+
     async getStudentForTeacher(teacherId: string, studentId: string): Promise<Student | null> {
         const row = await this.db
             .selectFrom('relations')

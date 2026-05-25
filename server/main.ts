@@ -12,6 +12,8 @@ import { createExercisesApi } from './api/exercises.api';
 import { createHorsesApi } from './api/horses.api';
 import { createLessonsApi } from './api/lessons.api';
 import { createNotesApi } from './api/notes.api';
+import { createTrainingSessionsApi } from './api/training-sessions.api';
+import { createTeachersApi } from './api/teachers.api';
 
 // --- Composition root ---
 
@@ -20,6 +22,7 @@ const { app, db, bootstrapAuth } = await createApp<Database>(path.join(import.me
 const {
     userService, invitationService, relationService,
     exerciseService, horseService, lessonService, noteService,
+    trainingSessionService,
 } = createServices(db);
 
 const { sessions } = await bootstrapAuth({
@@ -36,6 +39,8 @@ mount(app, '/api', createExercisesApi(exerciseService));
 mount(app, '/api', createHorsesApi(horseService));
 mount(app, '/api', createLessonsApi(lessonService));
 mount(app, '/api', createNotesApi(noteService));
+mount(app, '/api', createTrainingSessionsApi(trainingSessionService));
+mount(app, '/api', createTeachersApi(relationService));
 
 // --- Dev seed ---
 

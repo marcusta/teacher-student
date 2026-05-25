@@ -9,6 +9,24 @@ export interface Database {
     lessons: LessonsTable;
     lesson_exercise: LessonExerciseTable;
     notes: NotesTable;
+    training_sessions: TrainingSessionsTable;
+    training_session_share: TrainingSessionShareTable;
+}
+
+export interface TrainingSessionsTable {
+    id: string;
+    student_id: string;
+    performed_at: string;
+    duration_min: number | null;
+    summary: string | null;
+    created_at: Generated<string>;
+    updated_at: Generated<string>;
+}
+
+export interface TrainingSessionShareTable {
+    training_session_id: string;
+    teacher_id: string;
+    created_at: Generated<string>;
 }
 
 /** SCOPE.md: unified Note table. MVP wires only parent_kind='lesson'. */

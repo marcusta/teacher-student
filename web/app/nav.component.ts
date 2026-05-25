@@ -11,6 +11,7 @@ const tpl = template(`
         <a bind="libraryLink" href="/library">Bibliotek</a>
         <a bind="stableLink" href="/hastar">Hästar</a>
         <a bind="lessonsLink" href="/lektioner">Lektioner</a>
+        <a bind="trainingSessionsLink" href="/traningspass">Träningspass</a>
         <a bind="inboxLink" href="/inbox">
             Inkorg
             <span bind="inboxBadge" class="nav__badge"></span>
@@ -77,6 +78,7 @@ export class NavComponent extends Component {
             libraryLink: this.router.link('/library'),
             stableLink: this.router.link('/hastar'),
             lessonsLink: this.router.link('/lektioner'),
+            trainingSessionsLink: this.router.link('/traningspass'),
             inboxLink: this.router.link('/inbox'),
             inboxBadge: {
                 textContent: () => String(this.inbox.pendingCount.get()),
