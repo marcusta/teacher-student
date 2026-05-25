@@ -235,6 +235,131 @@ test('listForUser populates horseName when attached', async () => {
     expect(list[0].horseName).toBe('Bella');
 });
 
+// --- exercises (016: attach Exercises to a Lesson) ---
+
+test('addExercise links Teacher\'s Exercise to own Lesson', async () => {
+    const ctx = await seedConnected();
+    const ex = await ctx.exerciseService.create(ctx.teacher.id, { name: 'Skritt' });
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+
+    await ctx.lessonService.addExercise(ctx.teacher.id, lesson.id, ex.id);
+    const list = await ctx.lessonService.listExercises(ctx.teacher.id, lesson.id);
+    expect(list.map((e) => e.id)).toEqual([ex.id]);
+    expect(list[0].name).toBe('Skritt');
+    expect(list[0].sortOrder).toBe(1);
+});
+
+test('addExercise on a stranger Lesson throws NotFoundError', async () => {
+    const ctx = await seedConnected();
+    const ex = await ctx.exerciseService.create(ctx.teacher.id, { name: 'Skritt' });
+    const t2 = await ctx.userService.register({
+        email: 't2@example.com', password: 'secret123', displayName: 'T2',
+    });
+    const inv = await ctx.invitationService.createInvitation(t2.id, 'student@example.com');
+    await ctx.invitationService.acceptInvitation(inv.id, ctx.student.id, 'student@example.com');
+    const otherLesson = await ctx.lessonService.create(t2.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+
+    await expect(ctx.lessonService.addExercise(ctx.teacher.id, otherLesson.id, ex.id))
+        .rejects.toThrow();
+});
+
+test('addExercise with a foreign Exercise throws NotFoundError', async () => {
+    const ctx = await seedConnected();
+    const t2 = await ctx.userService.register({
+        email: 't2@example.com', password: 'secret123', displayName: 'T2',
+    });
+    const foreign = await ctx.exerciseService.create(t2.id, { name: 'Foreign' });
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+
+    await expect(ctx.lessonService.addExercise(ctx.teacher.id, lesson.id, foreign.id))
+        .rejects.toThrow();
+});
+
+test('addExercise is idempotent on a duplicate link', async () => {
+    const ctx = await seedConnected();
+    const ex = await ctx.exerciseService.create(ctx.teacher.id, { name: 'Skritt' });
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    await ctx.lessonService.addExercise(ctx.teacher.id, lesson.id, ex.id);
+    await ctx.lessonService.addExercise(ctx.teacher.id, lesson.id, ex.id);
+    const list = await ctx.lessonService.listExercises(ctx.teacher.id, lesson.id);
+    expect(list.length).toBe(1);
+});
+
+test('listExercises orders by sort_order ASC', async () => {
+    const ctx = await seedConnected();
+    const a = await ctx.exerciseService.create(ctx.teacher.id, { name: 'A' });
+    const b = await ctx.exerciseService.create(ctx.teacher.id, { name: 'B' });
+    const c = await ctx.exerciseService.create(ctx.teacher.id, { name: 'C' });
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+
+    await ctx.lessonService.addExercise(ctx.teacher.id, lesson.id, b.id);
+    await ctx.lessonService.addExercise(ctx.teacher.id, lesson.id, a.id);
+    await ctx.lessonService.addExercise(ctx.teacher.id, lesson.id, c.id);
+
+    const list = await ctx.lessonService.listExercises(ctx.teacher.id, lesson.id);
+    expect(list.map((e) => e.id)).toEqual([b.id, a.id, c.id]);
+});
+
+test('removeExercise unlinks; idempotent on missing link', async () => {
+    const ctx = await seedConnected();
+    const ex = await ctx.exerciseService.create(ctx.teacher.id, { name: 'Skritt' });
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    await ctx.lessonService.addExercise(ctx.teacher.id, lesson.id, ex.id);
+
+    await ctx.lessonService.removeExercise(ctx.teacher.id, lesson.id, ex.id);
+    expect(await ctx.lessonService.listExercises(ctx.teacher.id, lesson.id)).toEqual([]);
+    // second removal is a no-op
+    await ctx.lessonService.removeExercise(ctx.teacher.id, lesson.id, ex.id);
+});
+
+test('listExercises is readable by the Lesson\'s Student', async () => {
+    const ctx = await seedConnected();
+    const ex = await ctx.exerciseService.create(ctx.teacher.id, { name: 'Skritt' });
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    await ctx.lessonService.addExercise(ctx.teacher.id, lesson.id, ex.id);
+
+    const list = await ctx.lessonService.listExercises(ctx.student.id, lesson.id);
+    expect(list.map((e) => e.id)).toEqual([ex.id]);
+});
+
+test('listExercises by an outsider throws NotFoundError', async () => {
+    const ctx = await seedConnected();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    const stranger = await ctx.userService.register({
+        email: 'stranger@example.com', password: 'secret123', displayName: 'X',
+    });
+    await expect(ctx.lessonService.listExercises(stranger.id, lesson.id)).rejects.toThrow();
+});
+
+test('listForUser includes exercises array on each row', async () => {
+    const ctx = await seedConnected();
+    const ex = await ctx.exerciseService.create(ctx.teacher.id, { name: 'Skritt' });
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    await ctx.lessonService.addExercise(ctx.teacher.id, lesson.id, ex.id);
+
+    const list = await ctx.lessonService.listForUser(ctx.student.id);
+    expect(list[0].exercises.map((e) => e.id)).toEqual([ex.id]);
+    expect(list[0].exercises[0].name).toBe('Skritt');
+});
+
 // --- transition (015: terminal status moves) ---
 
 test('transition to completed sets status', async () => {

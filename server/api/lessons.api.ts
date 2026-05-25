@@ -11,6 +11,20 @@ const CreateInput = Type.Object({
     scheduledAt: Type.String({ pattern: ISO_DATETIME_PATTERN }),
 });
 
+const AddExerciseInput = Type.Object({
+    id: Type.String({ minLength: 1 }),
+    exerciseId: Type.String({ minLength: 1 }),
+});
+
+const RemoveExerciseInput = Type.Object({
+    id: Type.String({ minLength: 1 }),
+    exerciseId: Type.String({ minLength: 1 }),
+});
+
+const ListExercisesInput = Type.Object({
+    id: Type.String({ minLength: 1 }),
+});
+
 const TransitionInput = Type.Object({
     id: Type.String({ minLength: 1 }),
     target: Type.Union([Type.Literal('completed'), Type.Literal('cancelled')]),
@@ -41,6 +55,38 @@ export function createLessonsApi(svc: LessonService) {
             fn: async (c: Context) => {
                 const user = requireUser(c);
                 return svc.listForUser(user.id);
+            },
+        },
+        addExercise: {
+            method: 'POST' as const,
+            path: '/lessons/:id/exercises',
+            schema: AddExerciseInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof AddExerciseInput>, c: Context) => {
+                const user = requireUser(c);
+                await svc.addExercise(user.id, input.id, input.exerciseId);
+                return svc.listExercises(user.id, input.id);
+            },
+        },
+        removeExercise: {
+            method: 'DELETE' as const,
+            path: '/lessons/:id/exercises/:exerciseId',
+            schema: RemoveExerciseInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof RemoveExerciseInput>, c: Context) => {
+                const user = requireUser(c);
+                await svc.removeExercise(user.id, input.id, input.exerciseId);
+                return svc.listExercises(user.id, input.id);
+            },
+        },
+        listExercises: {
+            method: 'GET' as const,
+            path: '/lessons/:id/exercises',
+            schema: ListExercisesInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof ListExercisesInput>, c: Context) => {
+                const user = requireUser(c);
+                return svc.listExercises(user.id, input.id);
             },
         },
         transition: {

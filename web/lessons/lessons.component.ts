@@ -1,4 +1,4 @@
-import { Component, Computed, Router, Signal, template } from '@basics/core/client/core';
+import { Component, Computed, Router, Signal, effect, template } from '@basics/core/client/core';
 import { t } from '../theme';
 import { s, btn, input } from '../css';
 import { LessonsService } from './lessons.service';
@@ -130,6 +130,7 @@ export class LessonsComponent extends Component {
             }
             & .lessons__item-when { font-weight: 500; }
             & .lessons__item-who { opacity: 0.7; font-size: 0.8125rem; }
+            & .lessons__item-ex { opacity: 0.7; font-size: 0.8125rem; margin-top: ${s('xs')}; }
             & .lessons__item-badge {
                 align-self: center;
                 font-size: 0.75rem;
@@ -158,6 +159,12 @@ export class LessonsComponent extends Component {
     onMount(): void {
         void this.lessons.load();
         void this.students.load();
+        // Default the picker to the first Student once roster loads so the
+        // visually-selected option (browser fallback) matches the signal.
+        this.track(effect(() => {
+            const first = this.students.items.get()[0];
+            if (first && !this.studentVal.get()) this.studentVal.set(first.id);
+        }));
     }
 
     render(): DocumentFragment {
@@ -250,6 +257,12 @@ export class LessonsComponent extends Component {
         who.textContent = rolePrefix + item.counterpartyDisplayName + horseSuffix;
         left.appendChild(when);
         left.appendChild(who);
+        if (item.exercises.length > 0) {
+            const ex = document.createElement('div');
+            ex.className = 'lessons__item-ex';
+            ex.textContent = 'Övningar: ' + item.exercises.map((e) => e.name).join(', ');
+            left.appendChild(ex);
+        }
 
         const badge = document.createElement('span');
         const mutedBadge = item.status === 'planned' ? '' : ' lessons__item-badge--muted';

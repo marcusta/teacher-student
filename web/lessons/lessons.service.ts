@@ -1,6 +1,6 @@
 import { Signal } from '@basics/core/client/core';
 import { request, type RequestError } from '@basics/core/client/request';
-import { api, type Lesson, type LessonForUser } from '../api';
+import { api, type Lesson, type LessonForUser, type LessonExerciseRef } from '../api';
 
 /**
  * Owns the current user's Lessons as observable state. Deep module:
@@ -45,6 +45,24 @@ export class LessonsService {
         if (!result) return null;
         // The PATCH response is a plain Lesson (no role/counterparty); reload
         // to keep the list rows consistent with what GET /api/lessons returns.
+        await this.load();
+        return result;
+    }
+
+    async addExercise(lessonId: string, exerciseId: string): Promise<LessonExerciseRef[] | null> {
+        const result = await request(this.loading, this.error, () =>
+            api.lessons.addExercise({ id: lessonId, exerciseId }),
+        );
+        if (!result) return null;
+        await this.load();
+        return result;
+    }
+
+    async removeExercise(lessonId: string, exerciseId: string): Promise<LessonExerciseRef[] | null> {
+        const result = await request(this.loading, this.error, () =>
+            api.lessons.removeExercise({ id: lessonId, exerciseId }),
+        );
+        if (!result) return null;
         await this.load();
         return result;
     }

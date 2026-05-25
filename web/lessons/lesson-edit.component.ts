@@ -1,7 +1,7 @@
 import { Component, Router, Signal, effect, template } from '@basics/core/client/core';
 import { t } from '../theme';
 import { s, btn, input } from '../css';
-import { api, type Horse, type LessonForUser } from '../api';
+import { api, type Exercise, type Horse } from '../api';
 import { LessonsService } from './lessons.service';
 
 const tpl = template(`
@@ -25,6 +25,16 @@ const tpl = template(`
                 <div class="error" bind="error"></div>
             </div>
         </form>
+
+        <section bind="exercisesSection" class="lesson-edit__exercises">
+            <h3>Övningar</h3>
+            <ul bind="exerciseList" class="lesson-edit__ex-list"></ul>
+            <div bind="exerciseEmpty" class="lesson-edit__ex-empty">Inga övningar kopplade än.</div>
+            <div class="lesson-edit__ex-add">
+                <select bind="exerciseSelect"></select>
+                <button bind="addExercise" type="button">Lägg till</button>
+            </div>
+        </section>
     </div>
 `);
 
@@ -103,6 +113,58 @@ export class LessonEditComponent extends Component {
             }
             &.missing .lesson-edit__missing { display: block; }
             &.missing .lesson-edit__form { display: none; }
+            &.missing .lesson-edit__exercises { display: none; }
+
+            & .lesson-edit__exercises {
+                margin-top: ${s('xl')};
+                & h3 { margin: 0 0 ${s('sm')}; font-size: 1rem; }
+            }
+
+            & .lesson-edit__ex-list {
+                list-style: none;
+                margin: 0 0 ${s('sm')};
+                padding: 0;
+                display: flex;
+                flex-direction: column;
+                gap: ${s('xs')};
+            }
+
+            & .lesson-edit__ex-item {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: ${s('sm')};
+                padding: ${s('xs')} ${s('sm')};
+                background: ${t('surface')};
+                border-radius: ${t('radius')};
+                font-size: 0.875rem;
+
+                & button {
+                    background: transparent;
+                    border: none;
+                    color: ${t('error')};
+                    cursor: pointer;
+                    font-size: 0.8125rem;
+                    &:hover { text-decoration: underline; }
+                }
+            }
+
+            & .lesson-edit__ex-empty {
+                padding: ${s('sm')};
+                opacity: 0.6;
+                font-size: 0.875rem;
+            }
+            & .lesson-edit__ex-empty.hidden { display: none; }
+
+            & .lesson-edit__ex-add {
+                display: flex;
+                gap: ${s('sm')};
+                & select {
+                    ${input()}
+                    flex: 1;
+                }
+                & button { ${btn()} }
+            }
         }
     `;
 
@@ -111,6 +173,8 @@ export class LessonEditComponent extends Component {
     private horseVal = new Signal('');
     private whenVal = new Signal('');
     private horses = new Signal<Horse[]>([]);
+    private library = new Signal<Exercise[]>([]);
+    private exerciseVal = new Signal('');
     private resolved = new Signal(false);
     private found = new Signal(true);
 
@@ -141,11 +205,25 @@ export class LessonEditComponent extends Component {
             }
             this.horseVal.set(lesson.horseId ?? '');
             this.whenVal.set(toLocalInput(lesson.scheduledAt));
-            const horses = await api.students.listHorses({ id: lesson.studentId });
+            const [horses, library] = await Promise.all([
+                api.students.listHorses({ id: lesson.studentId }),
+                api.exercises.list(),
+            ]);
             this.horses.set(horses);
+            this.library.set(library);
             this.found.set(true);
             this.resolved.set(true);
         });
+    }
+
+    private currentExercises() {
+        const id = this.router.route.get().split('/')[2] ?? '';
+        return this.svc.get(id)?.exercises ?? [];
+    }
+
+    private unattachedLibrary(): Exercise[] {
+        const linked = new Set(this.currentExercises().map((e) => e.id));
+        return this.library.get().filter((e) => !linked.has(e.id));
     }
 
     render(): DocumentFragment {
@@ -202,8 +280,71 @@ export class LessonEditComponent extends Component {
                     await this.svc.transition(id, 'cancelled');
                 },
             },
+            exerciseSelect: {
+                value: () => this.exerciseVal.get(),
+                onchange: (e: Event) => this.exerciseVal.set((e.target as HTMLSelectElement).value),
+            },
+            addExercise: {
+                onclick: async () => {
+                    const exerciseId = this.exerciseVal.get();
+                    if (!exerciseId) return;
+                    const id = this.router.route.get().split('/')[2] ?? '';
+                    const result = await this.svc.addExercise(id, exerciseId);
+                    if (result) this.exerciseVal.set('');
+                },
+            },
+            exerciseEmpty: {
+                className: () => this.currentExercises().length === 0
+                    ? 'lesson-edit__ex-empty' : 'lesson-edit__ex-empty hidden',
+            },
             error: { textContent: () => this.svc.error.get()?.message ?? '' },
         });
+
+        // Render the attached-exercises list reactively.
+        const exHost = this.ref(frag, 'exerciseList');
+        this.track(effect(() => {
+            exHost.replaceChildren();
+            for (const ex of this.currentExercises()) {
+                const li = document.createElement('li');
+                li.className = 'lesson-edit__ex-item';
+                const label = document.createElement('span');
+                label.textContent = ex.name;
+                const remove = document.createElement('button');
+                remove.type = 'button';
+                remove.textContent = 'Ta bort';
+                remove.onclick = async () => {
+                    const id = this.router.route.get().split('/')[2] ?? '';
+                    await this.svc.removeExercise(id, ex.id);
+                };
+                li.appendChild(label);
+                li.appendChild(remove);
+                exHost.appendChild(li);
+            }
+        }));
+
+        // Library dropdown: keep in sync with what's not yet attached. Drop
+        // the current selection if it became attached.
+        const exSelect = this.ref(frag, 'exerciseSelect') as HTMLSelectElement;
+        this.track(effect(() => {
+            const available = this.unattachedLibrary();
+            exSelect.replaceChildren();
+            const none = document.createElement('option');
+            none.value = '';
+            none.textContent = available.length === 0
+                ? '(inga övningar i biblioteket)'
+                : '(välj övning)';
+            exSelect.appendChild(none);
+            for (const ex of available) {
+                const opt = document.createElement('option');
+                opt.value = ex.id;
+                opt.textContent = ex.name;
+                exSelect.appendChild(opt);
+            }
+            if (!available.some((e) => e.id === this.exerciseVal.get())) {
+                this.exerciseVal.set('');
+            }
+            exSelect.value = this.exerciseVal.get();
+        }));
 
         // Populate horse <select> from the loaded list with a clear option.
         const select = this.ref(frag, 'horseSelect') as HTMLSelectElement;

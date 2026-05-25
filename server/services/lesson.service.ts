@@ -2,6 +2,12 @@ import type { Kysely } from 'kysely';
 import { ConflictError, NotFoundError } from '@basics/core/server/auth';
 import type { Database, LessonStatus } from '../db/schema';
 
+export interface LessonExerciseRef {
+    id: string;
+    name: string;
+    sortOrder: number;
+}
+
 export interface Lesson {
     id: string;
     teacherId: string;
@@ -10,6 +16,7 @@ export interface Lesson {
     status: LessonStatus;
     horseId: string | null;
     horseName: string | null;
+    exercises: LessonExerciseRef[];
     createdAt: string;
     updatedAt: string;
 }
@@ -46,7 +53,7 @@ interface LessonRow {
     updated_at: string;
 }
 
-function toLesson(row: LessonRow): Lesson {
+function toLesson(row: LessonRow, exercises: LessonExerciseRef[]): Lesson {
     return {
         id: row.id,
         teacherId: row.teacher_id,
@@ -55,6 +62,7 @@ function toLesson(row: LessonRow): Lesson {
         status: row.status,
         horseId: row.horse_id,
         horseName: row.horse_name,
+        exercises,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
     };
@@ -120,6 +128,7 @@ export class LessonService {
             status: 'planned',
             horseId: null,
             horseName: null,
+            exercises: [],
             createdAt: now,
             updatedAt: now,
         };
@@ -169,13 +178,7 @@ export class LessonService {
             .where('id', '=', lessonId)
             .execute();
 
-        const row = await this.db
-            .selectFrom('lessons')
-            .leftJoin('horses', 'horses.id', 'lessons.horse_id')
-            .select([...LESSON_COLUMNS, 'horses.name as horse_name'])
-            .where('lessons.id', '=', lessonId)
-            .executeTakeFirstOrThrow();
-        return toLesson(row as LessonRow);
+        return this.loadOne(lessonId);
     }
 
     /**
@@ -206,13 +209,7 @@ export class LessonService {
                 .where('id', '=', lessonId)
                 .execute();
         }
-        const row = await this.db
-            .selectFrom('lessons')
-            .leftJoin('horses', 'horses.id', 'lessons.horse_id')
-            .select([...LESSON_COLUMNS, 'horses.name as horse_name'])
-            .where('lessons.id', '=', lessonId)
-            .executeTakeFirstOrThrow();
-        return toLesson(row as LessonRow);
+        return this.loadOne(lessonId);
     }
 
     async listForTeacher(teacherId: string): Promise<Lesson[]> {
@@ -223,7 +220,8 @@ export class LessonService {
             .where('lessons.teacher_id', '=', teacherId)
             .orderBy('lessons.scheduled_at', 'asc')
             .execute();
-        return rows.map((r) => toLesson(r as LessonRow));
+        const exMap = await this.exercisesByLesson(rows.map((r) => r.id));
+        return rows.map((r) => toLesson(r as LessonRow, exMap.get(r.id) ?? []));
     }
 
     /**
@@ -251,13 +249,139 @@ export class LessonService {
             .orderBy('lessons.scheduled_at', 'asc')
             .execute();
 
+        const exMap = await this.exercisesByLesson(rows.map((r) => r.id));
         return rows.map((r) => {
             const isTeacher = r.teacher_id === userId;
             return {
-                ...toLesson(r as LessonRow),
+                ...toLesson(r as LessonRow, exMap.get(r.id) ?? []),
                 role: isTeacher ? 'teacher' : 'student',
                 counterpartyDisplayName: isTeacher ? r.student_display_name : r.teacher_display_name,
             };
         });
+    }
+
+    /**
+     * Append an Exercise to a Lesson. Both the Lesson and the Exercise must
+     * be owned by `teacherId` (NotFoundError otherwise — leak-safe). The
+     * write is idempotent: a duplicate (lesson_id, exercise_id) is a no-op.
+     */
+    async addExercise(teacherId: string, lessonId: string, exerciseId: string): Promise<void> {
+        const lesson = await this.db
+            .selectFrom('lessons')
+            .select(['id', 'teacher_id'])
+            .where('id', '=', lessonId)
+            .executeTakeFirst();
+        if (!lesson || lesson.teacher_id !== teacherId) {
+            throw new NotFoundError('Lesson not found');
+        }
+        const exercise = await this.db
+            .selectFrom('exercises')
+            .select(['id', 'teacher_id'])
+            .where('id', '=', exerciseId)
+            .executeTakeFirst();
+        if (!exercise || exercise.teacher_id !== teacherId) {
+            throw new NotFoundError('Exercise not found');
+        }
+
+        const existing = await this.db
+            .selectFrom('lesson_exercise')
+            .select(['lesson_id'])
+            .where('lesson_id', '=', lessonId)
+            .where('exercise_id', '=', exerciseId)
+            .executeTakeFirst();
+        if (existing) return;
+
+        const max = await this.db
+            .selectFrom('lesson_exercise')
+            .select(({ fn }) => fn.max('sort_order').as('m'))
+            .where('lesson_id', '=', lessonId)
+            .executeTakeFirst();
+        const nextOrder = ((max?.m as number | null | undefined) ?? 0) + 1;
+
+        await this.db.insertInto('lesson_exercise').values({
+            lesson_id: lessonId,
+            exercise_id: exerciseId,
+            sort_order: nextOrder,
+            notes: null,
+        }).execute();
+    }
+
+    /**
+     * Detach an Exercise from a Lesson. NotFoundError when the Lesson isn't
+     * owned by the caller; idempotent when the link is already gone.
+     */
+    async removeExercise(teacherId: string, lessonId: string, exerciseId: string): Promise<void> {
+        const lesson = await this.db
+            .selectFrom('lessons')
+            .select(['id', 'teacher_id'])
+            .where('id', '=', lessonId)
+            .executeTakeFirst();
+        if (!lesson || lesson.teacher_id !== teacherId) {
+            throw new NotFoundError('Lesson not found');
+        }
+        await this.db.deleteFrom('lesson_exercise')
+            .where('lesson_id', '=', lessonId)
+            .where('exercise_id', '=', exerciseId)
+            .execute();
+    }
+
+    /**
+     * Read the ordered list of attached Exercises for a Lesson. Accessible
+     * to either side of the Lesson; NotFoundError to outsiders so the
+     * existence of the Lesson doesn't leak.
+     */
+    async listExercises(userId: string, lessonId: string): Promise<LessonExerciseRef[]> {
+        const lesson = await this.db
+            .selectFrom('lessons')
+            .select(['id', 'teacher_id', 'student_id'])
+            .where('id', '=', lessonId)
+            .executeTakeFirst();
+        if (!lesson || (lesson.teacher_id !== userId && lesson.student_id !== userId)) {
+            throw new NotFoundError('Lesson not found');
+        }
+        const map = await this.exercisesByLesson([lessonId]);
+        return map.get(lessonId) ?? [];
+    }
+
+    /** Resolve a single Lesson with all hydrated fields. */
+    private async loadOne(lessonId: string): Promise<Lesson> {
+        const row = await this.db
+            .selectFrom('lessons')
+            .leftJoin('horses', 'horses.id', 'lessons.horse_id')
+            .select([...LESSON_COLUMNS, 'horses.name as horse_name'])
+            .where('lessons.id', '=', lessonId)
+            .executeTakeFirstOrThrow();
+        const map = await this.exercisesByLesson([lessonId]);
+        return toLesson(row as LessonRow, map.get(lessonId) ?? []);
+    }
+
+    /**
+     * Batch-fetch attached Exercises for a set of lesson ids and group them
+     * by lesson id so callers can hydrate list responses in one query.
+     */
+    private async exercisesByLesson(
+        lessonIds: string[],
+    ): Promise<Map<string, LessonExerciseRef[]>> {
+        const out = new Map<string, LessonExerciseRef[]>();
+        if (lessonIds.length === 0) return out;
+        const rows = await this.db
+            .selectFrom('lesson_exercise')
+            .innerJoin('exercises', 'exercises.id', 'lesson_exercise.exercise_id')
+            .select([
+                'lesson_exercise.lesson_id as lesson_id',
+                'lesson_exercise.sort_order as sort_order',
+                'exercises.id as id',
+                'exercises.name as name',
+            ])
+            .where('lesson_exercise.lesson_id', 'in', lessonIds)
+            .orderBy('lesson_exercise.lesson_id')
+            .orderBy('lesson_exercise.sort_order', 'asc')
+            .execute();
+        for (const r of rows) {
+            const list = out.get(r.lesson_id) ?? [];
+            list.push({ id: r.id, name: r.name, sortOrder: r.sort_order });
+            out.set(r.lesson_id, list);
+        }
+        return out;
     }
 }

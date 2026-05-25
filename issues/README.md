@@ -30,3 +30,6 @@ Efter 004 är hela `User ↔ Relation`-grafen på plats. Då kan följande featu
 | [013](013-student-sees-own-lessons.md) | Student sees own Lessons | AFK | 012 |
 | [014](014-teacher-attaches-horse-to-lesson.md) | Teacher attaches a Horse to a Lesson | AFK | 012, 008 |
 | [015](015-teacher-transitions-lesson-status.md) | Teacher transitions Lesson status | AFK | 014 |
+| [016](016-teacher-links-exercises-to-lesson.md) | Teacher links Exercises to a Lesson | AFK | 014, 005 |
+| [017](017-teacher-writes-notes-on-lesson.md) | Teacher writes Notes on a Lesson | AFK | 012 |
+| [018](018-student-writes-notes-on-shared-lesson.md) | Student writes Notes on a shared Lesson | AFK | 017, 013 |

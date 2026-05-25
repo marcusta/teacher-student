@@ -7,6 +7,15 @@ export interface Database {
     exercises: ExercisesTable;
     horses: HorsesTable;
     lessons: LessonsTable;
+    lesson_exercise: LessonExerciseTable;
+}
+
+export interface LessonExerciseTable {
+    lesson_id: string;
+    exercise_id: string;
+    sort_order: number;
+    notes: string | null;
+    created_at: Generated<string>;
 }
 
 export type LessonStatus = 'planned' | 'completed' | 'cancelled';

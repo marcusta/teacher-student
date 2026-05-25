@@ -764,6 +764,58 @@ test('PATCH /api/lessons/:id with foreign Horse returns 500-or-400', async () =>
     expect(res.status).toBe(500);
 });
 
+test('POST /api/lessons/:id/exercises attaches and lists', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const ex = await (await req(app, 'POST', '/api/exercises',
+        { name: 'Skritt' }, teacherCookie)).json();
+    const lesson = await (await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: '2026-06-01T10:00:00.000Z' }, teacherCookie)).json();
+
+    const res = await req(app, 'POST', `/api/lessons/${lesson.id}/exercises`,
+        { exerciseId: ex.id }, teacherCookie);
+    expect(res.status).toBe(200);
+    const list = await res.json();
+    expect(list.map((e: { id: string }) => e.id)).toEqual([ex.id]);
+
+    const getRes = await req(app, 'GET', `/api/lessons/${lesson.id}/exercises`,
+        undefined, teacherCookie);
+    expect(getRes.status).toBe(200);
+    expect((await getRes.json()).length).toBe(1);
+});
+
+test('DELETE /api/lessons/:id/exercises/:exerciseId detaches', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const ex = await (await req(app, 'POST', '/api/exercises',
+        { name: 'Skritt' }, teacherCookie)).json();
+    const lesson = await (await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: '2026-06-01T10:00:00.000Z' }, teacherCookie)).json();
+    await req(app, 'POST', `/api/lessons/${lesson.id}/exercises`,
+        { exerciseId: ex.id }, teacherCookie);
+
+    const res = await req(app, 'DELETE',
+        `/api/lessons/${lesson.id}/exercises/${ex.id}`, undefined, teacherCookie);
+    expect(res.status).toBe(200);
+    expect((await res.json()).length).toBe(0);
+});
+
+test('POST /api/lessons/:id/exercises on stranger Lesson returns 404', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const ex = await (await req(app, 'POST', '/api/exercises',
+        { name: 'Skritt' }, teacherCookie)).json();
+    const lesson = await (await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: '2026-06-01T10:00:00.000Z' }, teacherCookie)).json();
+    const intruderCookie = await registerAndLogin(app, 'intruder@example.com');
+    const res = await req(app, 'POST', `/api/lessons/${lesson.id}/exercises`,
+        { exerciseId: ex.id }, intruderCookie);
+    expect(res.status).toBe(404);
+});
+
 test('POST /api/lessons/:id/transition marks completed', async () => {
     const { app } = await setup([seedUser]);
     const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');

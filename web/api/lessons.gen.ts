@@ -9,6 +9,7 @@ export interface Lesson {
     status: 'completed' | 'cancelled' | 'planned';
     horseId: null | string;
     horseName: null | string;
+    exercises: LessonExerciseRef[];
     createdAt: string;
     updatedAt: string;
 }
@@ -23,13 +24,23 @@ export interface LessonForUser {
     status: 'completed' | 'cancelled' | 'planned';
     horseId: null | string;
     horseName: null | string;
+    exercises: LessonExerciseRef[];
     createdAt: string;
     updatedAt: string;
+}
+
+export interface LessonExerciseRef {
+    id: string;
+    name: string;
+    sortOrder: number;
 }
 
 export interface LessonsApi {
     create(input: { studentId: string; scheduledAt: string }): Promise<Lesson>;
     list(): Promise<LessonForUser[]>;
+    addExercise(input: { id: string; exerciseId: string }): Promise<LessonExerciseRef[]>;
+    removeExercise(input: { id: string; exerciseId: string }): Promise<LessonExerciseRef[]>;
+    listExercises(input: { id: string }): Promise<LessonExerciseRef[]>;
     transition(input: { id: string; target: 'completed' | 'cancelled' }): Promise<Lesson>;
     update(input: { scheduledAt?: string; horseId?: null | string; id: string }): Promise<Lesson>;
 }
@@ -41,6 +52,24 @@ export function createLessonsClient(baseUrl: string): LessonsApi {
         },
         async list() {
             return apiFetch({ method: 'GET', url: `${baseUrl}/lessons` });
+        },
+        async addExercise(input) {
+            const pathParams = new Set(['id']);
+            const body: Record<string, unknown> = {};
+            for (const [k, v] of Object.entries(input as any))
+                if (!pathParams.has(k)) body[k] = v;
+            return apiFetch({ method: 'POST', url: `${baseUrl}/lessons/${input.id}/exercises`, body });
+        },
+        async removeExercise(input) {
+            return apiFetch({ method: 'DELETE', url: `${baseUrl}/lessons/${input.id}/exercises/${input.exerciseId}` });
+        },
+        async listExercises(input) {
+            const pathParams = new Set(['id']);
+            const params = new URLSearchParams();
+            for (const [k, v] of Object.entries(input as any))
+                if (!pathParams.has(k) && v !== undefined) params.set(k, String(v));
+            const qs = params.toString();
+            return apiFetch({ method: 'GET', url: `${baseUrl}/lessons/${input.id}/exercises${qs ? '?' + qs : ''}` });
         },
         async transition(input) {
             const pathParams = new Set(['id']);
