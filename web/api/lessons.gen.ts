@@ -11,9 +11,21 @@ export interface Lesson {
     updatedAt: string;
 }
 
+export interface LessonForUser {
+    role: 'teacher' | 'student';
+    counterpartyDisplayName: string;
+    id: string;
+    teacherId: string;
+    studentId: string;
+    scheduledAt: string;
+    status: 'planned' | 'completed' | 'cancelled';
+    createdAt: string;
+    updatedAt: string;
+}
+
 export interface LessonsApi {
     create(input: { studentId: string; scheduledAt: string }): Promise<Lesson>;
-    list(): Promise<Lesson[]>;
+    list(): Promise<LessonForUser[]>;
 }
 
 export function createLessonsClient(baseUrl: string): LessonsApi {

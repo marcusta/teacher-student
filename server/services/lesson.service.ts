@@ -12,6 +12,16 @@ export interface Lesson {
     updatedAt: string;
 }
 
+/**
+ * Lesson plus a `role` discriminator describing the caller's side and the
+ * resolved counterparty display name. Used by the unified `GET /api/lessons`
+ * which serves both teachers and students from a single endpoint.
+ */
+export interface LessonForUser extends Lesson {
+    role: 'teacher' | 'student';
+    counterpartyDisplayName: string;
+}
+
 export interface CreateLessonInput {
     studentId: string;
     scheduledAt: string;
@@ -87,5 +97,44 @@ export class LessonService {
             .orderBy('scheduled_at', 'asc')
             .execute();
         return rows.map(toLesson);
+    }
+
+    /**
+     * Lessons relevant to `userId` from both sides — as teacher and as
+     * student — merged and sorted by `scheduled_at ASC`. Each row carries
+     * the caller's `role` and the counterparty's display name, so the UI
+     * can render a single timeline without a follow-up roster lookup.
+     */
+    async listForUser(userId: string): Promise<LessonForUser[]> {
+        const rows = await this.db
+            .selectFrom('lessons')
+            .innerJoin('users as teacher', 'teacher.id', 'lessons.teacher_id')
+            .innerJoin('users as student', 'student.id', 'lessons.student_id')
+            .select([
+                'lessons.id as id',
+                'lessons.teacher_id as teacher_id',
+                'lessons.student_id as student_id',
+                'lessons.scheduled_at as scheduled_at',
+                'lessons.status as status',
+                'lessons.created_at as created_at',
+                'lessons.updated_at as updated_at',
+                'teacher.display_name as teacher_display_name',
+                'student.display_name as student_display_name',
+            ])
+            .where((eb) => eb.or([
+                eb('lessons.teacher_id', '=', userId),
+                eb('lessons.student_id', '=', userId),
+            ]))
+            .orderBy('lessons.scheduled_at', 'asc')
+            .execute();
+
+        return rows.map((r) => {
+            const isTeacher = r.teacher_id === userId;
+            return {
+                ...toLesson(r),
+                role: isTeacher ? 'teacher' : 'student',
+                counterpartyDisplayName: isTeacher ? r.student_display_name : r.teacher_display_name,
+            };
+        });
     }
 }

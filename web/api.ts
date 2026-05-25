@@ -10,7 +10,7 @@ export type { Invitation, InboxInvitation } from './api/invitations.gen';
 export type { Student } from './api/students.gen';
 export type { Exercise } from './api/exercises.gen';
 export type { Horse } from './api/horses.gen';
-export type { Lesson } from './api/lessons.gen';
+export type { Lesson, LessonForUser } from './api/lessons.gen';
 
 export const api = {
     register: createRegisterClient('/api'),

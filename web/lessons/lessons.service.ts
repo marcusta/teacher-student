@@ -1,6 +1,6 @@
 import { Signal } from '@basics/core/client/core';
 import { request, type RequestError } from '@basics/core/client/request';
-import { api, type Lesson } from '../api';
+import { api, type LessonForUser } from '../api';
 
 /**
  * Owns the current user's Lessons as observable state. Deep module:
@@ -10,7 +10,7 @@ import { api, type Lesson } from '../api';
  * without changing this surface.
  */
 export class LessonsService {
-    readonly items = new Signal<Lesson[]>([]);
+    readonly items = new Signal<LessonForUser[]>([]);
     readonly loading = new Signal(false);
     readonly error = new Signal<RequestError | null>(null);
 
@@ -24,11 +24,9 @@ export class LessonsService {
             api.lessons.create(input),
         );
         if (!result) return false;
-        // listForTeacher is ordered scheduled_at ASC — re-sort the local list.
-        const next = [...this.items.get(), result].sort((a, b) =>
-            a.scheduledAt < b.scheduledAt ? -1 : 1,
-        );
-        this.items.set(next);
+        // Server returns the base Lesson; reload so the row carries the
+        // role + counterparty fields the unified GET /api/lessons supplies.
+        await this.load();
         return true;
     }
 }

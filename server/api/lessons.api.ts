@@ -29,7 +29,7 @@ export function createLessonsApi(svc: LessonService) {
             middleware: [requireAuth()],
             fn: async (c: Context) => {
                 const user = requireUser(c);
-                return svc.listForTeacher(user.id);
+                return svc.listForUser(user.id);
             },
         },
     };

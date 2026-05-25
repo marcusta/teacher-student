@@ -78,3 +78,62 @@ test('listForTeacher returns only own lessons sorted by scheduled_at ASC', async
     const list = await ctx.lessonService.listForTeacher(ctx.teacher.id);
     expect(list.map((l) => l.id)).toEqual([earlier.id, later.id]);
 });
+
+// --- listForUser (013: same endpoint serves teacher + student sides) ---
+
+test('listForUser returns lessons from teacher side with role + counterparty', async () => {
+    const { lessonService, teacher, student } = await seedConnected();
+    await lessonService.create(teacher.id, {
+        studentId: student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+
+    const list = await lessonService.listForUser(teacher.id);
+    expect(list.length).toBe(1);
+    expect(list[0].role).toBe('teacher');
+    expect(list[0].counterpartyDisplayName).toBe('S');
+});
+
+test('listForUser returns lessons from student side with role + counterparty', async () => {
+    const { lessonService, teacher, student } = await seedConnected();
+    await lessonService.create(teacher.id, {
+        studentId: student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+
+    const list = await lessonService.listForUser(student.id);
+    expect(list.length).toBe(1);
+    expect(list[0].role).toBe('student');
+    expect(list[0].counterpartyDisplayName).toBe('T');
+});
+
+test('listForUser merges both sides sorted by scheduled_at ASC', async () => {
+    const ctx = await seedConnected();
+    // ctx.teacher schedules a lesson with ctx.student.
+    await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-07-01T10:00:00.000Z',
+    });
+    // ctx.teacher is also a student of another teacher.
+    const t2 = await ctx.userService.register({
+        email: 't2@example.com', password: 'secret123', displayName: 'T2',
+    });
+    const inv = await ctx.invitationService.createInvitation(t2.id, 'teacher@example.com');
+    await ctx.invitationService.acceptInvitation(inv.id, ctx.teacher.id, 'teacher@example.com');
+    await ctx.lessonService.create(t2.id, {
+        studentId: ctx.teacher.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+
+    const list = await ctx.lessonService.listForUser(ctx.teacher.id);
+    expect(list.length).toBe(2);
+    expect(list[0].scheduledAt).toBe('2026-06-01T10:00:00.000Z');
+    expect(list[0].role).toBe('student');
+    expect(list[0].counterpartyDisplayName).toBe('T2');
+    expect(list[1].role).toBe('teacher');
+    expect(list[1].counterpartyDisplayName).toBe('S');
+});
+
+test('listForUser returns [] for user with no lessons', async () => {
+    const ctx = await seedConnected();
+    const lonely = await ctx.userService.register({
+        email: 'lonely@example.com', password: 'secret123', displayName: 'L',
+    });
+    expect(await ctx.lessonService.listForUser(lonely.id)).toEqual([]);
+});

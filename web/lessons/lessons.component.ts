@@ -3,7 +3,7 @@ import { t } from '../theme';
 import { s, btn, input } from '../css';
 import { LessonsService } from './lessons.service';
 import { StudentsService } from '../students/students.service';
-import type { Lesson, Student } from '../api';
+import type { Lesson, LessonForUser, Student } from '../api';
 
 const tpl = template(`
     <div class="lessons" bind="root">
@@ -49,6 +49,7 @@ export class LessonsComponent extends Component {
 
             & h2 { margin: 0 0 ${s('lg')}; }
 
+            & .lessons__form.hidden { display: none; }
             & .lessons__form {
                 display: flex;
                 flex-direction: column;
@@ -154,6 +155,8 @@ export class LessonsComponent extends Component {
                 oninput: (e: Event) => this.whenVal.set((e.target as HTMLInputElement).value),
             },
             form: {
+                className: () => this.students.items.get().length === 0
+                    ? 'lessons__form hidden' : 'lessons__form',
                 onsubmit: async (e: Event) => {
                     e.preventDefault();
                     const studentId = this.studentVal.get();
@@ -198,7 +201,7 @@ export class LessonsComponent extends Component {
         return frag;
     }
 
-    private renderItem(item: Lesson): HTMLElement {
+    private renderItem(item: LessonForUser): HTMLElement {
         const li = document.createElement('li');
         li.className = 'lessons__item';
 
@@ -208,8 +211,8 @@ export class LessonsComponent extends Component {
         when.textContent = DATETIME_FORMAT.format(new Date(item.scheduledAt));
         const who = document.createElement('div');
         who.className = 'lessons__item-who';
-        const student = this.students.items.get().find((st) => st.id === item.studentId);
-        who.textContent = student?.displayName ?? '';
+        const rolePrefix = item.role === 'teacher' ? 'Elev: ' : 'Lärare: ';
+        who.textContent = rolePrefix + item.counterpartyDisplayName;
         left.appendChild(when);
         left.appendChild(who);
 

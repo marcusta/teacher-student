@@ -710,3 +710,27 @@ test('GET /api/lessons returns own lessons sorted by scheduled_at ASC', async ()
     expect(list.length).toBe(2);
     expect(list[0].scheduledAt < list[1].scheduledAt).toBe(true);
 });
+
+test('GET /api/lessons returns student-side lessons with role + counterparty', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentCookie = await registerAndLogin(app, 'student@example.com', 'secret123', 'Stina Studentsson');
+
+    // Teacher invites + student accepts.
+    const inv = await (await req(app, 'POST', '/api/invitations',
+        { inviteeEmail: 'student@example.com' }, teacherCookie)).json();
+    await req(app, 'POST', '/api/invitations/accept', { invitationId: inv.id }, studentCookie);
+
+    const me = await (await req(app, 'GET', '/api/auth/me', undefined, studentCookie)).json();
+    await req(app, 'POST', '/api/lessons',
+        { studentId: me.id, scheduledAt: '2026-06-01T10:00:00.000Z' }, teacherCookie);
+
+    const studentList = await (await req(app, 'GET', '/api/lessons', undefined, studentCookie)).json();
+    expect(studentList.length).toBe(1);
+    expect(studentList[0].role).toBe('student');
+    expect(studentList[0].counterpartyDisplayName).toBe('Anna Andersson');
+
+    const teacherList = await (await req(app, 'GET', '/api/lessons', undefined, teacherCookie)).json();
+    expect(teacherList[0].role).toBe('teacher');
+    expect(teacherList[0].counterpartyDisplayName).toBe('Stina Studentsson');
+});
