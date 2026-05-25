@@ -55,6 +55,33 @@ test('create on a stranger lesson throws NotFoundError', async () => {
     })).rejects.toBeInstanceOf(NotFoundError);
 });
 
+test('student can author a note on a lesson they participate in (018)', async () => {
+    const { noteService, student, teacher, lesson } = await seedLesson();
+    const n = await noteService.create(student.id, {
+        parentKind: 'lesson', parentId: lesson.id,
+        body: 'mina tankar', visibility: 'private',
+    });
+    expect(n.authorId).toBe(student.id);
+    expect(n.authorDisplayName).toBe('S');
+
+    // Visible to the student (own private), hidden from the teacher.
+    const teacherView = await noteService.listFor(teacher.id, {
+        parentKind: 'lesson', parentId: lesson.id,
+    });
+    expect(teacherView.map((x) => x.body)).toEqual([]);
+});
+
+test('student create on a lesson they are not in throws NotFoundError (018)', async () => {
+    const { noteService, userService, lesson } = await seedLesson();
+    const outsider = await userService.register({
+        email: 'outsider@example.com', password: 'secret123', displayName: 'O',
+    });
+    await expect(noteService.create(outsider.id, {
+        parentKind: 'lesson', parentId: lesson.id,
+        body: 'nope', visibility: 'shared',
+    })).rejects.toBeInstanceOf(NotFoundError);
+});
+
 test('listFor returns shared notes to both sides and hides private from others', async () => {
     const { noteService, teacher, student, lesson } = await seedLesson();
     await noteService.create(teacher.id, {

@@ -146,8 +146,8 @@ export class NoteService {
     }
 
     /**
-     * Author-side authorization. MVP: only the Lesson's teacher can author
-     * lesson Notes; student authoring lands in 018.
+     * Author-side authorization. For `lesson` either participant (teacher
+     * or student) may author; visibility selects the audience.
      */
     private async assertCanAuthor(
         userId: string,
@@ -157,10 +157,10 @@ export class NoteService {
         if (parentKind === 'lesson') {
             const lesson = await this.db
                 .selectFrom('lessons')
-                .select(['id', 'teacher_id'])
+                .select(['id', 'teacher_id', 'student_id'])
                 .where('id', '=', parentId)
                 .executeTakeFirst();
-            if (!lesson || lesson.teacher_id !== userId) {
+            if (!lesson || (lesson.teacher_id !== userId && lesson.student_id !== userId)) {
                 throw new NotFoundError('Lesson not found');
             }
             return;

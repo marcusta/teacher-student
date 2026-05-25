@@ -229,22 +229,19 @@ export class LessonsComponent extends Component {
 
     private renderItem(item: LessonForUser): HTMLElement {
         const li = document.createElement('li');
-        // Teachers click through to the edit page; students see read-only.
-        const row: HTMLElement = item.role === 'teacher'
-            ? document.createElement('a')
-            : document.createElement('div');
+        // Both roles click through to the detail page (teacher edits,
+        // student sees read-only summary + Notes — see lesson-edit shell).
+        const row = document.createElement('a');
         const statusClass = item.status === 'cancelled'
             ? ' lessons__item--cancelled'
             : item.status === 'completed' ? ' lessons__item--completed' : '';
         row.className = 'lessons__item' + statusClass;
-        if (row instanceof HTMLAnchorElement) {
-            const href = `/lektioner/${item.id}`;
-            row.href = href;
-            row.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.router.navigate(href);
-            });
-        }
+        const href = `/lektioner/${item.id}`;
+        row.href = href;
+        row.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.router.navigate(href);
+        });
 
         const left = document.createElement('div');
         const when = document.createElement('div');

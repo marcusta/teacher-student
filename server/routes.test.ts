@@ -942,6 +942,48 @@ test('POST /api/notes on a stranger Lesson returns 404', async () => {
     expect(res.status).toBe(404);
 });
 
+test('POST /api/notes by a student on own Lesson works and interleaves on teacher view (018)', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentCookie = await registerAndLogin(app, 'student@example.com');
+    const inv = await (await req(app, 'POST', '/api/invitations',
+        { inviteeEmail: 'student@example.com' }, teacherCookie)).json();
+    await req(app, 'POST', '/api/invitations/accept', { invitationId: inv.id }, studentCookie);
+    const me = await (await req(app, 'GET', '/api/auth/me', undefined, studentCookie)).json();
+    const lesson = await (await req(app, 'POST', '/api/lessons',
+        { studentId: me.id, scheduledAt: '2026-06-01T10:00:00.000Z' }, teacherCookie)).json();
+
+    await req(app, 'POST', '/api/notes', {
+        parentKind: 'lesson', parentId: lesson.id,
+        body: 'teacher-prep', visibility: 'shared',
+    }, teacherCookie);
+    const stRes = await req(app, 'POST', '/api/notes', {
+        parentKind: 'lesson', parentId: lesson.id,
+        body: 'student-reply', visibility: 'shared',
+    }, studentCookie);
+    expect(stRes.status).toBe(200);
+
+    const qs = `parentKind=lesson&parentId=${lesson.id}`;
+    const teacherView = await (await req(app, 'GET', `/api/notes?${qs}`,
+        undefined, teacherCookie)).json();
+    expect(teacherView.map((n: { body: string }) => n.body))
+        .toEqual(['teacher-prep', 'student-reply']);
+});
+
+test('POST /api/notes by an outsider on a Lesson returns 404 (018)', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const lesson = await (await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: '2026-06-01T10:00:00.000Z' }, teacherCookie)).json();
+    const outsiderCookie = await registerAndLogin(app, 'outsider@example.com');
+    const res = await req(app, 'POST', '/api/notes', {
+        parentKind: 'lesson', parentId: lesson.id,
+        body: 'nope', visibility: 'shared',
+    }, outsiderCookie);
+    expect(res.status).toBe(404);
+});
+
 test('DELETE /api/notes/:id removes own note', async () => {
     const { app } = await setup([seedUser]);
     const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');

@@ -1,7 +1,7 @@
 # 018 — Student writes Notes on a shared Lesson
 
 **Type:** AFK
-**Status:** open
+**Status:** done
 
 ## What to build
 

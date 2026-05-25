@@ -9,8 +9,20 @@ import { NotesService } from './notes.service';
 const tpl = template(`
     <div class="lesson-edit" bind="root">
         <a bind="back" href="/lektioner" class="lesson-edit__back">← Tillbaka</a>
-        <h2>Redigera lektion</h2>
+        <h2 bind="heading">Redigera lektion</h2>
         <div bind="missing" class="lesson-edit__missing">Lektionen kunde inte hittas.</div>
+
+        <section bind="studentSummary" class="lesson-edit__summary">
+            <dl>
+                <dt>Lärare</dt><dd bind="sumTeacher"></dd>
+                <dt>Tidpunkt</dt><dd bind="sumWhen"></dd>
+                <dt>Häst</dt><dd bind="sumHorse"></dd>
+                <dt>Status</dt><dd bind="sumStatus"></dd>
+            </dl>
+            <div bind="sumExLabel" class="lesson-edit__summary-ex-label">Övningar</div>
+            <ul bind="sumExList" class="lesson-edit__summary-ex-list"></ul>
+        </section>
+
         <form bind="form" class="lesson-edit__form">
             <label>
                 <span>Häst</span>
@@ -133,6 +145,44 @@ export class LessonEditComponent extends Component {
             &.missing .lesson-edit__missing { display: block; }
             &.missing .lesson-edit__form { display: none; }
             &.missing .lesson-edit__exercises { display: none; }
+            &.missing .lesson-edit__summary { display: none; }
+            &.missing .lesson-edit__notes { display: none; }
+
+            & .lesson-edit__summary { display: none; }
+            &.student .lesson-edit__summary { display: block; }
+            &.student .lesson-edit__form { display: none; }
+            &.student .lesson-edit__exercises { display: none; }
+
+            & .lesson-edit__summary {
+                margin-bottom: ${s('lg')};
+                & dl {
+                    display: grid;
+                    grid-template-columns: max-content 1fr;
+                    gap: ${s('xs')} ${s('md')};
+                    margin: 0 0 ${s('sm')};
+                }
+                & dt {
+                    opacity: 0.7;
+                    font-size: 0.8125rem;
+                }
+                & dd {
+                    margin: 0;
+                    font-size: 0.875rem;
+                }
+                & .lesson-edit__summary-ex-label {
+                    opacity: 0.7;
+                    font-size: 0.8125rem;
+                    margin-bottom: ${s('xs')};
+                }
+                & .lesson-edit__summary-ex-list {
+                    list-style: disc inside;
+                    margin: 0;
+                    padding: 0;
+                    font-size: 0.875rem;
+                }
+                & .lesson-edit__summary-ex-list.hidden { display: none; }
+                & .lesson-edit__summary-ex-label.hidden { display: none; }
+            }
 
             & .lesson-edit__exercises {
                 margin-top: ${s('xl')};
@@ -300,6 +350,7 @@ export class LessonEditComponent extends Component {
     private exerciseVal = new Signal('');
     private resolved = new Signal(false);
     private found = new Signal(true);
+    private role = new Signal<'teacher' | 'student' | null>(null);
     private noteBodyVal = new Signal('');
     private noteSharedVal = new Signal(false);
     private editingNoteId = new Signal<string | null>(null);
@@ -325,9 +376,11 @@ export class LessonEditComponent extends Component {
                 this.resolved.set(true);
                 return;
             }
+            this.role.set(lesson.role);
+            void this.notes.load('lesson', id);
             if (lesson.role !== 'teacher') {
-                // Students get the read-only timeline; deny edit access.
-                this.found.set(false);
+                // Student gets a read-only summary + Notes section (018).
+                this.found.set(true);
                 this.resolved.set(true);
                 return;
             }
@@ -337,7 +390,6 @@ export class LessonEditComponent extends Component {
                 api.students.listHorses({ id: lesson.studentId }),
                 api.exercises.list(),
             ]);
-            void this.notes.load('lesson', id);
             this.horses.set(horses);
             this.library.set(library);
             this.found.set(true);
@@ -345,9 +397,12 @@ export class LessonEditComponent extends Component {
         });
     }
 
+    private lessonId(): string {
+        return this.router.route.get().split('/')[2] ?? '';
+    }
+
     private currentExercises() {
-        const id = this.router.route.get().split('/')[2] ?? '';
-        return this.svc.get(id)?.exercises ?? [];
+        return this.svc.get(this.lessonId())?.exercises ?? [];
     }
 
     private unattachedLibrary(): Exercise[] {
@@ -358,10 +413,33 @@ export class LessonEditComponent extends Component {
     render(): DocumentFragment {
         const frag = this.wire(tpl, {
             root: {
-                className: () => this.resolved.get() && !this.found.get()
-                    ? 'lesson-edit missing' : 'lesson-edit',
+                className: () => {
+                    if (this.resolved.get() && !this.found.get()) return 'lesson-edit missing';
+                    if (this.role.get() === 'student') return 'lesson-edit student';
+                    return 'lesson-edit';
+                },
+            },
+            heading: {
+                textContent: () => this.role.get() === 'student' ? 'Lektion' : 'Redigera lektion',
             },
             back: this.router.link('/lektioner'),
+            sumTeacher: { textContent: () => this.svc.get(this.lessonId())?.counterpartyDisplayName ?? '' },
+            sumWhen: { textContent: () => {
+                const l = this.svc.get(this.lessonId());
+                return l ? new Date(l.scheduledAt).toLocaleString('sv-SE') : '';
+            } },
+            sumHorse: { textContent: () => this.svc.get(this.lessonId())?.horseName ?? '(ingen)' },
+            sumStatus: { textContent: () => {
+                const st = this.svc.get(this.lessonId())?.status;
+                if (st === 'completed') return 'Utförd';
+                if (st === 'cancelled') return 'Inställd';
+                return 'Planerad';
+            } },
+            sumExLabel: {
+                className: () => this.currentExercises().length === 0
+                    ? 'lesson-edit__summary-ex-label hidden'
+                    : 'lesson-edit__summary-ex-label',
+            },
             horseSelect: {
                 value: () => this.horseVal.get(),
                 onchange: (e: Event) => this.horseVal.set((e.target as HTMLSelectElement).value),
@@ -525,6 +603,21 @@ export class LessonEditComponent extends Component {
             this.horses.get();
             this.horseVal.get();
             renderOptions();
+        }));
+
+        // Read-only exercises summary (student view).
+        const sumExHost = this.ref(frag, 'sumExList');
+        this.track(effect(() => {
+            const items = this.currentExercises();
+            sumExHost.replaceChildren();
+            sumExHost.className = items.length === 0
+                ? 'lesson-edit__summary-ex-list hidden'
+                : 'lesson-edit__summary-ex-list';
+            for (const ex of items) {
+                const li = document.createElement('li');
+                li.textContent = ex.name;
+                sumExHost.appendChild(li);
+            }
         }));
 
         // Render notes list reactively.
