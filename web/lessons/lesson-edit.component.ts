@@ -364,7 +364,7 @@ export class LessonEditComponent extends Component {
         this.horses.get().map((h) => ({ value: h.id, label: h.name })),
     );
     private exerciseOptions = new Computed<SelectOption[]>(() => {
-        const linked = new Set(this.currentExercises().map((e) => e.id));
+        const linked = new Set(this.currentExercises().map((e) => e.exerciseId));
         return this.library.get()
             .filter((e) => !linked.has(e.id))
             .map((e) => ({ value: e.id, label: e.name }));
@@ -423,7 +423,7 @@ export class LessonEditComponent extends Component {
     }
 
     private unattachedLibrary(): Exercise[] {
-        const linked = new Set(this.currentExercises().map((e) => e.id));
+        const linked = new Set(this.currentExercises().map((e) => e.exerciseId));
         return this.library.get().filter((e) => !linked.has(e.id));
     }
 
@@ -559,7 +559,7 @@ export class LessonEditComponent extends Component {
                 remove.textContent = 'Ta bort';
                 remove.onclick = async () => {
                     const id = this.router.route.get().split('/')[2] ?? '';
-                    await this.svc.removeExercise(id, ex.id);
+                    await this.svc.removeExercise(id, ex.exerciseId);
                 };
                 li.appendChild(label);
                 li.appendChild(remove);

@@ -3,9 +3,14 @@ import { ConflictError, NotFoundError } from '@basics/core/server/auth';
 import type { Database, LessonStatus } from '../db/schema';
 
 export interface LessonExerciseRef {
+    /** Surrogate id of the `lesson_exercise` junction row (parent target for Notes). */
     id: string;
+    /** The library Exercise's id. */
+    exerciseId: string;
     name: string;
     sortOrder: number;
+    /** Program this row was snapshot-copied from, or null when added free. */
+    sourceProgramId: string | null;
 }
 
 export interface Lesson {
@@ -152,10 +157,12 @@ export class LessonService {
 
             if (programRows.length > 0) {
                 await tx.insertInto('lesson_exercise').values(programRows.map((r) => ({
+                    id: crypto.randomUUID(),
                     lesson_id: id,
                     exercise_id: r.exercise_id,
                     sort_order: r.sort_order,
                     notes: r.notes,
+                    source_program_id: program!.id,
                 }))).execute();
             }
         });
@@ -331,10 +338,12 @@ export class LessonService {
         const nextOrder = ((max?.m as number | null | undefined) ?? 0) + 1;
 
         await this.db.insertInto('lesson_exercise').values({
+            id: crypto.randomUUID(),
             lesson_id: lessonId,
             exercise_id: exerciseId,
             sort_order: nextOrder,
             notes: null,
+            source_program_id: null,
         }).execute();
     }
 
@@ -401,9 +410,11 @@ export class LessonService {
             .selectFrom('lesson_exercise')
             .innerJoin('exercises', 'exercises.id', 'lesson_exercise.exercise_id')
             .select([
+                'lesson_exercise.id as id',
                 'lesson_exercise.lesson_id as lesson_id',
                 'lesson_exercise.sort_order as sort_order',
-                'exercises.id as id',
+                'lesson_exercise.source_program_id as source_program_id',
+                'exercises.id as exercise_id',
                 'exercises.name as name',
             ])
             .where('lesson_exercise.lesson_id', 'in', lessonIds)
@@ -412,7 +423,13 @@ export class LessonService {
             .execute();
         for (const r of rows) {
             const list = out.get(r.lesson_id) ?? [];
-            list.push({ id: r.id, name: r.name, sortOrder: r.sort_order });
+            list.push({
+                id: r.id,
+                exerciseId: r.exercise_id,
+                name: r.name,
+                sortOrder: r.sort_order,
+                sourceProgramId: r.source_program_id,
+            });
             out.set(r.lesson_id, list);
         }
         return out;

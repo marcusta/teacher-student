@@ -64,10 +64,12 @@ export interface NotesTable {
 }
 
 export interface LessonExerciseTable {
+    id: string;
     lesson_id: string;
     exercise_id: string;
     sort_order: number;
     notes: string | null;
+    source_program_id: string | null;
     created_at: Generated<string>;
 }
 

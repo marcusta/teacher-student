@@ -822,7 +822,7 @@ test('POST /api/lessons/:id/exercises attaches and lists', async () => {
         { exerciseId: ex.id }, teacherCookie);
     expect(res.status).toBe(200);
     const list = await res.json();
-    expect(list.map((e: { id: string }) => e.id)).toEqual([ex.id]);
+    expect(list.map((e: { exerciseId: string }) => e.exerciseId)).toEqual([ex.id]);
 
     const getRes = await req(app, 'GET', `/api/lessons/${lesson.id}/exercises`,
         undefined, teacherCookie);

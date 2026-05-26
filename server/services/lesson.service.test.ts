@@ -246,7 +246,7 @@ test('addExercise links Teacher\'s Exercise to own Lesson', async () => {
 
     await ctx.lessonService.addExercise(ctx.teacher.id, lesson.id, ex.id);
     const list = await ctx.lessonService.listExercises(ctx.teacher.id, lesson.id);
-    expect(list.map((e) => e.id)).toEqual([ex.id]);
+    expect(list.map((e) => e.exerciseId)).toEqual([ex.id]);
     expect(list[0].name).toBe('Skritt');
     expect(list[0].sortOrder).toBe(1);
 });
@@ -307,7 +307,7 @@ test('listExercises orders by sort_order ASC', async () => {
     await ctx.lessonService.addExercise(ctx.teacher.id, lesson.id, c.id);
 
     const list = await ctx.lessonService.listExercises(ctx.teacher.id, lesson.id);
-    expect(list.map((e) => e.id)).toEqual([b.id, a.id, c.id]);
+    expect(list.map((e) => e.exerciseId)).toEqual([b.id, a.id, c.id]);
 });
 
 test('removeExercise unlinks; idempotent on missing link', async () => {
@@ -333,7 +333,7 @@ test('listExercises is readable by the Lesson\'s Student', async () => {
     await ctx.lessonService.addExercise(ctx.teacher.id, lesson.id, ex.id);
 
     const list = await ctx.lessonService.listExercises(ctx.student.id, lesson.id);
-    expect(list.map((e) => e.id)).toEqual([ex.id]);
+    expect(list.map((e) => e.exerciseId)).toEqual([ex.id]);
 });
 
 test('listExercises by an outsider throws NotFoundError', async () => {
@@ -356,7 +356,7 @@ test('listForUser includes exercises array on each row', async () => {
     await ctx.lessonService.addExercise(ctx.teacher.id, lesson.id, ex.id);
 
     const list = await ctx.lessonService.listForUser(ctx.student.id);
-    expect(list[0].exercises.map((e) => e.id)).toEqual([ex.id]);
+    expect(list[0].exercises.map((e) => e.exerciseId)).toEqual([ex.id]);
     expect(list[0].exercises[0].name).toBe('Skritt');
 });
 
@@ -523,6 +523,57 @@ test('listForUser on student side surfaces programId and programTitle', async ()
     const list = await ctx.lessonService.listForUser(ctx.student.id);
     expect(list[0].programId).toBe(ctx.program.id);
     expect(list[0].programTitle).toBe('Uppvärmning');
+});
+
+test('create with programId fills source_program_id on every snapshot row', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    });
+    const rows = await ctx.db.selectFrom('lesson_exercise')
+        .select(['id', 'source_program_id'])
+        .where('lesson_id', '=', lesson.id)
+        .execute();
+    expect(rows.length).toBe(3);
+    for (const r of rows) {
+        expect(r.id).toBeString();
+        expect(r.source_program_id).toBe(ctx.program.id);
+    }
+    // Surrogate ids are unique.
+    expect(new Set(rows.map((r) => r.id)).size).toBe(3);
+});
+
+test('addExercise (free add) inserts row with source_program_id = null', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    const exFree = await ctx.exerciseService.create(ctx.teacher.id, { name: 'Frittstå' });
+    await ctx.lessonService.addExercise(ctx.teacher.id, lesson.id, exFree.id);
+    const row = await ctx.db.selectFrom('lesson_exercise')
+        .select(['id', 'source_program_id'])
+        .where('lesson_id', '=', lesson.id)
+        .where('exercise_id', '=', exFree.id)
+        .executeTakeFirstOrThrow();
+    expect(row.id).toBeString();
+    expect(row.source_program_id).toBeNull();
+});
+
+test('listExercises returns the lesson_exercise surrogate id and sourceProgramId', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    });
+    const refs = await ctx.lessonService.listExercises(ctx.teacher.id, lesson.id);
+    expect(refs.length).toBe(3);
+    for (const r of refs) {
+        expect(r.id).toBeString();
+        expect(r.sourceProgramId).toBe(ctx.program.id);
+    }
 });
 
 test('create with programId copies notes and sort_order verbatim into lesson_exercise', async () => {

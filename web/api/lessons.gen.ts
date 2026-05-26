@@ -35,8 +35,10 @@ export interface LessonForUser {
 
 export interface LessonExerciseRef {
     id: string;
+    exerciseId: string;
     name: string;
     sortOrder: number;
+    sourceProgramId: null | string;
 }
 
 export interface LessonsApi {
