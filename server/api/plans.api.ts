@@ -6,8 +6,8 @@ import type { PlanService } from '../services/plan.service';
 const CreateInput = Type.Object({
     title: Type.String({ minLength: 1, maxLength: 200 }),
     description: Type.Optional(Type.String({ maxLength: 5000 })),
-    startDate: Type.Optional(Type.String({ format: 'date' })),
-    endDate: Type.Optional(Type.String({ format: 'date' })),
+    startDate: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$' })),
+    endDate: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$' })),
     primaryTeacherId: Type.Optional(Type.String({ minLength: 1 })),
 });
 
@@ -15,8 +15,8 @@ const UpdateInput = Type.Object({
     id: Type.String({ minLength: 1 }),
     title: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
     description: Type.Optional(Type.Union([Type.String({ maxLength: 5000 }), Type.Null()])),
-    startDate: Type.Optional(Type.Union([Type.String({ format: 'date' }), Type.Null()])),
-    endDate: Type.Optional(Type.Union([Type.String({ format: 'date' }), Type.Null()])),
+    startDate: Type.Optional(Type.Union([Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$' }), Type.Null()])),
+    endDate: Type.Optional(Type.Union([Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$' }), Type.Null()])),
     primaryTeacherId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
 });
 
