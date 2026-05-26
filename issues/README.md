@@ -47,3 +47,13 @@ Efter 004 är hela `User ↔ Relation`-grafen på plats. Då kan följande featu
 | [025](025-teacher-deletes-program.md) | Teacher deletes a Program | AFK | 023 |
 | [026](026-teacher-adds-exercise-to-program.md) | Teacher adds an Exercise to a Program | AFK | 023, 005 |
 | [027](027-teacher-manages-program-exercises.md) | Teacher reorders and removes Exercises in a Program | AFK | 026 |
+
+### Group B — Program attaches to Lesson (snapshot-copy) + per-Exercise tracking
+
+| # | Titel | Type | Blocked by |
+|---|-------|------|------------|
+| [028](028-teacher-attaches-program-at-lesson-create.md) | Teacher attaches Program when creating Lesson | AFK | 026, 012 |
+| [029](029-lesson-exercise-surrogate-id-and-source-program.md) | `lesson_exercise` surrogate id + `source_program_id` | AFK | 028 |
+| [030](030-multiple-programs-per-lesson.md) | Multiple Programs per Lesson via `lesson_program` junction | AFK | 029 |
+| [031](031-notes-on-lesson-exercise.md) | Notes on a `lesson_exercise` row | AFK | 029, 017 |
+| [032](032-exercise-history-per-rider.md) | Exercise history for a Student ("Övningshistorik") | AFK | 031 |
