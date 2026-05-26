@@ -66,3 +66,14 @@ Efter 004 är hela `User ↔ Relation`-grafen på plats. Då kan följande featu
 | [034](034-training-session-programs.md) | Multiple Programs per Training Session | AFK | 033 |
 
 Handoff for implementers: [HANDOFF-033-034.md](HANDOFF-033-034.md)
+
+### Group D — Plan umbrella (träningsplan)
+
+| # | Titel | Type | Blocked by |
+|---|-------|------|------------|
+| [035](035-student-plans-crud.md) | Student-owned Plans CRUD | AFK | — |
+| [036](036-lessons-plan-id.md) | `plan_id` on Lessons | AFK | 035 |
+| [037](037-training-sessions-plan-id.md) | `plan_id` on Training Sessions | AFK | 035 |
+| [038](038-plan-detail-and-linked-items.md) | Plan detail + linked items | AFK | 036, 037 |
+
+Handoff for implementers: [HANDOFF-035-038.md](HANDOFF-035-038.md)
