@@ -49,6 +49,8 @@ Canonical terms are English (matches code, DB columns, API). The Swedish column 
 | **Visibility** (`visibility`) | Synlighet | A **Note**'s access mode: `private` (author only) or `shared` (both parties in the **Relation**). | Access, privacy |
 | **Question** (`question`) | Fråga | A **Student**'s question about a specific **Exercise**. Status: `open`, `answered`, `closed`. Answers are stored as a **Note** with `parent_kind = exercise_question`. | Query, request |
 | **Goal** (`goal`) | Mål | A **Student**'s long-term objective. Status: `active`, `achieved`, `abandoned`. | Ambition, target |
+| **Exercise history** (`exercise_history`) | Övningshistorik | A read-only chronological view of one **Exercise** as it appeared across a **Student**'s **Lessons**, keyed by `(student_id, exercise_id)`. | Performance log, drill history |
+| **Row notes** (`lesson_exercise.notes`) | Radkommentar | Pre-written instructional text copied onto a **Lesson**'s `lesson_exercise` junction row (from a **Program** snapshot or entered at attach time). Not a **Note**. | Inline notes, exercise comment |
 
 ## Media (phase 2)
 
@@ -71,6 +73,7 @@ Canonical terms are English (matches code, DB columns, API). The Swedish column 
 - A **Program** (routine) belongs to exactly one **Teacher** and contains one or more **Exercises** (ordered). It is reusable across many **Lessons** and **Training Sessions**.
 - A **Plan** belongs to exactly one **Student**, optionally designates one **Primary Teacher**, and contains zero or more **Lessons**, **Training Sessions**, and **Goals**.
 - A **Note** has exactly one author (**User**) and exactly one parent entity.
+- An **Exercise history** query scopes to exactly one **Student** and one **Exercise**; each timeline entry is one `lesson_exercise` row on a **Lesson** where `student_id` matches and `exercise_id` matches.
 
 ## Example dialogue
 
@@ -85,6 +88,10 @@ Canonical terms are English (matches code, DB columns, API). The Swedish column 
 > **Dev:** "What if a **Student** practices at home and wants feedback?"
 >
 > **Domain expert:** "They log a **Training Session**. The teacher can then leave a **Note** with `shared` **Visibility** attached to it. If the student has a specific **Question** about an **Exercise**, they open a **Question** instead, and the teacher's reply is stored as a **Note** linked to that question."
+>
+> **Dev:** "Can I see how one **Exercise** evolved for a given **Student** across **Lessons**?"
+>
+> **Domain expert:** "Yes — that's **Exercise history** (övningshistorik). Each row is one appearance on a **Lesson**: the date, optional source **Program** label, the **Row notes** copied at attach time, and the per-instance **Note** thread from slice 031. The **Student** sees their own history; a **Teacher** in an active **Relation** sees the same timeline for that student."
 
 ## Flagged ambiguities
 
@@ -93,3 +100,5 @@ Canonical terms are English (matches code, DB columns, API). The Swedish column 
 - **"Lesson" vs "Training Session"** — distinct entities by *teacher presence*, not by who creates them. **Lesson** = teacher present at the event (planned or completed). **Training Session** = no teacher present at the event, but the session itself may be either student-logged (after the fact) or teacher-prescribed (planned home work). Both carry their own ordered exercises. Never use "session" as a synonym for "lesson".
 - **"User" vs "Teacher" vs "Student"** — **User** is an authentication identity. **Teacher** and **Student** are *roles* a user holds inside a specific **Relation**, not types of user. The same **User** can be both at the same time in different **Relations**.
 - **"Invitation"** refers only to a teacher's request to an email address to establish a **Relation**. Not to be confused with future notifications or calendar invites for lessons.
+- **"Rider" vs "Student"** — slice 032 title says "per Rider"; canonical domain term is **Student** (`student_id`). Use **Student** in code, API, and glossary; "rider" only in informal UI if ever needed.
+- **"notes" overload** — `lesson_exercise.notes` is **Row notes** (static junction text). Polymorphic `notes` rows are **Note** entities with **Visibility**. API field `rowNotes` vs `notes[]` keeps them distinct.

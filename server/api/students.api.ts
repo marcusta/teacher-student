@@ -3,11 +3,13 @@ import { NotFoundError, requireAuth, requireUser } from '@basics/core/server/aut
 import type { RelationService } from '../services/relation.service';
 import type { HorseService } from '../services/horse.service';
 import type { TrainingSessionService } from '../services/training-session.service';
+import type { LessonService } from '../services/lesson.service';
 
 export function createStudentsApi(
     svc: RelationService,
     horseService: HorseService,
     trainingSessionService: TrainingSessionService,
+    lessonService: LessonService,
 ) {
     return {
         list: {
@@ -47,6 +49,15 @@ export function createStudentsApi(
             fn: async (input: { id: string }, c: Context) => {
                 const user = requireUser(c);
                 return trainingSessionService.listForTeacherOfStudent(user.id, input.id);
+            },
+        },
+        exerciseHistory: {
+            method: 'GET' as const,
+            path: '/students/:id/exercises/:exerciseId/history',
+            middleware: [requireAuth()],
+            fn: async (input: { id: string; exerciseId: string }, c: Context) => {
+                const user = requireUser(c);
+                return lessonService.exerciseHistory(user.id, input.id, input.exerciseId);
             },
         },
     };

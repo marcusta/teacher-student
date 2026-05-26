@@ -290,7 +290,13 @@ export class LessonEditComponent extends Component {
                     color: ${t('error')};
                     &:hover { text-decoration: underline; }
                 }
-                & .lesson-edit__ex-notes-toggle { color: ${t('text')}; opacity: 0.8; }
+                & .lesson-edit__ex-notes-toggle,
+                & .lesson-edit__ex-historik { color: ${t('text')}; opacity: 0.8; }
+                & .lesson-edit__ex-historik {
+                    font-size: 0.8125rem;
+                    text-decoration: none;
+                    &:hover { opacity: 1; text-decoration: underline; }
+                }
             }
             & .lesson-edit__summary-ex-list .lesson-edit__ex-notes-toggle {
                 background: transparent;
@@ -450,6 +456,19 @@ export class LessonEditComponent extends Component {
         if (next.has(leId)) next.delete(leId);
         else next.add(leId);
         this.openExNotes.set(next);
+    }
+
+    private appendHistorikLink(actions: HTMLElement, exerciseId: string): void {
+        const lesson = this.svc.get(this.lessonId());
+        if (!lesson) return;
+        const from = encodeURIComponent(`/lektioner/${lesson.id}`);
+        const href = `/students/${lesson.studentId}/exercises/${exerciseId}/history?from=${from}`;
+        const link = document.createElement('a');
+        link.className = 'lesson-edit__ex-historik';
+        link.textContent = 'Historik';
+        link.href = href;
+        link.onclick = (e) => { e.preventDefault(); this.router.navigate(href); };
+        actions.appendChild(link);
     }
 
     private horseOptions = new Computed<SelectOption[]>(() =>
@@ -684,6 +703,7 @@ export class LessonEditComponent extends Component {
                 notesBtn.className = 'lesson-edit__ex-notes-toggle';
                 notesBtn.textContent = open.has(ex.id) ? 'Dölj anteckningar' : 'Anteckningar';
                 notesBtn.onclick = () => this.toggleExNotes(ex.id);
+                this.appendHistorikLink(actions, ex.exerciseId);
                 const remove = document.createElement('button');
                 remove.type = 'button';
                 remove.textContent = 'Ta bort';
@@ -796,7 +816,11 @@ export class LessonEditComponent extends Component {
                 notesBtn.className = 'lesson-edit__ex-notes-toggle';
                 notesBtn.textContent = open.has(ex.id) ? 'Dölj anteckningar' : 'Anteckningar';
                 notesBtn.onclick = () => this.toggleExNotes(ex.id);
-                row.append(label, notesBtn);
+                const actions = document.createElement('div');
+                actions.className = 'lesson-edit__ex-actions';
+                actions.append(notesBtn);
+                this.appendHistorikLink(actions, ex.exerciseId);
+                row.append(label, actions);
                 li.appendChild(row);
                 if (open.has(ex.id)) {
                     const host = document.createElement('div');

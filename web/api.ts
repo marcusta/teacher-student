@@ -11,7 +11,7 @@ import { createProgramsClient } from './api/programs.gen';
 
 export { ApiError } from '@basics/core/client/api-error';
 export type { Invitation, InboxInvitation } from './api/invitations.gen';
-export type { Student } from './api/students.gen';
+export type { Student, ExerciseHistoryEntry } from './api/students.gen';
 export type { Exercise } from './api/exercises.gen';
 export type { Horse } from './api/horses.gen';
 export type { Lesson, LessonForUser, LessonExerciseRef } from './api/lessons.gen';

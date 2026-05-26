@@ -31,7 +31,9 @@ async function setup(seeds: SeedFn[] = []) {
     mount(app, '/api', createAuthApi({ verify: (u, p) => userService.verify(u, p), sessions }));
     mount(app, '/api', createRegisterApi(userService, sessions));
     mount(app, '/api', createInvitationsApi(invitationService));
-    mount(app, '/api', createStudentsApi(relationService, horseService, trainingSessionService));
+    mount(app, '/api', createStudentsApi(
+        relationService, horseService, trainingSessionService, lessonService,
+    ));
     mount(app, '/api', createExercisesApi(exerciseService));
     mount(app, '/api', createHorsesApi(horseService));
     mount(app, '/api', createLessonsApi(lessonService));
@@ -655,6 +657,45 @@ test('GET /api/students/:id/horses without session returns 401', async () => {
     const { app } = await setup();
     const res = await req(app, 'GET', '/api/students/anyone/horses');
     expect(res.status).toBe(401);
+});
+
+test('GET /api/students/:id/exercises/:exerciseId/history returns timeline for connected teacher', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const studentCookie = await loginAs(app, 'student@example.com', 'secret123');
+
+    const ex = await (await req(app, 'POST', '/api/exercises',
+        { name: 'Skritt' }, teacherCookie)).json();
+    const lesson = await (await req(app, 'POST', '/api/lessons', {
+        studentId, scheduledAt: '2026-06-01T10:00:00.000Z',
+    }, teacherCookie)).json();
+    await req(app, 'POST', `/api/lessons/${lesson.id}/exercises`,
+        { exerciseId: ex.id }, teacherCookie);
+
+    const res = await req(app, 'GET',
+        `/api/students/${studentId}/exercises/${ex.id}/history`, undefined, teacherCookie);
+    expect(res.status).toBe(200);
+    const list = await res.json();
+    expect(list.length).toBe(1);
+    expect(list[0].lessonId).toBe(lesson.id);
+    expect(list[0].scheduledAt).toBe('2026-06-01T10:00:00.000Z');
+
+    const asStudent = await req(app, 'GET',
+        `/api/students/${studentId}/exercises/${ex.id}/history`, undefined, studentCookie);
+    expect(asStudent.status).toBe(200);
+});
+
+test('GET /api/students/:id/exercises/:exerciseId/history returns 404 for stranger', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const ex = await (await req(app, 'POST', '/api/exercises',
+        { name: 'Skritt' }, teacherCookie)).json();
+    const strangerCookie = await registerAndLogin(app, 'stranger@example.com');
+    const res = await req(app, 'GET',
+        `/api/students/${studentId}/exercises/${ex.id}/history`, undefined, strangerCookie);
+    expect(res.status).toBe(404);
 });
 
 // --- Lessons ---

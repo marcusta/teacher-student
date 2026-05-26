@@ -29,11 +29,34 @@ export interface TrainingSession {
     updatedAt: string;
 }
 
+export interface ExerciseHistoryEntry {
+    lessonExerciseId: string;
+    lessonId: string;
+    scheduledAt: string;
+    sourceProgramId: null | string;
+    sourceProgramTitle: null | string;
+    rowNotes: null | string;
+    notes: Note[];
+}
+
+export interface Note {
+    id: string;
+    authorId: string;
+    authorDisplayName: string;
+    parentKind: 'lesson' | 'student' | 'training_session' | 'exercise_question' | 'lesson_exercise';
+    parentId: string;
+    body: string;
+    visibility: 'private' | 'shared';
+    createdAt: string;
+    updatedAt: string;
+}
+
 export interface StudentsApi {
     list(): Promise<Student[]>;
     get(input: { id: string }): Promise<Student>;
     listHorses(input: { id: string }): Promise<Horse[]>;
     listTrainingSessions(input: { id: string }): Promise<TrainingSession[]>;
+    exerciseHistory(input: { id: string; exerciseId: string }): Promise<ExerciseHistoryEntry[]>;
 }
 
 export function createStudentsClient(baseUrl: string): StudentsApi {
@@ -64,6 +87,14 @@ export function createStudentsClient(baseUrl: string): StudentsApi {
                 if (!pathParams.has(k) && v !== undefined) params.set(k, String(v));
             const qs = params.toString();
             return apiFetch({ method: 'GET', url: `${baseUrl}/students/${input.id}/training-sessions${qs ? '?' + qs : ''}` });
+        },
+        async exerciseHistory(input) {
+            const pathParams = new Set(['id', 'exerciseId']);
+            const params = new URLSearchParams();
+            for (const [k, v] of Object.entries(input as any))
+                if (!pathParams.has(k) && v !== undefined) params.set(k, String(v));
+            const qs = params.toString();
+            return apiFetch({ method: 'GET', url: `${baseUrl}/students/${input.id}/exercises/${input.exerciseId}/history${qs ? '?' + qs : ''}` });
         },
     };
 }

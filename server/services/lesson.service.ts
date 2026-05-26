@@ -1,6 +1,7 @@
 import type { Kysely } from 'kysely';
 import { ConflictError, NotFoundError } from '@basics/core/server/auth';
 import type { Database, LessonStatus } from '../db/schema';
+import { NoteService, type Note } from './note.service';
 
 export interface LessonExerciseRef {
     /** Surrogate id of the `lesson_exercise` junction row (parent target for Notes). */
@@ -40,6 +41,17 @@ export interface Lesson {
 export interface LessonForUser extends Lesson {
     role: 'teacher' | 'student';
     counterpartyDisplayName: string;
+}
+
+/** One appearance of an Exercise on a Student's Lesson timeline (slice 032). */
+export interface ExerciseHistoryEntry {
+    lessonExerciseId: string;
+    lessonId: string;
+    scheduledAt: string;
+    sourceProgramId: string | null;
+    sourceProgramTitle: string | null;
+    rowNotes: string | null;
+    notes: Note[];
 }
 
 export interface CreateLessonInput {
@@ -394,6 +406,68 @@ export class LessonService {
         }
         const map = await this.exercisesByLesson([lessonId]);
         return map.get(lessonId) ?? [];
+    }
+
+    /**
+     * Chronological history of one Exercise across a Student's Lessons.
+     * Callable by the Student or a Teacher in an active Relation; otherwise
+     * NotFoundError (leak-safe). Ordered by Lesson `scheduledAt` DESC.
+     */
+    async exerciseHistory(
+        actorId: string,
+        studentId: string,
+        exerciseId: string,
+    ): Promise<ExerciseHistoryEntry[]> {
+        await this.assertCanViewStudentExerciseHistory(actorId, studentId);
+
+        const rows = await this.db
+            .selectFrom('lesson_exercise')
+            .innerJoin('lessons', 'lessons.id', 'lesson_exercise.lesson_id')
+            .leftJoin('programs', 'programs.id', 'lesson_exercise.source_program_id')
+            .select([
+                'lesson_exercise.id as lesson_exercise_id',
+                'lessons.id as lesson_id',
+                'lessons.scheduled_at as scheduled_at',
+                'lesson_exercise.source_program_id as source_program_id',
+                'programs.title as source_program_title',
+                'lesson_exercise.notes as row_notes',
+            ])
+            .where('lessons.student_id', '=', studentId)
+            .where('lesson_exercise.exercise_id', '=', exerciseId)
+            .orderBy('lessons.scheduled_at', 'desc')
+            .execute();
+
+        const noteService = new NoteService(this.db);
+        return Promise.all(rows.map(async (r) => ({
+            lessonExerciseId: r.lesson_exercise_id,
+            lessonId: r.lesson_id,
+            scheduledAt: r.scheduled_at,
+            sourceProgramId: r.source_program_id,
+            sourceProgramTitle: r.source_program_title ?? null,
+            rowNotes: r.row_notes,
+            notes: await noteService.listFor(actorId, {
+                parentKind: 'lesson_exercise',
+                parentId: r.lesson_exercise_id,
+            }),
+        })));
+    }
+
+    /**
+     * Student self-access or connected-teacher read gate for exercise history.
+     * Leak-safe NotFoundError when the Relation is missing.
+     */
+    private async assertCanViewStudentExerciseHistory(
+        actorId: string,
+        studentId: string,
+    ): Promise<void> {
+        if (actorId === studentId) return;
+        const rel = await this.db
+            .selectFrom('relations')
+            .select('id')
+            .where('teacher_id', '=', actorId)
+            .where('student_id', '=', studentId)
+            .executeTakeFirst();
+        if (!rel) throw new NotFoundError('Student not found');
     }
 
     /** Resolve a single Lesson with all hydrated fields. */

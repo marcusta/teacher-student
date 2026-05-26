@@ -711,3 +711,143 @@ test('detachProgram on stranger lesson throws NotFoundError', async () => {
     await expect(ctx.lessonService.detachProgram(t2.id, lesson.id, ctx.program.id))
         .rejects.toBeInstanceOf(NotFoundError);
 });
+
+// --- 032: exercise history per student ---
+
+test('exerciseHistory throws NotFoundError for outsider and unconnected teacher', async () => {
+    const { NotFoundError } = await import('@basics/core/server/auth');
+    const ctx = await seedConnectedWithProgram();
+    await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    });
+
+    const stranger = await ctx.userService.register({
+        email: 'stranger@example.com', password: 'secret123', displayName: 'X',
+    });
+    await expect(ctx.lessonService.exerciseHistory(
+        stranger.id, ctx.student.id, ctx.ex1.id,
+    )).rejects.toBeInstanceOf(NotFoundError);
+
+    const otherTeacher = await ctx.userService.register({
+        email: 'other-t@example.com', password: 'secret123', displayName: 'OT',
+    });
+    await expect(ctx.lessonService.exerciseHistory(
+        otherTeacher.id, ctx.student.id, ctx.ex1.id,
+    )).rejects.toBeInstanceOf(NotFoundError);
+
+    const otherStudent = await ctx.userService.register({
+        email: 'other-s@example.com', password: 'secret123', displayName: 'OS',
+    });
+    await expect(ctx.lessonService.exerciseHistory(
+        otherStudent.id, ctx.student.id, ctx.ex1.id,
+    )).rejects.toBeInstanceOf(NotFoundError);
+});
+
+test('exerciseHistory returns only matching (student, exercise) rows sorted scheduledAt DESC', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const earlier = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    });
+    const later = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-07-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    });
+    const ex2OnlyLesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-08-01T10:00:00.000Z',
+    });
+    await ctx.lessonService.addExercise(ctx.teacher.id, ex2OnlyLesson.id, ctx.ex2.id);
+
+    const teacherView = await ctx.lessonService.exerciseHistory(
+        ctx.teacher.id, ctx.student.id, ctx.ex1.id,
+    );
+    expect(teacherView.map((e) => e.lessonId)).toEqual([later.id, earlier.id]);
+    expect(teacherView.every((e) => e.notes.length === 0)).toBe(true);
+
+    const studentView = await ctx.lessonService.exerciseHistory(
+        ctx.student.id, ctx.student.id, ctx.ex1.id,
+    );
+    expect(studentView.map((e) => e.lessonId)).toEqual([later.id, earlier.id]);
+
+    const ex2Only = await ctx.lessonService.exerciseHistory(
+        ctx.teacher.id, ctx.student.id, ctx.ex2.id,
+    );
+    expect(ex2Only.map((e) => e.lessonId)).toEqual([ex2OnlyLesson.id, later.id, earlier.id]);
+
+    const empty = await ctx.lessonService.exerciseHistory(
+        ctx.teacher.id, ctx.student.id, '00000000-0000-4000-8000-000000000099',
+    );
+    expect(empty).toEqual([]);
+});
+
+test('exerciseHistory includes program snapshot and free-add origins with sourceProgramTitle', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const fromProgram = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    });
+    const freeAddLesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-07-01T10:00:00.000Z',
+    });
+    await ctx.lessonService.addExercise(ctx.teacher.id, freeAddLesson.id, ctx.ex1.id);
+
+    const history = await ctx.lessonService.exerciseHistory(
+        ctx.teacher.id, ctx.student.id, ctx.ex1.id,
+    );
+    expect(history.length).toBe(2);
+
+    const snapshot = history.find((e) => e.lessonId === fromProgram.id)!;
+    expect(snapshot.sourceProgramId).toBe(ctx.program.id);
+    expect(snapshot.sourceProgramTitle).toBe('Uppvärmning');
+    expect(snapshot.rowNotes).toBe('lugnt');
+
+    const free = history.find((e) => e.lessonId === freeAddLesson.id)!;
+    expect(free.sourceProgramId).toBeNull();
+    expect(free.sourceProgramTitle).toBeNull();
+    expect(free.rowNotes).toBeNull();
+});
+
+test('exerciseHistory note visibility matches NoteService.listFor', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    });
+    const refs = await ctx.lessonService.listExercises(ctx.teacher.id, lesson.id);
+    const leId = refs.find((r) => r.exerciseId === ctx.ex1.id)!.id;
+
+    await ctx.noteService.create(ctx.teacher.id, {
+        parentKind: 'lesson_exercise', parentId: leId,
+        body: 'teacher private', visibility: 'private',
+    });
+    await ctx.noteService.create(ctx.teacher.id, {
+        parentKind: 'lesson_exercise', parentId: leId,
+        body: 'teacher shared', visibility: 'shared',
+    });
+    await ctx.noteService.create(ctx.student.id, {
+        parentKind: 'lesson_exercise', parentId: leId,
+        body: 'student private', visibility: 'private',
+    });
+
+    const studentHistory = await ctx.lessonService.exerciseHistory(
+        ctx.student.id, ctx.student.id, ctx.ex1.id,
+    );
+    expect(studentHistory[0]!.notes.map((n) => n.body)).toEqual([
+        'teacher shared', 'student private',
+    ]);
+
+    const teacherHistory = await ctx.lessonService.exerciseHistory(
+        ctx.teacher.id, ctx.student.id, ctx.ex1.id,
+    );
+    expect(teacherHistory[0]!.notes.map((n) => n.body)).toEqual([
+        'teacher private', 'teacher shared',
+    ]);
+});
