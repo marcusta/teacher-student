@@ -706,7 +706,24 @@ test('GET /api/plans/:id returns 200 for own', async () => {
     const { id } = await created.json();
     const res = await req(app, 'GET', `/api/plans/${id}`, undefined, cookie);
     expect(res.status).toBe(200);
-    expect((await res.json()).title).toBe('X');
+    const body = await res.json();
+    expect(body.title).toBe('X');
+    expect(Array.isArray(body.lessons)).toBe(true);
+    expect(Array.isArray(body.trainingSessions)).toBe(true);
+});
+
+test('GET /api/plans/:id returns 200 for connected teacher', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentCookie = await registerAndLogin(app, 'student@example.com');
+    const inv = await (await req(app, 'POST', '/api/invitations',
+        { inviteeEmail: 'student@example.com' }, teacherCookie)).json();
+    await req(app, 'POST', '/api/invitations/accept', { invitationId: inv.id }, studentCookie);
+    const plan = await (await req(app, 'POST', '/api/plans', { title: 'Shared' }, studentCookie)).json();
+    const me = await (await req(app, 'GET', '/api/auth/me', undefined, studentCookie)).json();
+    const res = await req(app, 'GET', `/api/plans/${plan.id}`, undefined, teacherCookie);
+    expect(res.status).toBe(200);
+    expect((await res.json()).title).toBe('Shared');
 });
 
 test('GET /api/plans/:id returns 404 for other student', async () => {

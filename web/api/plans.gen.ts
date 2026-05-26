@@ -14,10 +14,41 @@ export interface Plan {
     updatedAt: string;
 }
 
+export interface PlanDetail {
+    lessons: LinkedLessonRef[];
+    trainingSessions: LinkedTrainingSessionRef[];
+    id: string;
+    studentId: string;
+    primaryTeacherId: null | string;
+    title: string;
+    description: null | string;
+    startDate: null | string;
+    endDate: null | string;
+    status: 'active' | 'archived';
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface LinkedLessonRef {
+    id: string;
+    scheduledAt: string;
+    teacherDisplayName: string;
+    status: 'completed' | 'cancelled' | 'planned';
+    horseName: null | string;
+}
+
+export interface LinkedTrainingSessionRef {
+    id: string;
+    performedAt: string;
+    durationMin: null | number;
+    summary: null | string;
+    horseName: null | string;
+}
+
 export interface PlansApi {
     create(input: { description?: string; startDate?: string; endDate?: string; primaryTeacherId?: string; title: string }): Promise<Plan>;
     list(): Promise<Plan[]>;
-    get(input: { id: string }): Promise<Plan>;
+    get(input: { id: string }): Promise<PlanDetail>;
     update(input: { title?: string; description?: null | string; startDate?: null | string; endDate?: null | string; primaryTeacherId?: null | string; id: string }): Promise<Plan>;
     archive(input: { id: string }): Promise<{ ok: true }>;
 }

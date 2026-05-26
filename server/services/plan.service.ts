@@ -31,6 +31,27 @@ export interface UpdatePlanInput {
     primaryTeacherId?: string | null;
 }
 
+export interface LinkedLessonRef {
+    id: string;
+    scheduledAt: string;
+    teacherDisplayName: string;
+    status: 'planned' | 'completed' | 'cancelled';
+    horseName: string | null;
+}
+
+export interface LinkedTrainingSessionRef {
+    id: string;
+    performedAt: string;
+    durationMin: number | null;
+    summary: string | null;
+    horseName: string | null;
+}
+
+export interface PlanDetail extends Plan {
+    lessons: LinkedLessonRef[];
+    trainingSessions: LinkedTrainingSessionRef[];
+}
+
 function toPlan(row: Selectable<PlansTable>): Plan {
     return {
         id: row.id,
@@ -116,6 +137,77 @@ export class PlanService {
             .executeTakeFirst();
         if (!row) throw new NotFoundError('Plan not found');
         return toPlan(row);
+    }
+
+    /**
+     * Plan metadata plus linked Lessons and Training Sessions. Callable by
+     * the owning Student or a Teacher in an active Relation with the owner;
+     * otherwise NotFoundError (leak-safe). Archived plans remain readable.
+     */
+    async getDetail(actorId: string, planId: string): Promise<PlanDetail> {
+        const row = await this.db
+            .selectFrom('plans')
+            .selectAll()
+            .where('id', '=', planId)
+            .executeTakeFirst();
+        if (!row) throw new NotFoundError('Plan not found');
+
+        if (row.student_id !== actorId) {
+            const rel = await this.db
+                .selectFrom('relations')
+                .select('id')
+                .where('teacher_id', '=', actorId)
+                .where('student_id', '=', row.student_id)
+                .executeTakeFirst();
+            if (!rel) throw new NotFoundError('Plan not found');
+        }
+
+        const lessons = await this.db
+            .selectFrom('lessons')
+            .innerJoin('users as teacher', 'teacher.id', 'lessons.teacher_id')
+            .leftJoin('horses', 'horses.id', 'lessons.horse_id')
+            .select([
+                'lessons.id as id',
+                'lessons.scheduled_at as scheduled_at',
+                'lessons.status as status',
+                'teacher.display_name as teacher_display_name',
+                'horses.name as horse_name',
+            ])
+            .where('lessons.plan_id', '=', planId)
+            .orderBy('lessons.scheduled_at', 'asc')
+            .execute();
+
+        const trainingSessions = await this.db
+            .selectFrom('training_sessions')
+            .leftJoin('horses', 'horses.id', 'training_sessions.horse_id')
+            .select([
+                'training_sessions.id as id',
+                'training_sessions.performed_at as performed_at',
+                'training_sessions.duration_min as duration_min',
+                'training_sessions.summary as summary',
+                'horses.name as horse_name',
+            ])
+            .where('training_sessions.plan_id', '=', planId)
+            .orderBy('training_sessions.performed_at', 'desc')
+            .execute();
+
+        return {
+            ...toPlan(row),
+            lessons: lessons.map((l) => ({
+                id: l.id,
+                scheduledAt: l.scheduled_at,
+                teacherDisplayName: l.teacher_display_name,
+                status: l.status,
+                horseName: l.horse_name,
+            })),
+            trainingSessions: trainingSessions.map((ts) => ({
+                id: ts.id,
+                performedAt: ts.performed_at,
+                durationMin: ts.duration_min,
+                summary: ts.summary,
+                horseName: ts.horse_name,
+            })),
+        };
     }
 
     async update(studentId: string, planId: string, input: UpdatePlanInput): Promise<Plan> {

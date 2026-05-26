@@ -89,6 +89,10 @@ Canonical terms are English (matches code, DB columns, API). The Swedish column 
 > **Dev:** "Can a **Teacher** who sees the pass via **share** edit the **Exercises**?"
 >
 > **Domain expert:** "No — read-only for teachers with share in slices 033–034. Only the owning **Student** adds, removes, attaches, or detaches."
+>
+> **Dev:** "How does a **Plan** relate to **Lessons** and **Training Sessions**?"
+>
+> **Domain expert:** "A **Plan** is the student's umbrella — **Lessons** and **Training Sessions** link via nullable `plan_id`. The **Teacher** attaches lessons; the **Student** attaches their own passes. Either can detach without deleting the event. Archived **Plans** keep existing links but reject new ones."
 
 ## Flagged ambiguities
 

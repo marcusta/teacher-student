@@ -207,3 +207,65 @@ test('assertActivePlanForStudent throws for wrong student', async () => {
     });
     await expect(ctx.planService.assertActivePlanForStudent(p.id, s2.id)).rejects.toThrow();
 });
+
+// --- getDetail (038) ---
+
+test('getDetail returns linked lessons and training sessions for student owner', async () => {
+    const ctx = await seedTeacherWithStudent();
+    const plan = await ctx.planService.create(ctx.student.id, { title: 'Plan' });
+    await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        planId: plan.id,
+    });
+    await ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-07-01T10:00:00.000Z',
+        planId: plan.id,
+    });
+
+    const detail = await ctx.planService.getDetail(ctx.student.id, plan.id);
+    expect(detail.lessons.length).toBe(1);
+    expect(detail.lessons[0].teacherDisplayName).toBe('T');
+    expect(detail.trainingSessions.length).toBe(1);
+});
+
+test('getDetail allows connected teacher read-only access', async () => {
+    const { planService, teacher, student } = await seedTeacherWithStudent();
+    const plan = await planService.create(student.id, { title: 'Plan' });
+    const detail = await planService.getDetail(teacher.id, plan.id);
+    expect(detail.title).toBe('Plan');
+    expect(detail.lessons).toEqual([]);
+});
+
+test('getDetail throws NotFoundError for teacher without relation', async () => {
+    const ctx = await seedTeacherWithStudent();
+    const plan = await ctx.planService.create(ctx.student.id, { title: 'Plan' });
+    const stranger = await ctx.userService.register({
+        email: 'stranger@example.com', password: 'secret123', displayName: 'X',
+    });
+    await expect(ctx.planService.getDetail(stranger.id, plan.id)).rejects.toThrow();
+});
+
+test('getDetail still readable when plan is archived', async () => {
+    const { planService, student } = await seedStudent();
+    const plan = await planService.create(student.id, { title: 'Old' });
+    await planService.archive(student.id, plan.id);
+    const detail = await planService.getDetail(student.id, plan.id);
+    expect(detail.status).toBe('archived');
+});
+
+test('getDetail lists only items with matching plan_id', async () => {
+    const ctx = await seedTeacherWithStudent();
+    const plan = await ctx.planService.create(ctx.student.id, { title: 'Plan' });
+    await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        planId: plan.id,
+    });
+    await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-07-01T10:00:00.000Z',
+    });
+    const detail = await ctx.planService.getDetail(ctx.student.id, plan.id);
+    expect(detail.lessons.length).toBe(1);
+});

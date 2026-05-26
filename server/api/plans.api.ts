@@ -51,7 +51,7 @@ export function createPlansApi(svc: PlanService) {
             middleware: [requireAuth()],
             fn: async (input: { id: string }, c: Context) => {
                 const user = requireUser(c);
-                return svc.getForStudent(user.id, input.id);
+                return svc.getDetail(user.id, input.id);
             },
         },
         update: {
