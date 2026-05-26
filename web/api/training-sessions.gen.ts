@@ -9,6 +9,8 @@ export interface TrainingSession {
     summary: null | string;
     horseId: null | string;
     horseName: null | string;
+    planId: null | string;
+    planTitle: null | string;
     sharedWithTeacherIds: string[];
     exercises: TrainingSessionExerciseRef[];
     programs: AttachedProgramRef[];
@@ -30,10 +32,10 @@ export interface AttachedProgramRef {
 }
 
 export interface TrainingSessionsApi {
-    create(input: { durationMin?: null | number; summary?: null | string; horseId?: null | string; shareWithTeacherIds?: string[]; programId?: string; performedAt: string }): Promise<TrainingSession>;
+    create(input: { durationMin?: null | number; summary?: null | string; horseId?: null | string; planId?: string; shareWithTeacherIds?: string[]; programId?: string; performedAt: string }): Promise<TrainingSession>;
     list(): Promise<TrainingSession[]>;
     get(input: { id: string }): Promise<TrainingSession>;
-    update(input: { performedAt?: string; durationMin?: null | number; summary?: null | string; horseId?: null | string; shareWithTeacherIds?: string[]; id: string }): Promise<TrainingSession>;
+    update(input: { performedAt?: string; durationMin?: null | number; summary?: null | string; horseId?: null | string; planId?: null | string; shareWithTeacherIds?: string[]; id: string }): Promise<TrainingSession>;
     delete(input: { id: string }): Promise<{ ok: boolean }>;
     addExercise(input: { id: string; exerciseId: string }): Promise<TrainingSessionExerciseRef[]>;
     removeExercise(input: { id: string; exerciseId: string }): Promise<TrainingSessionExerciseRef[]>;

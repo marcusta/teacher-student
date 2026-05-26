@@ -23,6 +23,7 @@ export class TrainingSessionsService {
         durationMin?: number | null;
         summary?: string | null;
         horseId?: string | null;
+        planId?: string;
         shareWithTeacherIds?: string[];
         programId?: string;
     }): Promise<boolean> {
@@ -41,6 +42,7 @@ export class TrainingSessionsService {
             durationMin?: number | null;
             summary?: string | null;
             horseId?: string | null;
+            planId?: string | null;
             shareWithTeacherIds?: string[];
         },
     ): Promise<TrainingSession | null> {

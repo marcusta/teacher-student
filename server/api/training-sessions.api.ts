@@ -12,6 +12,7 @@ const CreateInput = Type.Object({
     durationMin: Type.Optional(Type.Union([Type.Integer({ minimum: 0 }), Type.Null()])),
     summary: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     horseId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
+    planId: Type.Optional(Type.String({ minLength: 1 })),
     shareWithTeacherIds: Type.Optional(ShareIds),
     programId: Type.Optional(Type.String({ minLength: 1 })),
 });
@@ -22,6 +23,7 @@ const UpdateInput = Type.Object({
     durationMin: Type.Optional(Type.Union([Type.Integer({ minimum: 0 }), Type.Null()])),
     summary: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     horseId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
+    planId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
     shareWithTeacherIds: Type.Optional(ShareIds),
 });
 

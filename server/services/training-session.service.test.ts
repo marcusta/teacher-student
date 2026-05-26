@@ -223,6 +223,90 @@ test('listForStudent includes resolved horseName', async () => {
     expect(list[1].horseName).toBe('Brunte');
 });
 
+// --- plan_id (037) ---
+
+async function seedStudentWithPlan() {
+    const ctx = await seedStudent();
+    const plan = await ctx.planService.create(ctx.student.id, { title: 'Vinterplan' });
+    return { ...ctx, plan };
+}
+
+test('create attaches active Plan with hydrated planTitle', async () => {
+    const { trainingSessionService, student, plan } = await seedStudentWithPlan();
+    const ts = await trainingSessionService.create(student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+        planId: plan.id,
+    });
+    expect(ts.planId).toBe(plan.id);
+    expect(ts.planTitle).toBe('Vinterplan');
+});
+
+test('create rejects archived Plan', async () => {
+    const ctx = await seedStudentWithPlan();
+    await ctx.planService.archive(ctx.student.id, ctx.plan.id);
+    await expect(ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+        planId: ctx.plan.id,
+    })).rejects.toThrow();
+});
+
+test('update attaches and clears planId by student owner', async () => {
+    const ctx = await seedStudentWithPlan();
+    const ts = await ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+    });
+    const linked = await ctx.trainingSessionService.update(ctx.student.id, ts.id, {
+        planId: ctx.plan.id,
+    });
+    expect(linked.planId).toBe(ctx.plan.id);
+    const cleared = await ctx.trainingSessionService.update(ctx.student.id, ts.id, { planId: null });
+    expect(cleared.planId).toBeNull();
+});
+
+test('detachFromPlan clears plan_id for student owner', async () => {
+    const ctx = await seedStudentWithPlan();
+    const ts = await ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+        planId: ctx.plan.id,
+    });
+    const detached = await ctx.trainingSessionService.detachFromPlan(ctx.student.id, ts.id);
+    expect(detached.planId).toBeNull();
+});
+
+test('teacher with share cannot detachFromPlan (student-only write)', async () => {
+    const ctx = await seedStudentWithPlan();
+    const teacher = await connect(ctx, 't@example.com');
+    const ts = await ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+        planId: ctx.plan.id,
+        shareWithTeacherIds: [teacher.id],
+    });
+    await expect(ctx.trainingSessionService.detachFromPlan(teacher.id, ts.id)).rejects.toThrow();
+});
+
+test('listForStudent includes resolved planTitle', async () => {
+    const ctx = await seedStudentWithPlan();
+    await ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+        planId: ctx.plan.id,
+    });
+    const list = await ctx.trainingSessionService.listForStudent(ctx.student.id);
+    expect(list[0].planId).toBe(ctx.plan.id);
+    expect(list[0].planTitle).toBe('Vinterplan');
+});
+
+test('listForTeacherOfStudent returns shared TS with read-only planTitle', async () => {
+    const ctx = await seedStudentWithPlan();
+    const teacher = await connect(ctx, 't@example.com');
+    await ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+        planId: ctx.plan.id,
+        shareWithTeacherIds: [teacher.id],
+    });
+    const list = await ctx.trainingSessionService.listForTeacherOfStudent(teacher.id, ctx.student.id);
+    expect(list[0].planTitle).toBe('Vinterplan');
+});
+
 test('listForTeacherOfStudent returns only TS shared with the calling teacher, sorted DESC, with horseName', async () => {
     const ctx = await seedStudent();
     const teacher = await connect(ctx, 'tA@example.com');

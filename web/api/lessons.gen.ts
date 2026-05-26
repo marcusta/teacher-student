@@ -49,7 +49,7 @@ export interface AttachedProgramRef {
 }
 
 export interface LessonsApi {
-    create(input: { programId?: string; planId?: string; studentId: string; scheduledAt: string }): Promise<Lesson>;
+    create(input: { planId?: string; programId?: string; studentId: string; scheduledAt: string }): Promise<Lesson>;
     list(): Promise<LessonForUser[]>;
     addExercise(input: { id: string; exerciseId: string }): Promise<LessonExerciseRef[]>;
     removeExercise(input: { id: string; exerciseId: string }): Promise<LessonExerciseRef[]>;
@@ -57,7 +57,7 @@ export interface LessonsApi {
     transition(input: { id: string; target: 'completed' | 'cancelled' }): Promise<Lesson>;
     attachProgram(input: { id: string; programId: string }): Promise<Lesson>;
     detachProgram(input: { id: string; programId: string }): Promise<Lesson>;
-    update(input: { horseId?: null | string; scheduledAt?: string; planId?: null | string; id: string }): Promise<Lesson>;
+    update(input: { horseId?: null | string; planId?: null | string; scheduledAt?: string; id: string }): Promise<Lesson>;
 }
 
 export function createLessonsClient(baseUrl: string): LessonsApi {

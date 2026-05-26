@@ -1,6 +1,7 @@
 import type { Kysely } from 'kysely';
 import { NotFoundError } from '@basics/core/server/auth';
 import type { Database } from '../db/schema';
+import { PlanService } from './plan.service';
 
 export interface TrainingSessionExerciseRef {
     /** Surrogate id of the `training_session_exercise` junction row. */
@@ -24,6 +25,8 @@ export interface TrainingSession {
     summary: string | null;
     horseId: string | null;
     horseName: string | null;
+    planId: string | null;
+    planTitle: string | null;
     sharedWithTeacherIds: string[];
     exercises: TrainingSessionExerciseRef[];
     programs: AttachedProgramRef[];
@@ -36,6 +39,7 @@ export interface CreateTrainingSessionInput {
     durationMin?: number | null;
     summary?: string | null;
     horseId?: string | null;
+    planId?: string;
     programId?: string;
     /**
      * Teacher ids the Student wants this session visible to. Each must be a
@@ -50,6 +54,7 @@ export interface UpdateTrainingSessionInput {
     durationMin?: number | null;
     summary?: string | null;
     horseId?: string | null;
+    planId?: string | null;
     /** If supplied, replaces the share set entirely. Omit to leave shares unchanged. */
     shareWithTeacherIds?: string[];
 }
@@ -61,7 +66,9 @@ interface TrainingSessionRow {
     duration_min: number | null;
     summary: string | null;
     horse_id: string | null;
+    plan_id: string | null;
     horse_name: string | null;
+    plan_title: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -89,13 +96,22 @@ function assertDuration(value: number | null | undefined): number | null {
  * which connected Teachers may see it (gated later in 022).
  */
 export class TrainingSessionService {
-    constructor(private db: Kysely<Database>) {}
+    private planService: PlanService;
+
+    constructor(private db: Kysely<Database>) {
+        this.planService = new PlanService(db);
+    }
 
     async create(studentId: string, input: CreateTrainingSessionInput): Promise<TrainingSession> {
         const performedAt = assertIsoDate(input.performedAt);
         const durationMin = assertDuration(input.durationMin);
         const summary = input.summary ?? null;
         const horseId = input.horseId == null ? null : await this.assertOwnUnarchivedHorse(studentId, input.horseId);
+        let planId: string | null = null;
+        if (input.planId !== undefined) {
+            await this.planService.assertActivePlanForStudent(input.planId, studentId);
+            planId = input.planId;
+        }
         const shareIds = await this.normalizeShareIds(studentId, input.shareWithTeacherIds ?? []);
 
         let programId: string | null = null;
@@ -121,6 +137,7 @@ export class TrainingSessionService {
                 duration_min: durationMin,
                 summary,
                 horse_id: horseId,
+                plan_id: planId,
                 created_at: now,
                 updated_at: now,
             }).execute();
@@ -154,6 +171,7 @@ export class TrainingSessionService {
         const rows = await this.db
             .selectFrom('training_sessions')
             .leftJoin('horses', 'horses.id', 'training_sessions.horse_id')
+            .leftJoin('plans', 'plans.id', 'training_sessions.plan_id')
             .select([
                 'training_sessions.id as id',
                 'training_sessions.student_id as student_id',
@@ -161,9 +179,11 @@ export class TrainingSessionService {
                 'training_sessions.duration_min as duration_min',
                 'training_sessions.summary as summary',
                 'training_sessions.horse_id as horse_id',
+                'training_sessions.plan_id as plan_id',
                 'training_sessions.created_at as created_at',
                 'training_sessions.updated_at as updated_at',
                 'horses.name as horse_name',
+                'plans.title as plan_title',
             ])
             .where('training_sessions.student_id', '=', studentId)
             .orderBy('training_sessions.performed_at', 'desc')
@@ -198,6 +218,7 @@ export class TrainingSessionService {
             .selectFrom('training_sessions')
             .innerJoin('training_session_share', 'training_session_share.training_session_id', 'training_sessions.id')
             .leftJoin('horses', 'horses.id', 'training_sessions.horse_id')
+            .leftJoin('plans', 'plans.id', 'training_sessions.plan_id')
             .select([
                 'training_sessions.id as id',
                 'training_sessions.student_id as student_id',
@@ -205,9 +226,11 @@ export class TrainingSessionService {
                 'training_sessions.duration_min as duration_min',
                 'training_sessions.summary as summary',
                 'training_sessions.horse_id as horse_id',
+                'training_sessions.plan_id as plan_id',
                 'training_sessions.created_at as created_at',
                 'training_sessions.updated_at as updated_at',
                 'horses.name as horse_name',
+                'plans.title as plan_title',
             ])
             .where('training_sessions.student_id', '=', studentId)
             .where('training_session_share.teacher_id', '=', teacherId)
@@ -273,6 +296,14 @@ export class TrainingSessionService {
                 ? null
                 : await this.assertOwnUnarchivedHorse(studentId, input.horseId);
         }
+        if (input.planId !== undefined) {
+            if (input.planId === null) {
+                patch.plan_id = null;
+            } else {
+                await this.planService.assertActivePlanForStudent(input.planId, studentId);
+                patch.plan_id = input.planId;
+            }
+        }
 
         await this.db.updateTable('training_sessions')
             .set(patch)
@@ -287,6 +318,26 @@ export class TrainingSessionService {
             await this.writeShares(sessionId, shareIds);
         }
 
+        return this.loadOne(sessionId);
+    }
+
+    /**
+     * Detach a Training Session from its Plan. Student owner only; idempotent
+     * when already detached.
+     */
+    async detachFromPlan(actorId: string, sessionId: string): Promise<TrainingSession> {
+        await this.assertTrainingSessionOwner(actorId, sessionId);
+        const row = await this.db
+            .selectFrom('training_sessions')
+            .select(['plan_id'])
+            .where('id', '=', sessionId)
+            .executeTakeFirstOrThrow();
+        if (row.plan_id === null) return this.loadOne(sessionId);
+
+        await this.db.updateTable('training_sessions')
+            .set({ plan_id: null, updated_at: new Date().toISOString() })
+            .where('id', '=', sessionId)
+            .execute();
         return this.loadOne(sessionId);
     }
 
@@ -436,6 +487,7 @@ export class TrainingSessionService {
         const row = await this.db
             .selectFrom('training_sessions')
             .leftJoin('horses', 'horses.id', 'training_sessions.horse_id')
+            .leftJoin('plans', 'plans.id', 'training_sessions.plan_id')
             .select([
                 'training_sessions.id as id',
                 'training_sessions.student_id as student_id',
@@ -443,9 +495,11 @@ export class TrainingSessionService {
                 'training_sessions.duration_min as duration_min',
                 'training_sessions.summary as summary',
                 'training_sessions.horse_id as horse_id',
+                'training_sessions.plan_id as plan_id',
                 'training_sessions.created_at as created_at',
                 'training_sessions.updated_at as updated_at',
                 'horses.name as horse_name',
+                'plans.title as plan_title',
             ])
             .where('training_sessions.id', '=', sessionId)
             .executeTakeFirstOrThrow();
@@ -553,6 +607,8 @@ export class TrainingSessionService {
             summary: row.summary,
             horseId: row.horse_id,
             horseName: row.horse_name,
+            planId: row.plan_id,
+            planTitle: row.plan_title,
             sharedWithTeacherIds: shareIds,
             exercises,
             programs,

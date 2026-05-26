@@ -17,6 +17,7 @@ const tpl = template(`
                 <dt>Tidpunkt</dt><dd bind="sumWhen"></dd>
                 <dt>Längd</dt><dd bind="sumDuration"></dd>
                 <dt>Häst</dt><dd bind="sumHorse"></dd>
+                <dt>Plan</dt><dd bind="sumPlan"></dd>
                 <dt>Delning</dt><dd bind="sumShare"></dd>
             </dl>
             <div bind="sumSummary" class="tsd__summary-text"></div>
@@ -371,6 +372,7 @@ export class TrainingSessionDetailComponent extends Component {
                 return ts?.durationMin != null ? `${ts.durationMin} min` : '(ej angiven)';
             } },
             sumHorse: { textContent: () => this.session()?.horseName ?? '(ingen)' },
+            sumPlan: { textContent: () => this.session()?.planTitle ?? '(ingen)' },
             sumShare: { textContent: () => this.shareSummary() },
             sumSummary: {
                 className: () => this.session()?.summary

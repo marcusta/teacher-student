@@ -37,6 +37,8 @@ export interface TrainingSession {
     summary: null | string;
     horseId: null | string;
     horseName: null | string;
+    planId: null | string;
+    planTitle: null | string;
     sharedWithTeacherIds: string[];
     exercises: TrainingSessionExerciseRef[];
     programs: AttachedProgramRef[];

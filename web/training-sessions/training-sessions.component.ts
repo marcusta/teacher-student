@@ -5,6 +5,7 @@ import { s, btn, input } from '../css';
 import { TrainingSessionsService } from './training-sessions.service';
 import { TeachersService } from './teachers.service';
 import { StableService } from '../stable/stable.service';
+import { PlansService } from '../plans/plans.service';
 import { api, type Program, type Teacher, type TrainingSession } from '../api';
 
 const tpl = template(`
@@ -28,6 +29,10 @@ const tpl = template(`
             <label bind="horseLabel" class="ts__horse-label">
                 <span>Häst (valfri)</span>
                 <div bind="horseSelectHost" class="ts__select-host"></div>
+            </label>
+            <label bind="planLabel" class="ts__plan-label">
+                <span>Plan (valfri)</span>
+                <div bind="planSelectHost" class="ts__select-host"></div>
             </label>
             <label bind="programLabel" class="ts__program-label">
                 <span>Program (valfritt)</span>
@@ -214,11 +219,13 @@ export class TrainingSessionsComponent extends Component {
     private sessions = this.inject(TrainingSessionsService);
     private teachers = this.inject(TeachersService);
     private stable = this.inject(StableService);
+    private plans = this.inject(PlansService);
     private router = this.inject(Router);
     private whenVal = new Signal('');
     private durationVal = new Signal('');
     private summaryVal = new Signal('');
     private horseIdVal = new Signal<string>('');
+    private planIdVal = new Signal<string>('');
     private programIdVal = new Signal<string>('');
     private programCatalog = new Signal<Program[]>([]);
     private editingId = new Signal<string | null>(null);
@@ -230,6 +237,11 @@ export class TrainingSessionsComponent extends Component {
     private horseOptions = new Computed<SelectOption[]>(() =>
         this.stable.items.get().map((h) => ({ value: h.id, label: h.name })),
     );
+    private planOptions = new Computed<SelectOption[]>(() =>
+        this.plans.items.get()
+            .filter((p) => p.status === 'active')
+            .map((p) => ({ value: p.id, label: p.title })),
+    );
     private programOptions = new Computed<SelectOption[]>(() =>
         this.programCatalog.get().map((p) => ({ value: p.id, label: p.title })),
     );
@@ -238,6 +250,7 @@ export class TrainingSessionsComponent extends Component {
         void this.sessions.load();
         void this.teachers.load();
         void this.stable.load();
+        void this.plans.load();
         void api.programs.listForStudent()
             .then((list) => this.programCatalog.set(list))
             .catch(() => this.programCatalog.set([]));
@@ -263,6 +276,11 @@ export class TrainingSessionsComponent extends Component {
                 className: () =>
                     this.stable.items.get().length === 0
                         ? 'ts__horse-label hidden' : 'ts__horse-label',
+            },
+            planLabel: {
+                className: () =>
+                    this.plans.items.get().filter((p) => p.status === 'active').length === 0
+                        ? 'ts__plan-label hidden' : 'ts__plan-label',
             },
             programLabel: {
                 className: () =>
@@ -292,6 +310,9 @@ export class TrainingSessionsComponent extends Component {
                     const durationMin = durationRaw === '' ? null : Number(durationRaw);
                     const summary = this.summaryVal.get().trim() || null;
                     const horseId = this.horseIdVal.get() || null;
+                    const planRaw = this.planIdVal.get();
+                    const planId = planRaw || undefined;
+                    const planIdPatch = planRaw === '' ? null : planRaw;
                     const programId = this.programIdVal.get() || undefined;
                     const shareWithTeacherIds = Array.from(this.shareIds.get());
 
@@ -303,6 +324,7 @@ export class TrainingSessionsComponent extends Component {
                             durationMin,
                             summary,
                             horseId,
+                            planId: planIdPatch,
                             shareWithTeacherIds,
                         });
                         ok = updated !== null;
@@ -312,6 +334,7 @@ export class TrainingSessionsComponent extends Component {
                             durationMin,
                             summary,
                             horseId,
+                            planId,
                             shareWithTeacherIds,
                             programId,
                         });
@@ -348,6 +371,11 @@ export class TrainingSessionsComponent extends Component {
             value: this.horseIdVal,
             options: this.horseOptions,
             placeholder: 'Ingen häst',
+        });
+        this.spawn(SelectComponent, this.ref(frag, 'planSelectHost'), {
+            value: this.planIdVal,
+            options: this.planOptions,
+            placeholder: 'Ingen plan',
         });
         this.spawn(SelectComponent, this.ref(frag, 'programSelectHost'), {
             value: this.programIdVal,
@@ -387,6 +415,7 @@ export class TrainingSessionsComponent extends Component {
         this.durationVal.set('');
         this.summaryVal.set('');
         this.horseIdVal.set('');
+        this.planIdVal.set('');
         this.programIdVal.set('');
         this.shareIds.set(new Set());
     }
@@ -397,6 +426,7 @@ export class TrainingSessionsComponent extends Component {
         this.durationVal.set(item.durationMin === null ? '' : String(item.durationMin));
         this.summaryVal.set(item.summary ?? '');
         this.horseIdVal.set(item.horseId ?? '');
+        this.planIdVal.set(item.planId ?? '');
         this.shareIds.set(new Set(item.sharedWithTeacherIds));
     }
 
@@ -418,6 +448,7 @@ export class TrainingSessionsComponent extends Component {
         const bits: string[] = [];
         if (item.durationMin !== null) bits.push(`${item.durationMin} min`);
         if (item.horseName) bits.push(item.horseName);
+        if (item.planTitle) bits.push(item.planTitle);
         bits.push(this.shareLabel(item));
         meta.textContent = bits.join(' · ');
         left.appendChild(meta);
