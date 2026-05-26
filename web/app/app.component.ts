@@ -14,6 +14,7 @@ import { StableShellComponent } from '../stable/stable-shell.component';
 import { LessonsShellComponent } from '../lessons/lessons-shell.component';
 import { TrainingSessionsShellComponent } from '../training-sessions/training-sessions-shell.component';
 import { ProgramsShellComponent } from '../programs/programs-shell.component';
+import { PlansShellComponent } from '../plans/plans-shell.component';
 
 const tpl = template(`
     <div class="app-layout">
@@ -69,6 +70,7 @@ export class AppComponent extends Component {
             '/lektioner': LessonsShellComponent,
             '/traningspass': TrainingSessionsShellComponent,
             '/program': ProgramsShellComponent,
+            '/planer': PlansShellComponent,
         }, HomeComponent);
 
         return frag;

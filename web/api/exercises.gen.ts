@@ -13,10 +13,10 @@ export interface Exercise {
 export interface ExercisesApi {
     create(input: { description?: string; name: string }): Promise<Exercise>;
     list(): Promise<Exercise[]>;
+    listForStudent(): Promise<Exercise[]>;
     get(input: { id: string }): Promise<Exercise>;
     update(input: { name?: string; description?: string; id: string }): Promise<Exercise>;
     delete(input: { id: string }): Promise<{ ok: boolean }>;
-    listForStudent(): Promise<Exercise[]>;
 }
 
 export function createExercisesClient(baseUrl: string): ExercisesApi {
@@ -26,6 +26,9 @@ export function createExercisesClient(baseUrl: string): ExercisesApi {
         },
         async list() {
             return apiFetch({ method: 'GET', url: `${baseUrl}/exercises` });
+        },
+        async listForStudent() {
+            return apiFetch({ method: 'GET', url: `${baseUrl}/exercises/for-student` });
         },
         async get(input) {
             const pathParams = new Set(['id']);
@@ -44,9 +47,6 @@ export function createExercisesClient(baseUrl: string): ExercisesApi {
         },
         async delete(input) {
             return apiFetch({ method: 'DELETE', url: `${baseUrl}/exercises/${input.id}` });
-        },
-        async listForStudent() {
-            return apiFetch({ method: 'GET', url: `${baseUrl}/exercises/for-student` });
         },
     };
 }

@@ -6,6 +6,7 @@ export interface Database {
     relations: RelationsTable;
     exercises: ExercisesTable;
     horses: HorsesTable;
+    plans: PlansTable;
     lessons: LessonsTable;
     lesson_exercise: LessonExerciseTable;
     notes: NotesTable;
@@ -116,6 +117,21 @@ export interface HorsesTable {
     student_id: string;
     name: string;
     archived_at: string | null;
+    created_at: Generated<string>;
+    updated_at: Generated<string>;
+}
+
+export type PlanStatus = 'active' | 'archived';
+
+export interface PlansTable {
+    id: string;
+    student_id: string;
+    primary_teacher_id: string | null;
+    title: string;
+    description: string | null;
+    start_date: string | null;
+    end_date: string | null;
+    status: Generated<PlanStatus>;
     created_at: Generated<string>;
     updated_at: Generated<string>;
 }

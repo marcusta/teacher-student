@@ -14,12 +14,13 @@ import { createNotesApi } from './api/notes.api';
 import { createTrainingSessionsApi } from './api/training-sessions.api';
 import { createTeachersApi } from './api/teachers.api';
 import { createProgramsApi } from './api/programs.api';
+import { createPlansApi } from './api/plans.api';
 
 async function setup(seeds: SeedFn[] = []) {
     const {
         userService, invitationService, relationService,
         exerciseService, horseService, lessonService, noteService,
-        trainingSessionService, programService,
+        trainingSessionService, programService, planService,
     } = await createTestDb(...seeds);
 
     const sessions = new SessionStore(':memory:');
@@ -32,7 +33,7 @@ async function setup(seeds: SeedFn[] = []) {
     mount(app, '/api', createRegisterApi(userService, sessions));
     mount(app, '/api', createInvitationsApi(invitationService));
     mount(app, '/api', createStudentsApi(
-        relationService, horseService, trainingSessionService, lessonService,
+        relationService, horseService, planService, trainingSessionService, lessonService,
     ));
     mount(app, '/api', createExercisesApi(exerciseService));
     mount(app, '/api', createHorsesApi(horseService));
@@ -41,6 +42,7 @@ async function setup(seeds: SeedFn[] = []) {
     mount(app, '/api', createTrainingSessionsApi(trainingSessionService));
     mount(app, '/api', createTeachersApi(relationService));
     mount(app, '/api', createProgramsApi(programService));
+    mount(app, '/api', createPlansApi(planService));
 
     return { app, sessions };
 }
@@ -656,6 +658,140 @@ test('GET /api/students/:id/horses returns 404 for stranger', async () => {
 test('GET /api/students/:id/horses without session returns 401', async () => {
     const { app } = await setup();
     const res = await req(app, 'GET', '/api/students/anyone/horses');
+    expect(res.status).toBe(401);
+});
+
+// --- Plans (student CRUD + teacher catalog) ---
+
+test('GET /api/plans without session returns 401', async () => {
+    const { app } = await setup();
+    const res = await req(app, 'GET', '/api/plans');
+    expect(res.status).toBe(401);
+});
+
+test('POST /api/plans happy path returns created Plan', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const res = await req(app, 'POST', '/api/plans', { title: 'Sommarplan' }, cookie);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.title).toBe('Sommarplan');
+    expect(body.status).toBe('active');
+});
+
+test('POST /api/plans empty title returns 400', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const res = await req(app, 'POST', '/api/plans', { title: '' }, cookie);
+    expect(res.status).toBe(400);
+});
+
+test('GET /api/plans lists only my plans', async () => {
+    const { app } = await setup([seedUser]);
+    const annaCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    await req(app, 'POST', '/api/plans', { title: 'A1' }, annaCookie);
+    const otherCookie = await registerAndLogin(app, 'other@example.com');
+    await req(app, 'POST', '/api/plans', { title: 'O1' }, otherCookie);
+
+    const res = await req(app, 'GET', '/api/plans', undefined, annaCookie);
+    const list = await res.json();
+    expect(list.length).toBe(1);
+    expect(list[0].title).toBe('A1');
+});
+
+test('GET /api/plans/:id returns 200 for own', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/plans', { title: 'X' }, cookie);
+    const { id } = await created.json();
+    const res = await req(app, 'GET', `/api/plans/${id}`, undefined, cookie);
+    expect(res.status).toBe(200);
+    expect((await res.json()).title).toBe('X');
+});
+
+test('GET /api/plans/:id returns 404 for other student', async () => {
+    const { app } = await setup([seedUser]);
+    const annaCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/plans', { title: 'X' }, annaCookie);
+    const { id } = await created.json();
+    const otherCookie = await registerAndLogin(app, 'other@example.com');
+    const res = await req(app, 'GET', `/api/plans/${id}`, undefined, otherCookie);
+    expect(res.status).toBe(404);
+});
+
+test('PATCH /api/plans/:id updates own', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/plans', { title: 'Old' }, cookie);
+    const { id } = await created.json();
+    const res = await req(app, 'PATCH', `/api/plans/${id}`, { title: 'New' }, cookie);
+    expect(res.status).toBe(200);
+    expect((await res.json()).title).toBe('New');
+});
+
+test('PATCH /api/plans/:id on other student returns 404', async () => {
+    const { app } = await setup([seedUser]);
+    const annaCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/plans', { title: 'X' }, annaCookie);
+    const { id } = await created.json();
+    const otherCookie = await registerAndLogin(app, 'other@example.com');
+    const res = await req(app, 'PATCH', `/api/plans/${id}`, { title: 'Hack' }, otherCookie);
+    expect(res.status).toBe(404);
+});
+
+test('POST /api/plans/:id/archive archives own (still gettable)', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/plans', { title: 'X' }, cookie);
+    const { id } = await created.json();
+    const res = await req(app, 'POST', `/api/plans/${id}/archive`, undefined, cookie);
+    expect(res.status).toBe(200);
+    const got = await (await req(app, 'GET', `/api/plans/${id}`, undefined, cookie)).json();
+    expect(got.status).toBe('archived');
+});
+
+test('POST /api/plans/:id/archive on other student returns 404', async () => {
+    const { app } = await setup([seedUser]);
+    const annaCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/plans', { title: 'X' }, annaCookie);
+    const { id } = await created.json();
+    const otherCookie = await registerAndLogin(app, 'other@example.com');
+    const res = await req(app, 'POST', `/api/plans/${id}/archive`, undefined, otherCookie);
+    expect(res.status).toBe(404);
+});
+
+test('GET /api/students/:id/plans returns connected student\'s active plans', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentCookie = await registerAndLogin(app, 'student@example.com');
+
+    const inv = await (await req(app, 'POST', '/api/invitations',
+        { inviteeEmail: 'student@example.com' }, teacherCookie)).json();
+    await req(app, 'POST', '/api/invitations/accept', { invitationId: inv.id }, studentCookie);
+
+    await req(app, 'POST', '/api/plans', { title: 'Visible' }, studentCookie);
+    const arch = await (await req(app, 'POST', '/api/plans', { title: 'Archived' }, studentCookie)).json();
+    await req(app, 'POST', `/api/plans/${arch.id}/archive`, undefined, studentCookie);
+
+    const meRes = await (await req(app, 'GET', '/api/auth/me', undefined, studentCookie)).json();
+    const res = await req(app, 'GET', `/api/students/${meRes.id}/plans`, undefined, teacherCookie);
+    expect(res.status).toBe(200);
+    const list = await res.json();
+    expect(list.map((p: any) => p.title)).toEqual(['Visible']);
+});
+
+test('GET /api/students/:id/plans returns 404 for stranger', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const strangerCookie = await registerAndLogin(app, 'stranger@example.com');
+    const me = await (await req(app, 'GET', '/api/auth/me', undefined, strangerCookie)).json();
+    const res = await req(app, 'GET', `/api/students/${me.id}/plans`, undefined, teacherCookie);
+    expect(res.status).toBe(404);
+});
+
+test('GET /api/students/:id/plans without session returns 401', async () => {
+    const { app } = await setup();
+    const res = await req(app, 'GET', '/api/students/anyone/plans');
     expect(res.status).toBe(401);
 });
 

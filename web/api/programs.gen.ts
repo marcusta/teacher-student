@@ -20,6 +20,7 @@ export interface ProgramExerciseRef {
 export interface ProgramsApi {
     create(input: { description?: string; title: string }): Promise<Program>;
     list(): Promise<Program[]>;
+    listForStudent(): Promise<Program[]>;
     get(input: { id: string }): Promise<Program>;
     update(input: { title?: string; description?: string; id: string }): Promise<Program>;
     delete(input: { id: string }): Promise<{ ok: boolean }>;
@@ -27,7 +28,6 @@ export interface ProgramsApi {
     addExercise(input: { notes?: string; id: string; exerciseId: string }): Promise<{ ok: boolean }>;
     reorderExercises(input: { id: string; exerciseIds: string[] }): Promise<{ ok: boolean }>;
     removeExercise(input: { id: string; exerciseId: string }): Promise<{ ok: boolean }>;
-    listForStudent(): Promise<Program[]>;
 }
 
 export function createProgramsClient(baseUrl: string): ProgramsApi {
@@ -37,6 +37,9 @@ export function createProgramsClient(baseUrl: string): ProgramsApi {
         },
         async list() {
             return apiFetch({ method: 'GET', url: `${baseUrl}/programs` });
+        },
+        async listForStudent() {
+            return apiFetch({ method: 'GET', url: `${baseUrl}/programs/for-student` });
         },
         async get(input) {
             const pathParams = new Set(['id']);
@@ -80,9 +83,6 @@ export function createProgramsClient(baseUrl: string): ProgramsApi {
         },
         async removeExercise(input) {
             return apiFetch({ method: 'DELETE', url: `${baseUrl}/programs/${input.id}/exercises/${input.exerciseId}` });
-        },
-        async listForStudent() {
-            return apiFetch({ method: 'GET', url: `${baseUrl}/programs/for-student` });
         },
     };
 }

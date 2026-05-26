@@ -16,6 +16,19 @@ export interface Horse {
     updatedAt: string;
 }
 
+export interface Plan {
+    id: string;
+    studentId: string;
+    primaryTeacherId: null | string;
+    title: string;
+    description: null | string;
+    startDate: null | string;
+    endDate: null | string;
+    status: 'active' | 'archived';
+    createdAt: string;
+    updatedAt: string;
+}
+
 export interface TrainingSession {
     id: string;
     studentId: string;
@@ -70,6 +83,7 @@ export interface StudentsApi {
     list(): Promise<Student[]>;
     get(input: { id: string }): Promise<Student>;
     listHorses(input: { id: string }): Promise<Horse[]>;
+    listPlans(input: { id: string }): Promise<Plan[]>;
     listTrainingSessions(input: { id: string }): Promise<TrainingSession[]>;
     exerciseHistory(input: { id: string; exerciseId: string }): Promise<ExerciseHistoryEntry[]>;
 }
@@ -94,6 +108,14 @@ export function createStudentsClient(baseUrl: string): StudentsApi {
                 if (!pathParams.has(k) && v !== undefined) params.set(k, String(v));
             const qs = params.toString();
             return apiFetch({ method: 'GET', url: `${baseUrl}/students/${input.id}/horses${qs ? '?' + qs : ''}` });
+        },
+        async listPlans(input) {
+            const pathParams = new Set(['id']);
+            const params = new URLSearchParams();
+            for (const [k, v] of Object.entries(input as any))
+                if (!pathParams.has(k) && v !== undefined) params.set(k, String(v));
+            const qs = params.toString();
+            return apiFetch({ method: 'GET', url: `${baseUrl}/students/${input.id}/plans${qs ? '?' + qs : ''}` });
         },
         async listTrainingSessions(input) {
             const pathParams = new Set(['id']);
