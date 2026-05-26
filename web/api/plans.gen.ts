@@ -19,7 +19,7 @@ export interface PlansApi {
     list(): Promise<Plan[]>;
     get(input: { id: string }): Promise<Plan>;
     update(input: { title?: string; description?: null | string; startDate?: null | string; endDate?: null | string; primaryTeacherId?: null | string; id: string }): Promise<Plan>;
-    archive(input: { id: string }): Promise<{ ok: boolean }>;
+    archive(input: { id: string }): Promise<{ ok: true }>;
 }
 
 export function createPlansClient(baseUrl: string): PlansApi {

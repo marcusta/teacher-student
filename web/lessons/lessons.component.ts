@@ -5,7 +5,7 @@ import { s, btn, input } from '../css';
 import { LessonsService } from './lessons.service';
 import { StudentsService } from '../students/students.service';
 import { ProgramsService } from '../programs/programs.service';
-import type { Lesson, LessonForUser } from '../api';
+import { api, type Lesson, type LessonForUser, type Plan } from '../api';
 
 const tpl = template(`
     <div class="lessons" bind="root">
@@ -15,6 +15,7 @@ const tpl = template(`
             <div bind="studentSelectHost" class="lessons__student-host"></div>
             <input bind="whenInput" type="datetime-local" required>
             <div bind="programSelectHost" class="lessons__program-host"></div>
+            <div bind="planSelectHost" class="lessons__plan-host"></div>
             <div class="lessons__form-row">
                 <button bind="submit" type="submit">Boka lektion</button>
                 <div class="error" bind="error"></div>
@@ -69,6 +70,7 @@ export class LessonsComponent extends Component {
                 }
                 & .lessons__student-host .ui-select { display: block; }
                 & .lessons__program-host .ui-select { display: block; }
+                & .lessons__plan-host .ui-select { display: block; }
             }
 
             & .lessons__form-row {
@@ -153,6 +155,8 @@ export class LessonsComponent extends Component {
     private programs = this.inject(ProgramsService);
     private studentVal = new Signal('');
     private programVal = new Signal('');
+    private planVal = new Signal('');
+    private plans = new Signal<Plan[]>([]);
     private whenVal = new Signal('');
     private nowIso = new Signal(new Date().toISOString());
     private upcoming = new Computed(() =>
@@ -170,6 +174,10 @@ export class LessonsComponent extends Component {
         { value: '', label: '(inget program)' },
         ...this.programs.items.get().map((p) => ({ value: p.id, label: p.title })),
     ]);
+    private planOptions = new Computed<SelectOption[]>(() => [
+        { value: '', label: '(ingen plan)' },
+        ...this.plans.get().map((p) => ({ value: p.id, label: p.title })),
+    ]);
 
     onMount(): void {
         void this.lessons.load();
@@ -180,6 +188,18 @@ export class LessonsComponent extends Component {
         this.track(effect(() => {
             const first = this.students.items.get()[0];
             if (first && !this.studentVal.get()) this.studentVal.set(first.id);
+        }));
+        this.track(effect(() => {
+            const studentId = this.studentVal.get();
+            if (!studentId) {
+                this.plans.set([]);
+                return;
+            }
+            void api.students.listPlans({ id: studentId }).then((list) => {
+                if (this.studentVal.get() === studentId) this.plans.set(list);
+            }).catch(() => {
+                if (this.studentVal.get() === studentId) this.plans.set([]);
+            });
         }));
     }
 
@@ -199,14 +219,17 @@ export class LessonsComponent extends Component {
                     const when = this.whenVal.get();
                     if (!studentId || !when) return;
                     const programId = this.programVal.get();
+                    const planId = this.planVal.get();
                     const ok = await this.lessons.create({
                         studentId,
                         scheduledAt: fromLocalInput(when),
                         ...(programId ? { programId } : {}),
+                        ...(planId ? { planId } : {}),
                     });
                     if (ok) {
                         this.whenVal.set('');
                         this.programVal.set('');
+                        this.planVal.set('');
                     }
                 },
             },
@@ -233,6 +256,10 @@ export class LessonsComponent extends Component {
         this.spawn(SelectComponent, this.ref(frag, 'programSelectHost'), {
             value: this.programVal,
             options: this.programOptions,
+        });
+        this.spawn(SelectComponent, this.ref(frag, 'planSelectHost'), {
+            value: this.planVal,
+            options: this.planOptions,
         });
 
         const upcomingHost = this.ref(frag, 'upcomingList');
@@ -269,7 +296,8 @@ export class LessonsComponent extends Component {
         who.className = 'lessons__item-who';
         const rolePrefix = item.role === 'teacher' ? 'Elev: ' : 'Lärare: ';
         const horseSuffix = item.horseName ? ` · ${item.horseName}` : '';
-        who.textContent = rolePrefix + item.counterpartyDisplayName + horseSuffix;
+        const planSuffix = item.planTitle ? ` · ${item.planTitle}` : '';
+        who.textContent = rolePrefix + item.counterpartyDisplayName + horseSuffix + planSuffix;
         left.appendChild(when);
         left.appendChild(who);
         if (item.programs.length > 0) {

@@ -2,6 +2,7 @@ import type { Kysely } from 'kysely';
 import { ConflictError, NotFoundError } from '@basics/core/server/auth';
 import type { Database, LessonStatus } from '../db/schema';
 import { NoteService, type Note } from './note.service';
+import { PlanService } from './plan.service';
 
 export interface LessonExerciseRef {
     /** Surrogate id of the `lesson_exercise` junction row (parent target for Notes). */
@@ -27,6 +28,8 @@ export interface Lesson {
     status: LessonStatus;
     horseId: string | null;
     horseName: string | null;
+    planId: string | null;
+    planTitle: string | null;
     programs: AttachedProgramRef[];
     exercises: LessonExerciseRef[];
     createdAt: string;
@@ -58,11 +61,13 @@ export interface CreateLessonInput {
     studentId: string;
     scheduledAt: string;
     programId?: string;
+    planId?: string;
 }
 
 export interface UpdateLessonInput {
     horseId?: string | null;
     scheduledAt?: string;
+    planId?: string | null;
 }
 
 interface LessonRow {
@@ -72,7 +77,9 @@ interface LessonRow {
     scheduled_at: string;
     status: LessonStatus;
     horse_id: string | null;
+    plan_id: string | null;
     horse_name: string | null;
+    plan_title: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -90,6 +97,8 @@ function toLesson(
         status: row.status,
         horseId: row.horse_id,
         horseName: row.horse_name,
+        planId: row.plan_id,
+        planTitle: row.plan_title,
         programs,
         exercises,
         createdAt: row.created_at,
@@ -112,6 +121,7 @@ const LESSON_COLUMNS = [
     'lessons.scheduled_at as scheduled_at',
     'lessons.status as status',
     'lessons.horse_id as horse_id',
+    'lessons.plan_id as plan_id',
     'lessons.created_at as created_at',
     'lessons.updated_at as updated_at',
 ] as const;
@@ -123,7 +133,11 @@ const LESSON_COLUMNS = [
  * ISO-date validation live here.
  */
 export class LessonService {
-    constructor(private db: Kysely<Database>) {}
+    private planService: PlanService;
+
+    constructor(private db: Kysely<Database>) {
+        this.planService = new PlanService(db);
+    }
 
     async create(teacherId: string, input: CreateLessonInput): Promise<Lesson> {
         const scheduledAt = assertIsoDate(input.scheduledAt);
@@ -135,6 +149,12 @@ export class LessonService {
             .where('student_id', '=', input.studentId)
             .executeTakeFirst();
         if (!rel) throw new NotFoundError('Student not found');
+
+        let planId: string | null = null;
+        if (input.planId !== undefined) {
+            await this.planService.assertActivePlanForStudent(input.planId, input.studentId);
+            planId = input.planId;
+        }
 
         let program: { id: string; title: string } | null = null;
         let programRows: { exercise_id: string; sort_order: number; notes: string | null }[] = [];
@@ -166,6 +186,7 @@ export class LessonService {
                 scheduled_at: scheduledAt,
                 status: 'planned',
                 horse_id: null,
+                plan_id: planId,
                 created_at: now,
                 updated_at: now,
             }).execute();
@@ -232,8 +253,43 @@ export class LessonService {
             }
         }
 
+        if (input.planId !== undefined) {
+            if (input.planId === null) {
+                patch.plan_id = null;
+            } else {
+                await this.planService.assertActivePlanForStudent(input.planId, lesson.student_id);
+                patch.plan_id = input.planId;
+            }
+        }
+
         await this.db.updateTable('lessons')
             .set(patch)
+            .where('id', '=', lessonId)
+            .execute();
+
+        return this.loadOne(lessonId);
+    }
+
+    /**
+     * Detach a Lesson from its Plan (`plan_id = null`). Allowed for the
+     * lesson's Teacher (row author) or the plan's Student owner. Idempotent
+     * when already detached. NotFoundError to outsiders (leak-safe).
+     */
+    async detachFromPlan(actorId: string, lessonId: string): Promise<Lesson> {
+        const lesson = await this.db
+            .selectFrom('lessons')
+            .select(['id', 'teacher_id', 'student_id', 'plan_id'])
+            .where('id', '=', lessonId)
+            .executeTakeFirst();
+        if (!lesson) throw new NotFoundError('Lesson not found');
+        if (lesson.plan_id === null) return this.loadOne(lessonId);
+
+        const isTeacher = lesson.teacher_id === actorId;
+        const isStudent = lesson.student_id === actorId;
+        if (!isTeacher && !isStudent) throw new NotFoundError('Lesson not found');
+
+        await this.db.updateTable('lessons')
+            .set({ plan_id: null, updated_at: new Date().toISOString() })
             .where('id', '=', lessonId)
             .execute();
 
@@ -275,7 +331,8 @@ export class LessonService {
         const rows = await this.db
             .selectFrom('lessons')
             .leftJoin('horses', 'horses.id', 'lessons.horse_id')
-            .select([...LESSON_COLUMNS, 'horses.name as horse_name'])
+            .leftJoin('plans', 'plans.id', 'lessons.plan_id')
+            .select([...LESSON_COLUMNS, 'horses.name as horse_name', 'plans.title as plan_title'])
             .where('lessons.teacher_id', '=', teacherId)
             .orderBy('lessons.scheduled_at', 'asc')
             .execute();
@@ -297,9 +354,11 @@ export class LessonService {
             .innerJoin('users as teacher', 'teacher.id', 'lessons.teacher_id')
             .innerJoin('users as student', 'student.id', 'lessons.student_id')
             .leftJoin('horses', 'horses.id', 'lessons.horse_id')
+            .leftJoin('plans', 'plans.id', 'lessons.plan_id')
             .select([
                 ...LESSON_COLUMNS,
                 'horses.name as horse_name',
+                'plans.title as plan_title',
                 'teacher.display_name as teacher_display_name',
                 'student.display_name as student_display_name',
             ])
@@ -475,7 +534,8 @@ export class LessonService {
         const row = await this.db
             .selectFrom('lessons')
             .leftJoin('horses', 'horses.id', 'lessons.horse_id')
-            .select([...LESSON_COLUMNS, 'horses.name as horse_name'])
+            .leftJoin('plans', 'plans.id', 'lessons.plan_id')
+            .select([...LESSON_COLUMNS, 'horses.name as horse_name', 'plans.title as plan_title'])
             .where('lessons.id', '=', lessonId)
             .executeTakeFirstOrThrow();
         const exMap = await this.exercisesByLesson([lessonId]);

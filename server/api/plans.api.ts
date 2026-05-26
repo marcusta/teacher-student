@@ -20,6 +20,10 @@ const UpdateInput = Type.Object({
     primaryTeacherId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
 });
 
+const ArchiveInput = Type.Object({
+    id: Type.String({ minLength: 1 }),
+});
+
 export function createPlansApi(svc: PlanService) {
     return {
         create: {
@@ -64,12 +68,12 @@ export function createPlansApi(svc: PlanService) {
         archive: {
             method: 'POST' as const,
             path: '/plans/:id/archive',
+            schema: ArchiveInput,
             middleware: [requireAuth()],
-            fn: async (c: Context) => {
+            fn: async (input: Static<typeof ArchiveInput>, c: Context) => {
                 const user = requireUser(c);
-                const { id } = c.req.param();
-                await svc.archive(user.id, id);
-                return { ok: true };
+                await svc.archive(user.id, input.id);
+                return { ok: true as const };
             },
         },
     };

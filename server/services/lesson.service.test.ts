@@ -235,6 +235,110 @@ test('listForUser populates horseName when attached', async () => {
     expect(list[0].horseName).toBe('Bella');
 });
 
+// --- plan_id (036: attach Plan to Lesson) ---
+
+async function seedConnectedWithPlan() {
+    const ctx = await seedConnected();
+    const plan = await ctx.planService.create(ctx.student.id, { title: 'Sommarplan' });
+    return { ...ctx, plan };
+}
+
+test('create attaches an active Plan for the lesson Student', async () => {
+    const ctx = await seedConnectedWithPlan();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        planId: ctx.plan.id,
+    });
+    expect(lesson.planId).toBe(ctx.plan.id);
+    expect(lesson.planTitle).toBe('Sommarplan');
+});
+
+test('create rejects archived Plan', async () => {
+    const ctx = await seedConnectedWithPlan();
+    await ctx.planService.archive(ctx.student.id, ctx.plan.id);
+    await expect(ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        planId: ctx.plan.id,
+    })).rejects.toThrow();
+});
+
+test('create rejects foreign Plan (wrong student)', async () => {
+    const ctx = await seedConnectedWithPlan();
+    const other = await ctx.userService.register({
+        email: 'other@example.com', password: 'secret123', displayName: 'O',
+    });
+    const foreign = await ctx.planService.create(other.id, { title: 'Foreign' });
+    await expect(ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        planId: foreign.id,
+    })).rejects.toThrow();
+});
+
+test('update attaches and detaches Plan by lesson Teacher', async () => {
+    const ctx = await seedConnectedWithPlan();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    const linked = await ctx.lessonService.update(ctx.teacher.id, lesson.id, {
+        planId: ctx.plan.id,
+    });
+    expect(linked.planId).toBe(ctx.plan.id);
+    expect(linked.planTitle).toBe('Sommarplan');
+
+    const cleared = await ctx.lessonService.update(ctx.teacher.id, lesson.id, { planId: null });
+    expect(cleared.planId).toBeNull();
+    expect(cleared.planTitle).toBeNull();
+});
+
+test('detachFromPlan by lesson Teacher clears plan_id', async () => {
+    const ctx = await seedConnectedWithPlan();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        planId: ctx.plan.id,
+    });
+    const detached = await ctx.lessonService.detachFromPlan(ctx.teacher.id, lesson.id);
+    expect(detached.planId).toBeNull();
+});
+
+test('detachFromPlan by plan Student owner clears plan_id', async () => {
+    const ctx = await seedConnectedWithPlan();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        planId: ctx.plan.id,
+    });
+    const detached = await ctx.lessonService.detachFromPlan(ctx.student.id, lesson.id);
+    expect(detached.planId).toBeNull();
+});
+
+test('detachFromPlan by stranger throws NotFoundError', async () => {
+    const ctx = await seedConnectedWithPlan();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        planId: ctx.plan.id,
+    });
+    const stranger = await ctx.userService.register({
+        email: 'stranger@example.com', password: 'secret123', displayName: 'X',
+    });
+    await expect(ctx.lessonService.detachFromPlan(stranger.id, lesson.id)).rejects.toThrow();
+});
+
+test('update rejects attach to archived Plan', async () => {
+    const ctx = await seedConnectedWithPlan();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    await ctx.planService.archive(ctx.student.id, ctx.plan.id);
+    await expect(ctx.lessonService.update(ctx.teacher.id, lesson.id, {
+        planId: ctx.plan.id,
+    })).rejects.toThrow();
+});
+
 // --- exercises (016: attach Exercises to a Lesson) ---
 
 test('addExercise links Teacher\'s Exercise to own Lesson', async () => {

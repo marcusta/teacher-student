@@ -19,7 +19,7 @@ export class LessonsService {
         if (result) this.items.set(result);
     }
 
-    async create(input: { studentId: string; scheduledAt: string; programId?: string }): Promise<boolean> {
+    async create(input: { studentId: string; scheduledAt: string; programId?: string; planId?: string }): Promise<boolean> {
         const result = await request(this.loading, this.error, () =>
             api.lessons.create(input),
         );
@@ -37,7 +37,7 @@ export class LessonsService {
 
     async update(
         id: string,
-        patch: { horseId?: string | null; scheduledAt?: string },
+        patch: { horseId?: string | null; scheduledAt?: string; planId?: string | null },
     ): Promise<Lesson | null> {
         const result = await request(this.loading, this.error, () =>
             api.lessons.update({ id, ...patch }),

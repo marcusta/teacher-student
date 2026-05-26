@@ -3,7 +3,7 @@ import { AuthService } from '@basics/core/client/auth';
 import { SelectComponent, type SelectOption } from '@basics/core/client/ui/select';
 import { t } from '../theme';
 import { s, btn, input } from '../css';
-import { api, type Exercise, type Horse } from '../api';
+import { api, type Exercise, type Horse, type Plan } from '../api';
 import { LessonsService } from './lessons.service';
 import { NotesService } from './notes.service';
 import { ExerciseNotesComponent } from './exercise-notes.component';
@@ -20,6 +20,7 @@ const tpl = template(`
                 <dt>Lärare</dt><dd bind="sumTeacher"></dd>
                 <dt>Tidpunkt</dt><dd bind="sumWhen"></dd>
                 <dt>Häst</dt><dd bind="sumHorse"></dd>
+                <dt>Plan</dt><dd bind="sumPlan"></dd>
                 <dt>Status</dt><dd bind="sumStatus"></dd>
             </dl>
             <div bind="sumProgLabel" class="lesson-edit__summary-ex-label">Program</div>
@@ -32,6 +33,10 @@ const tpl = template(`
             <label>
                 <span>Häst</span>
                 <div bind="horseSelectHost" class="lesson-edit__select-host"></div>
+            </label>
+            <label>
+                <span>Plan</span>
+                <div bind="planSelectHost" class="lesson-edit__select-host"></div>
             </label>
             <label>
                 <span>Tidpunkt</span>
@@ -437,8 +442,10 @@ export class LessonEditComponent extends Component {
     private programs = this.inject(ProgramsService);
     private programVal = new Signal('');
     private horseVal = new Signal('');
+    private planVal = new Signal('');
     private whenVal = new Signal('');
     private horses = new Signal<Horse[]>([]);
+    private plans = new Signal<Plan[]>([]);
     private library = new Signal<Exercise[]>([]);
     private exerciseVal = new Signal('');
     private resolved = new Signal(false);
@@ -472,7 +479,10 @@ export class LessonEditComponent extends Component {
     }
 
     private horseOptions = new Computed<SelectOption[]>(() =>
-        this.horses.get().map((h) => ({ value: h.id, label: h.name })),
+        [{ value: '', label: '(ingen häst)' }, ...this.horses.get().map((h) => ({ value: h.id, label: h.name }))],
+    );
+    private planOptions = new Computed<SelectOption[]>(() =>
+        [{ value: '', label: '(ingen plan)' }, ...this.plans.get().map((p) => ({ value: p.id, label: p.title }))],
     );
     private programOptions = new Computed<SelectOption[]>(() => {
         const attached = new Set(this.currentPrograms().map((p) => p.id));
@@ -515,13 +525,16 @@ export class LessonEditComponent extends Component {
                 return;
             }
             this.horseVal.set(lesson.horseId ?? '');
+            this.planVal.set(lesson.planId ?? '');
             this.whenVal.set(toLocalInput(lesson.scheduledAt));
-            const [horses, library] = await Promise.all([
+            const [horses, planList, library] = await Promise.all([
                 api.students.listHorses({ id: lesson.studentId }),
+                api.students.listPlans({ id: lesson.studentId }),
                 api.exercises.list(),
                 this.programs.load(),
             ]);
             this.horses.set(horses);
+            this.plans.set(planList);
             this.library.set(library);
             this.found.set(true);
             this.resolved.set(true);
@@ -568,6 +581,7 @@ export class LessonEditComponent extends Component {
                 return l ? new Date(l.scheduledAt).toLocaleString('sv-SE') : '';
             } },
             sumHorse: { textContent: () => this.svc.get(this.lessonId())?.horseName ?? '(ingen)' },
+            sumPlan: { textContent: () => this.svc.get(this.lessonId())?.planTitle ?? '(ingen)' },
             sumStatus: { textContent: () => {
                 const st = this.svc.get(this.lessonId())?.status;
                 if (st === 'completed') return 'Utförd';
@@ -595,10 +609,14 @@ export class LessonEditComponent extends Component {
                     const lesson = this.svc.get(id);
                     if (!lesson) return;
                     const horseId = this.horseVal.get();
+                    const planId = this.planVal.get();
                     const when = this.whenVal.get();
-                    const patch: { horseId?: string | null; scheduledAt?: string } = {};
+                    const patch: { horseId?: string | null; planId?: string | null; scheduledAt?: string } = {};
                     if (horseId !== (lesson.horseId ?? '')) {
                         patch.horseId = horseId === '' ? null : horseId;
+                    }
+                    if (planId !== (lesson.planId ?? '')) {
+                        patch.planId = planId === '' ? null : planId;
                     }
                     if (when) {
                         const iso = fromLocalInput(when);
@@ -778,7 +796,11 @@ export class LessonEditComponent extends Component {
         this.spawn(SelectComponent, this.ref(frag, 'horseSelectHost'), {
             value: this.horseVal,
             options: this.horseOptions,
-            placeholder: '(ingen häst)',
+        });
+
+        this.spawn(SelectComponent, this.ref(frag, 'planSelectHost'), {
+            value: this.planVal,
+            options: this.planOptions,
         });
 
         // Read-only programs summary (student view).

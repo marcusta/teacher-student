@@ -10,6 +10,7 @@ const CreateInput = Type.Object({
     studentId: Type.String({ minLength: 1 }),
     scheduledAt: Type.String({ pattern: ISO_DATETIME_PATTERN }),
     programId: Type.Optional(Type.String({ minLength: 1 })),
+    planId: Type.Optional(Type.String({ minLength: 1 })),
 });
 
 const AddExerciseInput = Type.Object({
@@ -44,6 +45,7 @@ const DetachProgramInput = Type.Object({
 const UpdateInput = Type.Object({
     id: Type.String({ minLength: 1 }),
     horseId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
+    planId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
     scheduledAt: Type.Optional(Type.String({ pattern: ISO_DATETIME_PATTERN })),
 });
 
