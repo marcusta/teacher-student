@@ -315,3 +315,50 @@ test('deleting a Program cascades to program_exercise rows', async () => {
     const rows = await db.selectFrom('program_exercise').selectAll().execute();
     expect(rows).toEqual([]);
 });
+
+// --- listForStudent (student-visible catalog from connected Teachers) ---
+
+async function seedStudentForPrograms() {
+    const ctx = await createTestDb();
+    const student = await ctx.userService.register({
+        email: 'student@example.com', password: 'secret123', displayName: 'S',
+    });
+    return { ...ctx, student };
+}
+
+async function connectStudentForPrograms(
+    ctx: Awaited<ReturnType<typeof seedStudentForPrograms>>,
+    teacherEmail: string,
+) {
+    const teacher = await ctx.userService.register({
+        email: teacherEmail, password: 'secret123', displayName: teacherEmail,
+    });
+    const inv = await ctx.invitationService.createInvitation(teacher.id, ctx.student.email);
+    await ctx.invitationService.acceptInvitation(inv.id, ctx.student.id, ctx.student.email);
+    return teacher;
+}
+
+test('listForStudent returns empty when no relations', async () => {
+    const { programService, student } = await seedStudentForPrograms();
+    expect(await programService.listForStudent(student.id)).toEqual([]);
+});
+
+test('listForStudent throws NotFoundError for invalid student id', async () => {
+    const { programService } = await seedStudentForPrograms();
+    await expect(programService.listForStudent('missing')).rejects.toThrow();
+});
+
+test('listForStudent returns programs from connected teachers only, sorted created_at DESC', async () => {
+    const ctx = await seedStudentForPrograms();
+    const t1 = await connectStudentForPrograms(ctx, 't1@example.com');
+    const t2 = await ctx.userService.register({
+        email: 't2@example.com', password: 'secret123', displayName: 'T2',
+    });
+    const p1 = await ctx.programService.create(t1.id, { title: 'First' });
+    await new Promise((r) => setTimeout(r, 5));
+    const p2 = await ctx.programService.create(t1.id, { title: 'Second' });
+    await ctx.programService.create(t2.id, { title: 'Unconnected' });
+
+    const list = await ctx.programService.listForStudent(ctx.student.id);
+    expect(list.map((p) => p.id)).toEqual([p2.id, p1.id]);
+});

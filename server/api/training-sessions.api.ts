@@ -13,6 +13,7 @@ const CreateInput = Type.Object({
     summary: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     horseId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
     shareWithTeacherIds: Type.Optional(ShareIds),
+    programId: Type.Optional(Type.String({ minLength: 1 })),
 });
 
 const UpdateInput = Type.Object({
@@ -22,6 +23,30 @@ const UpdateInput = Type.Object({
     summary: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     horseId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
     shareWithTeacherIds: Type.Optional(ShareIds),
+});
+
+const AddExerciseInput = Type.Object({
+    id: Type.String({ minLength: 1 }),
+    exerciseId: Type.String({ minLength: 1 }),
+});
+
+const RemoveExerciseInput = Type.Object({
+    id: Type.String({ minLength: 1 }),
+    exerciseId: Type.String({ minLength: 1 }),
+});
+
+const ListExercisesInput = Type.Object({
+    id: Type.String({ minLength: 1 }),
+});
+
+const AttachProgramInput = Type.Object({
+    id: Type.String({ minLength: 1 }),
+    programId: Type.String({ minLength: 1 }),
+});
+
+const DetachProgramInput = Type.Object({
+    id: Type.String({ minLength: 1 }),
+    programId: Type.String({ minLength: 1 }),
 });
 
 export function createTrainingSessionsApi(svc: TrainingSessionService) {
@@ -73,6 +98,58 @@ export function createTrainingSessionsApi(svc: TrainingSessionService) {
                 const user = requireUser(c);
                 await svc.delete(user.id, input.id);
                 return { ok: true };
+            },
+        },
+        addExercise: {
+            method: 'POST' as const,
+            path: '/training-sessions/:id/exercises',
+            schema: AddExerciseInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof AddExerciseInput>, c: Context) => {
+                const user = requireUser(c);
+                await svc.addExercise(user.id, input.id, input.exerciseId);
+                return svc.listExercises(user.id, input.id);
+            },
+        },
+        removeExercise: {
+            method: 'DELETE' as const,
+            path: '/training-sessions/:id/exercises/:exerciseId',
+            schema: RemoveExerciseInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof RemoveExerciseInput>, c: Context) => {
+                const user = requireUser(c);
+                await svc.removeExercise(user.id, input.id, input.exerciseId);
+                return svc.listExercises(user.id, input.id);
+            },
+        },
+        listExercises: {
+            method: 'GET' as const,
+            path: '/training-sessions/:id/exercises',
+            schema: ListExercisesInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof ListExercisesInput>, c: Context) => {
+                const user = requireUser(c);
+                return svc.listExercises(user.id, input.id);
+            },
+        },
+        attachProgram: {
+            method: 'POST' as const,
+            path: '/training-sessions/:id/programs',
+            schema: AttachProgramInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof AttachProgramInput>, c: Context) => {
+                const user = requireUser(c);
+                return svc.attachProgram(user.id, input.id, input.programId);
+            },
+        },
+        detachProgram: {
+            method: 'DELETE' as const,
+            path: '/training-sessions/:id/programs/:programId',
+            schema: DetachProgramInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof DetachProgramInput>, c: Context) => {
+                const user = requireUser(c);
+                return svc.detachProgram(user.id, input.id, input.programId);
             },
         },
     };

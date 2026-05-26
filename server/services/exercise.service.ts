@@ -114,4 +114,27 @@ export class ExerciseService {
             .execute();
         return rows.map(toExercise);
     }
+
+    /**
+     * Student-visible Exercise catalog: all Exercises owned by Teachers in an
+     * active Relation with the student. Powers the Training Session picker.
+     * Empty when no Relations; NotFoundError only when the student id is invalid.
+     */
+    async listForStudent(studentId: string): Promise<Exercise[]> {
+        const user = await this.db
+            .selectFrom('users')
+            .select('id')
+            .where('id', '=', studentId)
+            .executeTakeFirst();
+        if (!user) throw new NotFoundError('Student not found');
+
+        const rows = await this.db
+            .selectFrom('exercises')
+            .innerJoin('relations', 'relations.teacher_id', 'exercises.teacher_id')
+            .selectAll('exercises')
+            .where('relations.student_id', '=', studentId)
+            .orderBy('exercises.name', 'asc')
+            .execute();
+        return rows.map(toExercise);
+    }
 }

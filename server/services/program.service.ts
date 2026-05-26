@@ -80,6 +80,28 @@ export class ProgramService {
         return rows.map(toProgram);
     }
 
+    /**
+     * Student-visible Program catalog: all Programs owned by Teachers in an
+     * active Relation with the student. Powers the Training Session picker.
+     */
+    async listForStudent(studentId: string): Promise<Program[]> {
+        const user = await this.db
+            .selectFrom('users')
+            .select('id')
+            .where('id', '=', studentId)
+            .executeTakeFirst();
+        if (!user) throw new NotFoundError('Student not found');
+
+        const rows = await this.db
+            .selectFrom('programs')
+            .innerJoin('relations', 'relations.teacher_id', 'programs.teacher_id')
+            .selectAll('programs')
+            .where('relations.student_id', '=', studentId)
+            .orderBy('programs.created_at', 'desc')
+            .execute();
+        return rows.map(toProgram);
+    }
+
     async getForTeacher(teacherId: string, programId: string): Promise<Program | null> {
         const row = await this.db
             .selectFrom('programs')

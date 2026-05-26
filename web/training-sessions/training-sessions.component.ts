@@ -5,7 +5,7 @@ import { s, btn, input } from '../css';
 import { TrainingSessionsService } from './training-sessions.service';
 import { TeachersService } from './teachers.service';
 import { StableService } from '../stable/stable.service';
-import type { Teacher, TrainingSession } from '../api';
+import { api, type Program, type Teacher, type TrainingSession } from '../api';
 
 const tpl = template(`
     <div class="ts" bind="root">
@@ -28,6 +28,10 @@ const tpl = template(`
             <label bind="horseLabel" class="ts__horse-label">
                 <span>Häst (valfri)</span>
                 <div bind="horseSelectHost" class="ts__select-host"></div>
+            </label>
+            <label bind="programLabel" class="ts__program-label">
+                <span>Program (valfritt)</span>
+                <div bind="programSelectHost" class="ts__select-host"></div>
             </label>
 
             <fieldset bind="shareBox" class="ts__share">
@@ -97,6 +101,7 @@ export class TrainingSessionsComponent extends Component {
                 & .ts__select-host .ui-select { display: block; }
 
                 & .ts__horse-label.hidden { display: none; }
+                & .ts__program-label.hidden { display: none; }
             }
 
             & .ts__share {
@@ -214,6 +219,8 @@ export class TrainingSessionsComponent extends Component {
     private durationVal = new Signal('');
     private summaryVal = new Signal('');
     private horseIdVal = new Signal<string>('');
+    private programIdVal = new Signal<string>('');
+    private programCatalog = new Signal<Program[]>([]);
     private editingId = new Signal<string | null>(null);
     /** Teacher ids checked in the share UI. Empty = keep private. */
     private shareIds = new Signal<Set<string>>(new Set());
@@ -223,11 +230,17 @@ export class TrainingSessionsComponent extends Component {
     private horseOptions = new Computed<SelectOption[]>(() =>
         this.stable.items.get().map((h) => ({ value: h.id, label: h.name })),
     );
+    private programOptions = new Computed<SelectOption[]>(() =>
+        this.programCatalog.get().map((p) => ({ value: p.id, label: p.title })),
+    );
 
     onMount(): void {
         void this.sessions.load();
         void this.teachers.load();
         void this.stable.load();
+        void api.programs.listForStudent()
+            .then((list) => this.programCatalog.set(list))
+            .catch(() => this.programCatalog.set([]));
     }
 
     render(): DocumentFragment {
@@ -250,6 +263,11 @@ export class TrainingSessionsComponent extends Component {
                 className: () =>
                     this.stable.items.get().length === 0
                         ? 'ts__horse-label hidden' : 'ts__horse-label',
+            },
+            programLabel: {
+                className: () =>
+                    this.editingId.get() !== null || this.programCatalog.get().length === 0
+                        ? 'ts__program-label hidden' : 'ts__program-label',
             },
             shareBox: {
                 className: () =>
@@ -274,6 +292,7 @@ export class TrainingSessionsComponent extends Component {
                     const durationMin = durationRaw === '' ? null : Number(durationRaw);
                     const summary = this.summaryVal.get().trim() || null;
                     const horseId = this.horseIdVal.get() || null;
+                    const programId = this.programIdVal.get() || undefined;
                     const shareWithTeacherIds = Array.from(this.shareIds.get());
 
                     const editing = this.editingId.get();
@@ -294,6 +313,7 @@ export class TrainingSessionsComponent extends Component {
                             summary,
                             horseId,
                             shareWithTeacherIds,
+                            programId,
                         });
                     }
                     if (ok) this.resetForm();
@@ -329,6 +349,11 @@ export class TrainingSessionsComponent extends Component {
             options: this.horseOptions,
             placeholder: 'Ingen häst',
         });
+        this.spawn(SelectComponent, this.ref(frag, 'programSelectHost'), {
+            value: this.programIdVal,
+            options: this.programOptions,
+            placeholder: 'Inget program',
+        });
 
         const listHost = this.ref(frag, 'list');
         this.$each(listHost, this.sessions.items, (item) => this.renderItem(item), (item) => `${item.id}:${item.updatedAt}`);
@@ -362,6 +387,7 @@ export class TrainingSessionsComponent extends Component {
         this.durationVal.set('');
         this.summaryVal.set('');
         this.horseIdVal.set('');
+        this.programIdVal.set('');
         this.shareIds.set(new Set());
     }
 

@@ -25,6 +25,8 @@ export interface TrainingSession {
     horseId: null | string;
     horseName: null | string;
     sharedWithTeacherIds: string[];
+    exercises: TrainingSessionExerciseRef[];
+    programs: AttachedProgramRef[];
     createdAt: string;
     updatedAt: string;
 }
@@ -37,6 +39,19 @@ export interface ExerciseHistoryEntry {
     sourceProgramTitle: null | string;
     rowNotes: null | string;
     notes: Note[];
+}
+
+export interface TrainingSessionExerciseRef {
+    id: string;
+    exerciseId: string;
+    name: string;
+    sortOrder: number;
+    sourceProgramId: null | string;
+}
+
+export interface AttachedProgramRef {
+    id: string;
+    title: string;
 }
 
 export interface Note {

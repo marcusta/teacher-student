@@ -11,6 +11,8 @@ export interface Database {
     notes: NotesTable;
     training_sessions: TrainingSessionsTable;
     training_session_share: TrainingSessionShareTable;
+    training_session_exercise: TrainingSessionExerciseTable;
+    training_session_program: TrainingSessionProgramTable;
     programs: ProgramsTable;
     program_exercise: ProgramExerciseTable;
     lesson_program: LessonProgramTable;
@@ -53,6 +55,22 @@ export interface TrainingSessionShareTable {
     training_session_id: string;
     teacher_id: string;
     created_at: Generated<string>;
+}
+
+export interface TrainingSessionExerciseTable {
+    id: string;
+    training_session_id: string;
+    exercise_id: string;
+    sort_order: number;
+    notes: string | null;
+    source_program_id: string | null;
+    created_at: Generated<string>;
+}
+
+export interface TrainingSessionProgramTable {
+    training_session_id: string;
+    program_id: string;
+    attached_at: Generated<string>;
 }
 
 /** SCOPE.md: unified Note table. MVP wires only parent_kind='lesson'. */

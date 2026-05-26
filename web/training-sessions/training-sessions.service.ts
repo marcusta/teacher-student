@@ -24,6 +24,7 @@ export class TrainingSessionsService {
         summary?: string | null;
         horseId?: string | null;
         shareWithTeacherIds?: string[];
+        programId?: string;
     }): Promise<boolean> {
         const result = await request(this.loading, this.error, () =>
             api.trainingSessions.create(input),

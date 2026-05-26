@@ -16,7 +16,7 @@ export type { Exercise } from './api/exercises.gen';
 export type { Horse } from './api/horses.gen';
 export type { Lesson, LessonForUser, LessonExerciseRef } from './api/lessons.gen';
 export type { Note } from './api/notes.gen';
-export type { TrainingSession } from './api/training-sessions.gen';
+export type { TrainingSession, TrainingSessionExerciseRef, AttachedProgramRef } from './api/training-sessions.gen';
 export type { Program, ProgramExerciseRef } from './api/programs.gen';
 /** Server reuses RelationService.Student for the teachers endpoint; alias for clarity. */
 export type Teacher = TeacherDto;

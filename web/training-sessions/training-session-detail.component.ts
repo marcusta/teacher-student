@@ -1,9 +1,10 @@
-import { Component, Router, Signal, effect, template } from '@basics/core/client/core';
+import { Component, Computed, Router, Signal, effect, template } from '@basics/core/client/core';
 import { AuthService } from '@basics/core/client/auth';
+import { SelectComponent, type SelectOption } from '@basics/core/client/ui/select';
 import { t } from '../theme';
 import { s, btn, input } from '../css';
 import { NotesService } from '../lessons/notes.service';
-import { api, type TrainingSession } from '../api';
+import { api, type AttachedProgramRef, type Exercise, type Program, type TrainingSession, type TrainingSessionExerciseRef } from '../api';
 
 const tpl = template(`
     <div class="tsd" bind="root">
@@ -19,6 +20,26 @@ const tpl = template(`
                 <dt>Delning</dt><dd bind="sumShare"></dd>
             </dl>
             <div bind="sumSummary" class="tsd__summary-text"></div>
+        </section>
+
+        <section bind="programsSection" class="tsd__programs">
+            <h3>Program</h3>
+            <ul bind="programList" class="tsd__prog-list"></ul>
+            <div bind="programEmpty" class="tsd__prog-empty">Inga program kopplade än.</div>
+            <div bind="programAdd" class="tsd__prog-add">
+                <div bind="programSelectHost" class="tsd__select-host"></div>
+                <button bind="attachProgram" type="button">Koppla program</button>
+            </div>
+        </section>
+
+        <section bind="exercisesSection" class="tsd__exercises">
+            <h3>Övningar</h3>
+            <ul bind="exerciseList" class="tsd__ex-list"></ul>
+            <div bind="exerciseEmpty" class="tsd__ex-empty">Inga övningar kopplade än.</div>
+            <div bind="exerciseAdd" class="tsd__ex-add">
+                <div bind="exerciseSelectHost" class="tsd__select-host"></div>
+                <button bind="addExercise" type="button">Lägg till</button>
+            </div>
         </section>
 
         <section bind="notesSection" class="tsd__notes">
@@ -65,6 +86,8 @@ export class TrainingSessionDetailComponent extends Component {
             & .tsd__missing { display: none; padding: ${s('md')}; color: ${t('error')}; }
             &.missing .tsd__missing { display: block; }
             &.missing .tsd__summary, &.missing .tsd__notes { display: none; }
+            &.missing .tsd__exercises { display: none; }
+            &.missing .tsd__programs { display: none; }
 
             & .tsd__summary {
                 margin-bottom: ${s('xl')};
@@ -85,6 +108,90 @@ export class TrainingSessionDetailComponent extends Component {
                     font-size: 0.875rem;
                 }
                 & .tsd__summary-text.hidden { display: none; }
+            }
+
+            & .tsd__programs {
+                margin-bottom: ${s('xl')};
+                & h3 { margin: 0 0 ${s('sm')}; font-size: 0.9375rem; }
+
+                & .tsd__prog-list {
+                    list-style: none;
+                    margin: 0 0 ${s('sm')};
+                    padding: 0;
+                    display: flex;
+                    flex-direction: column;
+                    gap: ${s('xs')};
+                }
+                & .tsd__prog-item {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: ${s('sm')};
+                    background: ${t('surface')};
+                    border-radius: ${t('radius')};
+                    padding: ${s('sm')} ${s('md')};
+                    font-size: 0.875rem;
+                    & button { ${btn()} padding: ${s('xs')} ${s('sm')}; font-size: 0.8125rem; }
+                }
+                & .tsd__prog-empty {
+                    padding: ${s('md')};
+                    opacity: 0.6;
+                    font-size: 0.875rem;
+                }
+                & .tsd__prog-empty.hidden { display: none; }
+                & .tsd__prog-add {
+                    display: flex;
+                    align-items: center;
+                    gap: ${s('sm')};
+                    flex-wrap: wrap;
+                    & button { ${btn()} }
+                }
+                & .tsd__prog-add.hidden { display: none; }
+                & .tsd__select-host .ui-select { display: block; min-width: 12rem; }
+            }
+
+            & .tsd__exercises {
+                margin-bottom: ${s('xl')};
+                & h3 { margin: 0 0 ${s('sm')}; font-size: 0.9375rem; }
+
+                & .tsd__ex-list {
+                    list-style: none;
+                    margin: 0 0 ${s('sm')};
+                    padding: 0;
+                    display: flex;
+                    flex-direction: column;
+                    gap: ${s('xs')};
+                }
+                & .tsd__ex-item {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    gap: ${s('sm')};
+                    background: ${t('surface')};
+                    border-radius: ${t('radius')};
+                    padding: ${s('sm')} ${s('md')};
+                    font-size: 0.875rem;
+                }
+                & .tsd__ex-actions {
+                    display: flex;
+                    gap: ${s('xs')};
+                    & button { ${btn()} padding: ${s('xs')} ${s('sm')}; font-size: 0.8125rem; }
+                }
+                & .tsd__ex-empty {
+                    padding: ${s('md')};
+                    opacity: 0.6;
+                    font-size: 0.875rem;
+                }
+                & .tsd__ex-empty.hidden { display: none; }
+                & .tsd__ex-add {
+                    display: flex;
+                    align-items: center;
+                    gap: ${s('sm')};
+                    flex-wrap: wrap;
+                    & button { ${btn()} }
+                }
+                & .tsd__ex-add.hidden { display: none; }
+                & .tsd__select-host .ui-select { display: block; min-width: 12rem; }
             }
 
             & .tsd__notes {
@@ -174,6 +281,22 @@ export class TrainingSessionDetailComponent extends Component {
     private editingNoteId = new Signal<string | null>(null);
     private editingBodyVal = new Signal('');
     private editingSharedVal = new Signal(false);
+    private exerciseVal = new Signal('');
+    private programVal = new Signal('');
+    private catalog = new Signal<Exercise[]>([]);
+    private programCatalog = new Signal<Program[]>([]);
+    private exerciseOptions = new Computed<SelectOption[]>(() => {
+        const linked = new Set((this.ts.get()?.exercises ?? []).map((e) => e.exerciseId));
+        return this.catalog.get()
+            .filter((e) => !linked.has(e.id))
+            .map((e) => ({ value: e.id, label: e.name }));
+    });
+    private programOptions = new Computed<SelectOption[]>(() => {
+        const attached = new Set((this.ts.get()?.programs ?? []).map((p) => p.id));
+        return this.programCatalog.get()
+            .filter((p) => !attached.has(p.id))
+            .map((p) => ({ value: p.id, label: p.title }));
+    });
 
     private sessionId(): string {
         return this.router.route.get().split('/')[2] ?? '';
@@ -183,14 +306,35 @@ export class TrainingSessionDetailComponent extends Component {
         return this.ts.get();
     }
 
+    private isOwner(): boolean {
+        const ts = this.ts.get();
+        const me = this.auth.currentUser.get()?.id;
+        return !!(ts && me && ts.studentId === me);
+    }
+
+    private async reloadSession(): Promise<void> {
+        const id = this.sessionId();
+        const ts = await api.trainingSessions.get({ id });
+        this.ts.set(ts);
+    }
+
     onMount(): void {
         const id = this.sessionId();
         void api.trainingSessions.get({ id })
-            .then((ts) => {
+            .then(async (ts) => {
                 this.ts.set(ts);
                 this.found.set(true);
                 this.resolved.set(true);
                 void this.notes.load('training_session', id);
+                const me = this.auth.currentUser.get()?.id;
+                if (me && ts.studentId === me) {
+                    const [exercises, programs] = await Promise.all([
+                        api.exercises.listForStudent(),
+                        api.programs.listForStudent(),
+                    ]);
+                    this.catalog.set(exercises);
+                    this.programCatalog.set(programs);
+                }
             })
             .catch(() => {
                 this.found.set(false);
@@ -233,6 +377,44 @@ export class TrainingSessionDetailComponent extends Component {
                     ? 'tsd__summary-text' : 'tsd__summary-text hidden',
                 textContent: () => this.session()?.summary ?? '',
             },
+            exerciseEmpty: {
+                className: () => (this.session()?.exercises.length ?? 0) === 0
+                    ? 'tsd__ex-empty' : 'tsd__ex-empty hidden',
+            },
+            exerciseAdd: {
+                className: () => this.isOwner() ? 'tsd__ex-add' : 'tsd__ex-add hidden',
+            },
+            programEmpty: {
+                className: () => (this.session()?.programs.length ?? 0) === 0
+                    ? 'tsd__prog-empty' : 'tsd__prog-empty hidden',
+            },
+            programAdd: {
+                className: () => this.isOwner() ? 'tsd__prog-add' : 'tsd__prog-add hidden',
+            },
+            attachProgram: {
+                onclick: async () => {
+                    const programId = this.programVal.get();
+                    if (!programId) return;
+                    const id = this.sessionId();
+                    const result = await api.trainingSessions.attachProgram({ id, programId });
+                    if (result) {
+                        this.programVal.set('');
+                        this.ts.set(result);
+                    }
+                },
+            },
+            addExercise: {
+                onclick: async () => {
+                    const exerciseId = this.exerciseVal.get();
+                    if (!exerciseId) return;
+                    const id = this.sessionId();
+                    const result = await api.trainingSessions.addExercise({ id, exerciseId });
+                    if (result) {
+                        this.exerciseVal.set('');
+                        await this.reloadSession();
+                    }
+                },
+            },
             noteBody: {
                 value: () => this.noteBodyVal.get(),
                 oninput: (e: Event) => this.noteBodyVal.set((e.target as HTMLTextAreaElement).value),
@@ -263,6 +445,48 @@ export class TrainingSessionDetailComponent extends Component {
             noteError: { textContent: () => this.notes.error.get()?.message ?? '' },
             noteSharedLabel: { textContent: () => this.sharedLabel() },
         });
+
+        this.spawn(SelectComponent, this.ref(frag, 'programSelectHost'), {
+            value: this.programVal,
+            options: this.programOptions,
+            placeholder: '(välj program)',
+        });
+        this.track(effect(() => {
+            const opts = this.programOptions.get();
+            const current = this.programVal.get();
+            if (current && !opts.some((o) => o.value === current)) {
+                this.programVal.set('');
+            }
+        }));
+
+        this.spawn(SelectComponent, this.ref(frag, 'exerciseSelectHost'), {
+            value: this.exerciseVal,
+            options: this.exerciseOptions,
+            placeholder: '(välj övning)',
+        });
+        this.track(effect(() => {
+            const opts = this.exerciseOptions.get();
+            const current = this.exerciseVal.get();
+            if (current && !opts.some((o) => o.value === current)) {
+                this.exerciseVal.set('');
+            }
+        }));
+
+        const exHost = this.ref(frag, 'exerciseList');
+        this.$each(
+            exHost,
+            new Computed(() => this.ts.get()?.exercises ?? []),
+            (ex) => this.renderExercise(ex),
+            (ex) => `${ex.id}:${ex.sortOrder}:${ex.sourceProgramId ?? ''}`,
+        );
+
+        const progHost = this.ref(frag, 'programList');
+        this.$each(
+            progHost,
+            new Computed(() => this.ts.get()?.programs ?? []),
+            (p) => this.renderProgram(p),
+            (p) => p.id,
+        );
 
         const noteHost = this.ref(frag, 'noteList');
         this.track(effect(() => {
@@ -357,5 +581,48 @@ export class TrainingSessionDetailComponent extends Component {
         }));
 
         return frag;
+    }
+
+    private renderExercise(ex: TrainingSessionExerciseRef): HTMLElement {
+        const li = document.createElement('li');
+        li.className = 'tsd__ex-item';
+        const label = document.createElement('span');
+        label.textContent = ex.name;
+        li.appendChild(label);
+        if (this.isOwner()) {
+            const actions = document.createElement('div');
+            actions.className = 'tsd__ex-actions';
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.textContent = 'Ta bort';
+            remove.onclick = async () => {
+                const id = this.sessionId();
+                await api.trainingSessions.removeExercise({ id, exerciseId: ex.exerciseId });
+                await this.reloadSession();
+            };
+            actions.appendChild(remove);
+            li.appendChild(actions);
+        }
+        return li;
+    }
+
+    private renderProgram(p: AttachedProgramRef): HTMLElement {
+        const li = document.createElement('li');
+        li.className = 'tsd__prog-item';
+        const label = document.createElement('span');
+        label.textContent = p.title;
+        li.appendChild(label);
+        if (this.isOwner()) {
+            const detach = document.createElement('button');
+            detach.type = 'button';
+            detach.textContent = 'Koppla loss';
+            detach.onclick = async () => {
+                const id = this.sessionId();
+                const result = await api.trainingSessions.detachProgram({ id, programId: p.id });
+                if (result) this.ts.set(result);
+            };
+            li.appendChild(detach);
+        }
+        return li;
     }
 }

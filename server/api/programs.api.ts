@@ -51,6 +51,15 @@ export function createProgramsApi(svc: ProgramService) {
                 return svc.listForTeacher(user.id);
             },
         },
+        listForStudent: {
+            method: 'GET' as const,
+            path: '/programs/for-student',
+            middleware: [requireAuth()],
+            fn: async (c: Context) => {
+                const user = requireUser(c);
+                return svc.listForStudent(user.id);
+            },
+        },
         get: {
             method: 'GET' as const,
             path: '/programs/:id',

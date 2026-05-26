@@ -122,3 +122,46 @@ test('delete on missing exercise throws NotFoundError', async () => {
     const { exerciseService, teacher } = await seedTeacher();
     await expect(exerciseService.delete(teacher.id, 'missing')).rejects.toThrow();
 });
+
+// --- listForStudent (student-visible catalog from connected Teachers) ---
+
+async function seedStudent() {
+    const ctx = await createTestDb();
+    const student = await ctx.userService.register({
+        email: 'student@example.com', password: 'secret123', displayName: 'S',
+    });
+    return { ...ctx, student };
+}
+
+async function connectStudent(ctx: Awaited<ReturnType<typeof seedStudent>>, teacherEmail: string) {
+    const teacher = await ctx.userService.register({
+        email: teacherEmail, password: 'secret123', displayName: teacherEmail,
+    });
+    const inv = await ctx.invitationService.createInvitation(teacher.id, ctx.student.email);
+    await ctx.invitationService.acceptInvitation(inv.id, ctx.student.id, ctx.student.email);
+    return teacher;
+}
+
+test('listForStudent returns empty when no relations', async () => {
+    const { exerciseService, student } = await seedStudent();
+    expect(await exerciseService.listForStudent(student.id)).toEqual([]);
+});
+
+test('listForStudent throws NotFoundError for invalid student id', async () => {
+    const { exerciseService } = await seedStudent();
+    await expect(exerciseService.listForStudent('missing')).rejects.toThrow();
+});
+
+test('listForStudent returns exercises from connected teachers only, sorted by name', async () => {
+    const ctx = await seedStudent();
+    const t1 = await connectStudent(ctx, 't1@example.com');
+    const t2 = await ctx.userService.register({
+        email: 't2@example.com', password: 'secret123', displayName: 'T2',
+    });
+    const exBravo = await ctx.exerciseService.create(t1.id, { name: 'Bravo' });
+    const exAlpha = await ctx.exerciseService.create(t1.id, { name: 'Alpha' });
+    await ctx.exerciseService.create(t2.id, { name: 'Unconnected teacher exercise' });
+
+    const list = await ctx.exerciseService.listForStudent(ctx.student.id);
+    expect(list.map((e) => e.id)).toEqual([exAlpha.id, exBravo.id]);
+});

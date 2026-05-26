@@ -29,6 +29,7 @@ Canonical terms are English (matches code, DB columns, API). The Swedish column 
 |------|---------|------------|------------------|
 | **Exercise** (`exercise`) | Övning | A reusable instructional unit in a **Teacher**'s **Library**, independent of any student. | Drill, move |
 | **Library** (`exercise library`) | Bibliotek | A **Teacher**'s private collection of **Exercises**. | Catalogue, repertoire |
+| **Student-visible catalog** | Elevkatalog | **Exercises** and **Programs** from all **Teachers** in active **Relations** with a **Student** — read-only picker source for **Training Session** attach. Not the student's own library. | Shared library, student exercises |
 | **Fork** (`fork`, later feature) | Fork | A copy of a shared **Exercise** into another **Teacher**'s **Library**, with tracked provenance. | Clone, branch |
 
 ## Instructional events
@@ -36,7 +37,7 @@ Canonical terms are English (matches code, DB columns, API). The Swedish column 
 | Term | Swedish | Definition | Aliases to avoid |
 |------|---------|------------|------------------|
 | **Lesson** (`lesson`) | Lektion | A planned or completed instructional event between a **Teacher** and a **Student**, optionally tied to a **Horse**, a **Plan**, and a **Program** (routine). Status: `planned`, `completed`, `cancelled`. Carries its own ordered **Exercises** via `lesson_exercise`. | Session, class |
-| **Training Session** (`training_session`) | Träningspass | A practice event for a **Student**, either logged by the student or prescribed by a **Teacher** in a **Relation** with that student. Carries its own ordered **Exercises** via `training_session_exercise`. May reference a **Plan** and a **Program** (routine). | Self-practice, home training |
+| **Training Session** (`training_session`) | Träningspass | A practice event for a **Student**, either logged by the student or prescribed by a **Teacher** in a **Relation** with that student. Carries its own ordered **Exercises** via `training_session_exercise` and attached **Programs** via `training_session_program`. May reference a **Plan**. | Self-practice, home training |
 | **Program** (`program`) | Program / Ridprogram | A **Teacher**'s reusable named sequence of **Exercises** — a routine or "ridprogram". Lives in the teacher's **Library**, independent of any student or date. When attached to a **Lesson** or **Training Session**, its exercises are **snapshot-copied** into that occasion's exercise list; later edits to the Program do not affect past occasions. | Plan, curriculum, umbrella |
 | **Plan** (`plan`) | Plan / Träningsplan | A **Student**'s long-running umbrella for development over weeks or months. Contains **Lessons**, **Training Sessions**, and **Goals** via `plan_id` references. Owned by the student; any **Teacher** in an active **Relation** with the student can contribute their own authored content. Optionally designates one **Primary Teacher**. Status: `active`, `archived`. | Program, course, schedule, curriculum |
 | **Primary Teacher** (`plan.primary_teacher_id`) | Huvudtränare | A soft designation on a **Plan** marking one **Teacher** as the student's main coach for that plan. Must be a teacher in an active **Relation** with the plan owner. In MVP, no elevated permissions — purely a label. | Main coach, head trainer |
@@ -50,7 +51,7 @@ Canonical terms are English (matches code, DB columns, API). The Swedish column 
 | **Question** (`question`) | Fråga | A **Student**'s question about a specific **Exercise**. Status: `open`, `answered`, `closed`. Answers are stored as a **Note** with `parent_kind = exercise_question`. | Query, request |
 | **Goal** (`goal`) | Mål | A **Student**'s long-term objective. Status: `active`, `achieved`, `abandoned`. | Ambition, target |
 | **Exercise history** (`exercise_history`) | Övningshistorik | A read-only chronological view of one **Exercise** as it appeared across a **Student**'s **Lessons**, keyed by `(student_id, exercise_id)`. | Performance log, drill history |
-| **Row notes** (`lesson_exercise.notes`) | Radkommentar | Pre-written instructional text copied onto a **Lesson**'s `lesson_exercise` junction row (from a **Program** snapshot or entered at attach time). Not a **Note**. | Inline notes, exercise comment |
+| **Row notes** (`lesson_exercise.notes`, `training_session_exercise.notes`) | Radkommentar | Pre-written instructional text copied onto a junction row (from a **Program** snapshot or entered at attach time). Not a **Note**. | Inline notes, exercise comment |
 
 ## Media (phase 2)
 
@@ -68,7 +69,7 @@ Canonical terms are English (matches code, DB columns, API). The Swedish column 
 - A **Teacher** owns zero or more **Exercises** in their **Library**.
 - A **Lesson** has exactly one **Teacher**, exactly one **Student**, zero or one **Horse**, zero or one **Plan**, zero or one **Program** (routine).
 - A **Lesson** contains zero or more **Exercises** (ordered, inline).
-- A **Training Session** belongs to exactly one **Student**, has exactly one creator (**User**: the student or a contributing **Teacher**), optionally one **Horse**, optionally one **Plan**, optionally one **Program** (routine).
+- A **Training Session** belongs to exactly one **Student**, has exactly one creator (**User**: the student or a contributing **Teacher**), optionally one **Horse**, optionally one **Plan**, zero or more attached **Programs** (routine).
 - A **Training Session** contains zero or more **Exercises** (ordered, inline).
 - A **Program** (routine) belongs to exactly one **Teacher** and contains one or more **Exercises** (ordered). It is reusable across many **Lessons** and **Training Sessions**.
 - A **Plan** belongs to exactly one **Student**, optionally designates one **Primary Teacher**, and contains zero or more **Lessons**, **Training Sessions**, and **Goals**.
@@ -77,21 +78,17 @@ Canonical terms are English (matches code, DB columns, API). The Swedish column 
 
 ## Example dialogue
 
-> **Dev:** "When a **Teacher** creates a **Lesson** for a **Student** — must they pick a **Horse**?"
+> **Dev:** "When a **Student** logs a **Training Session**, where do the **Exercises** in the picker come from?"
 >
-> **Domain expert:** "No, the **Horse** is optional. In practice the teacher usually wants to record which **Horse** the lesson concerned so they can comment on how it went. Remember a **Student** can own several **Horses**."
+> **Domain expert:** "From the **Student-visible catalog** — every **Exercise** owned by a **Teacher** they're in a **Relation** with. Not the student's own library; students don't author **Exercises**."
 >
-> **Dev:** "And if the teacher adds **Exercises** to the lesson — are those the same **Exercises** that appear in a **Program**?"
+> **Dev:** "Can the **Student** attach a **Program** the same way?"
 >
-> **Domain expert:** "Yes, the same entities from the teacher's **Library**. The difference is that a **Lesson** is a single event with the teacher present, while a **Program** is an umbrella that can hold both scheduled **Lessons** *and* **Exercises** the student does on their own between lessons."
+> **Domain expert:** "Yes — same catalog rule for **Programs**. Attaching snapshot-copies the routine's **Exercises** into `training_session_exercise` with `source_program_id` set. Detaching the **Program** removes only the junction row; the copied **Exercises** stay on the pass."
 >
-> **Dev:** "What if a **Student** practices at home and wants feedback?"
+> **Dev:** "Can a **Teacher** who sees the pass via **share** edit the **Exercises**?"
 >
-> **Domain expert:** "They log a **Training Session**. The teacher can then leave a **Note** with `shared` **Visibility** attached to it. If the student has a specific **Question** about an **Exercise**, they open a **Question** instead, and the teacher's reply is stored as a **Note** linked to that question."
->
-> **Dev:** "Can I see how one **Exercise** evolved for a given **Student** across **Lessons**?"
->
-> **Domain expert:** "Yes — that's **Exercise history** (övningshistorik). Each row is one appearance on a **Lesson**: the date, optional source **Program** label, the **Row notes** copied at attach time, and the per-instance **Note** thread from slice 031. The **Student** sees their own history; a **Teacher** in an active **Relation** sees the same timeline for that student."
+> **Domain expert:** "No — read-only for teachers with share in slices 033–034. Only the owning **Student** adds, removes, attaches, or detaches."
 
 ## Flagged ambiguities
 
@@ -101,4 +98,5 @@ Canonical terms are English (matches code, DB columns, API). The Swedish column 
 - **"User" vs "Teacher" vs "Student"** — **User** is an authentication identity. **Teacher** and **Student** are *roles* a user holds inside a specific **Relation**, not types of user. The same **User** can be both at the same time in different **Relations**.
 - **"Invitation"** refers only to a teacher's request to an email address to establish a **Relation**. Not to be confused with future notifications or calendar invites for lessons.
 - **"Rider" vs "Student"** — slice 032 title says "per Rider"; canonical domain term is **Student** (`student_id`). Use **Student** in code, API, and glossary; "rider" only in informal UI if ever needed.
-- **"notes" overload** — `lesson_exercise.notes` is **Row notes** (static junction text). Polymorphic `notes` rows are **Note** entities with **Visibility**. API field `rowNotes` vs `notes[]` keeps them distinct.
+- **"notes" overload** — `lesson_exercise.notes` and `training_session_exercise.notes` are **Row notes** (static junction text). Polymorphic `notes` rows are **Note** entities with **Visibility**. API field `rowNotes` vs `notes[]` keeps them distinct.
+- **"Student-visible catalog" vs teacher Library** — `listForTeacher` scopes to the caller's own **Library**; `listForStudent` scopes to connected teachers' content for **Training Session** pickers only. Do not reuse `listForTeacher` for student attach flows.

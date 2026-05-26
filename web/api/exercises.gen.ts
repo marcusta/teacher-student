@@ -16,6 +16,7 @@ export interface ExercisesApi {
     get(input: { id: string }): Promise<Exercise>;
     update(input: { name?: string; description?: string; id: string }): Promise<Exercise>;
     delete(input: { id: string }): Promise<{ ok: boolean }>;
+    listForStudent(): Promise<Exercise[]>;
 }
 
 export function createExercisesClient(baseUrl: string): ExercisesApi {
@@ -43,6 +44,9 @@ export function createExercisesClient(baseUrl: string): ExercisesApi {
         },
         async delete(input) {
             return apiFetch({ method: 'DELETE', url: `${baseUrl}/exercises/${input.id}` });
+        },
+        async listForStudent() {
+            return apiFetch({ method: 'GET', url: `${baseUrl}/exercises/for-student` });
         },
     };
 }

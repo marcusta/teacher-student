@@ -27,6 +27,7 @@ export interface ProgramsApi {
     addExercise(input: { notes?: string; id: string; exerciseId: string }): Promise<{ ok: boolean }>;
     reorderExercises(input: { id: string; exerciseIds: string[] }): Promise<{ ok: boolean }>;
     removeExercise(input: { id: string; exerciseId: string }): Promise<{ ok: boolean }>;
+    listForStudent(): Promise<Program[]>;
 }
 
 export function createProgramsClient(baseUrl: string): ProgramsApi {
@@ -79,6 +80,9 @@ export function createProgramsClient(baseUrl: string): ProgramsApi {
         },
         async removeExercise(input) {
             return apiFetch({ method: 'DELETE', url: `${baseUrl}/programs/${input.id}/exercises/${input.exerciseId}` });
+        },
+        async listForStudent() {
+            return apiFetch({ method: 'GET', url: `${baseUrl}/programs/for-student` });
         },
     };
 }
