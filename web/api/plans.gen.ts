@@ -5,6 +5,7 @@ export interface Plan {
     id: string;
     studentId: string;
     primaryTeacherId: null | string;
+    primaryTeacherDisplayName: null | string;
     title: string;
     description: null | string;
     startDate: null | string;
@@ -20,6 +21,7 @@ export interface PlanDetail {
     id: string;
     studentId: string;
     primaryTeacherId: null | string;
+    primaryTeacherDisplayName: null | string;
     title: string;
     description: null | string;
     startDate: null | string;

@@ -178,6 +178,17 @@ test('listForStudentAsTeacher returns connected student\'s active plans only', a
     expect(list.map((p) => p.title)).toEqual(['Visible']);
 });
 
+test('listForStudentAsTeacher hydrates primaryTeacherDisplayName', async () => {
+    const { planService, teacher, student } = await seedTeacherWithStudent();
+    await planService.create(student.id, { title: 'With teacher', primaryTeacherId: teacher.id });
+    await planService.create(student.id, { title: 'Without teacher' });
+
+    const list = await planService.listForStudentAsTeacher(teacher.id, student.id);
+    const byTitle = Object.fromEntries(list.map((p) => [p.title, p]));
+    expect(byTitle['With teacher'].primaryTeacherDisplayName).toBe('T');
+    expect(byTitle['Without teacher'].primaryTeacherDisplayName).toBeNull();
+});
+
 test('listForStudentAsTeacher throws NotFoundError when no Relation exists', async () => {
     const { planService, userService, teacher } = await seedTeacherWithStudent();
     const stranger = await userService.register({

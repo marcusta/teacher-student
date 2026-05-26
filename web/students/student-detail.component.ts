@@ -2,7 +2,7 @@ import { Component, Router, Signal, template } from '@basics/core/client/core';
 import { t } from '../theme';
 import { s } from '../css';
 import { StudentsService } from './students.service';
-import type { Student, Horse, TrainingSession } from '../api';
+import type { Student, Horse, TrainingSession, Plan } from '../api';
 
 const tpl = template(`
     <div class="student-detail" bind="root">
@@ -14,6 +14,11 @@ const tpl = template(`
             <h3>Hästar</h3>
             <div bind="horsesEmpty" class="student-detail__empty">Inga hästar.</div>
             <ul bind="horsesList" class="student-detail__horses"></ul>
+        </section>
+        <section class="student-detail__section">
+            <h3>Träningsplaner</h3>
+            <div bind="plansEmpty" class="student-detail__empty">Inga träningsplaner.</div>
+            <ul bind="plansList" class="student-detail__horses"></ul>
         </section>
         <section class="student-detail__section">
             <h3>Träningspass</h3>
@@ -98,6 +103,7 @@ export class StudentDetailComponent extends Component {
     private resolved = new Signal(false);
     private horses = new Signal<Horse[]>([]);
     private trainingSessions = new Signal<TrainingSession[]>([]);
+    private plans = new Signal<Plan[]>([]);
 
     onMount(): void {
         const id = this.router.route.get().split('/')[2] ?? '';
@@ -110,6 +116,9 @@ export class StudentDetailComponent extends Component {
                 });
                 void this.svc.listTrainingSessions(id).then((list) => {
                     if (list) this.trainingSessions.set(list);
+                });
+                void this.svc.listPlans(id).then((list) => {
+                    if (list) this.plans.set(list);
                 });
             }
         });
@@ -132,6 +141,10 @@ export class StudentDetailComponent extends Component {
                 className: () => this.trainingSessions.get().length === 0
                     ? 'student-detail__empty' : 'student-detail__empty hidden',
             },
+            plansEmpty: {
+                className: () => this.plans.get().length === 0
+                    ? 'student-detail__empty' : 'student-detail__empty hidden',
+            },
         });
 
         const listHost = this.ref(frag, 'horsesList');
@@ -140,6 +153,28 @@ export class StudentDetailComponent extends Component {
             li.textContent = h.name;
             return li;
         }, (h) => h.id);
+
+        const plansHost = this.ref(frag, 'plansList');
+        const dateFmt = new Intl.DateTimeFormat('sv-SE', { dateStyle: 'medium' });
+        this.$each(plansHost, this.plans, (p) => {
+            const li = document.createElement('li');
+            const link = document.createElement('a');
+            const path = `/planer/${p.id}`;
+            link.href = path;
+            link.onclick = (e) => { e.preventDefault(); this.router.navigate(path); };
+            const bits = [p.title];
+            if (p.startDate || p.endDate) {
+                const s = p.startDate ? dateFmt.format(new Date(p.startDate)) : '?';
+                const e = p.endDate ? dateFmt.format(new Date(p.endDate)) : '?';
+                bits.push(`${s} – ${e}`);
+            }
+            if (p.primaryTeacherDisplayName) bits.push(p.primaryTeacherDisplayName);
+            link.textContent = bits.join(' · ');
+            link.style.color = 'inherit';
+            link.style.textDecoration = 'none';
+            li.appendChild(link);
+            return li;
+        }, (p) => `${p.id}:${p.title}:${p.startDate ?? ''}:${p.endDate ?? ''}:${p.primaryTeacherDisplayName ?? ''}`);
 
         const tsHost = this.ref(frag, 'tsList');
         const fmt = new Intl.DateTimeFormat('sv-SE', { dateStyle: 'medium', timeStyle: 'short' });

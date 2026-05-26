@@ -6,6 +6,7 @@ export interface Plan {
     id: string;
     studentId: string;
     primaryTeacherId: string | null;
+    primaryTeacherDisplayName: string | null;
     title: string;
     description: string | null;
     startDate: string | null;
@@ -52,11 +53,12 @@ export interface PlanDetail extends Plan {
     trainingSessions: LinkedTrainingSessionRef[];
 }
 
-function toPlan(row: Selectable<PlansTable>): Plan {
+function toPlan(row: Selectable<PlansTable>, primaryTeacherDisplayName: string | null = null): Plan {
     return {
         id: row.id,
         studentId: row.student_id,
         primaryTeacherId: row.primary_teacher_id,
+        primaryTeacherDisplayName,
         title: row.title,
         description: row.description,
         startDate: row.start_date,
@@ -103,6 +105,7 @@ export class PlanService {
             id,
             studentId,
             primaryTeacherId: input.primaryTeacherId ?? null,
+            primaryTeacherDisplayName: null,
             title,
             description: input.description?.trim() ?? null,
             startDate: input.startDate ?? null,
@@ -125,7 +128,7 @@ export class PlanService {
             .orderBy('status', 'asc')
             .orderBy('created_at', 'desc')
             .execute();
-        return rows.map(toPlan);
+        return rows.map((r) => toPlan(r));
     }
 
     async getForStudent(studentId: string, planId: string): Promise<Plan> {
@@ -289,12 +292,18 @@ export class PlanService {
 
         const rows = await this.db
             .selectFrom('plans')
-            .selectAll()
-            .where('student_id', '=', studentId)
-            .where('status', '=', 'active')
-            .orderBy('created_at', 'desc')
+            .leftJoin('users as primary_teacher', 'primary_teacher.id', 'plans.primary_teacher_id')
+            .select([
+                'plans.id', 'plans.student_id', 'plans.primary_teacher_id',
+                'plans.title', 'plans.description', 'plans.start_date', 'plans.end_date',
+                'plans.status', 'plans.created_at', 'plans.updated_at',
+                'primary_teacher.display_name as primary_teacher_display_name',
+            ])
+            .where('plans.student_id', '=', studentId)
+            .where('plans.status', '=', 'active')
+            .orderBy('plans.created_at', 'desc')
             .execute();
-        return rows.map(toPlan);
+        return rows.map((r) => toPlan(r, r.primary_teacher_display_name));
     }
 
     /**
