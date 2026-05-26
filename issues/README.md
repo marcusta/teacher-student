@@ -57,3 +57,12 @@ Efter 004 är hela `User ↔ Relation`-grafen på plats. Då kan följande featu
 | [030](030-multiple-programs-per-lesson.md) | Multiple Programs per Lesson via `lesson_program` junction | AFK | 029 |
 | [031](031-notes-on-lesson-exercise.md) | Notes on a `lesson_exercise` row | AFK | 029, 017 |
 | [032](032-exercise-history-per-rider.md) | Exercise history for a Student ("Övningshistorik") | AFK | 031 |
+
+### Group C — Program + Exercise on Training Session (Lesson parity)
+
+| # | Titel | Type | Blocked by |
+|---|-------|------|------------|
+| [033](033-training-session-exercises.md) | `training_session_exercise` junction | AFK | — |
+| [034](034-training-session-programs.md) | Multiple Programs per Training Session | AFK | 033 |
+
+Handoff for implementers: [HANDOFF-033-034.md](HANDOFF-033-034.md)
