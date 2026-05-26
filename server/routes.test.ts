@@ -714,9 +714,59 @@ test('POST /api/lessons with programId snapshots exercises and surfaces programT
         teacherCookie);
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.programId).toBe(program.id);
-    expect(body.programTitle).toBe('Uppvärmning');
+    expect(body.programs).toEqual([{ id: program.id, title: 'Uppvärmning' }]);
     expect(body.exercises.map((e: { name: string }) => e.name)).toEqual(['A', 'B']);
+});
+
+test('POST /api/lessons/:id/programs attaches a Program and appends its exercises', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const ex1 = await (await req(app, 'POST', '/api/exercises', { name: 'A' }, teacherCookie)).json();
+    const program = await (await req(app, 'POST', '/api/programs',
+        { title: 'P' }, teacherCookie)).json();
+    await req(app, 'POST', `/api/programs/${program.id}/exercises`,
+        { exerciseId: ex1.id }, teacherCookie);
+    const lesson = await (await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: '2026-06-01T10:00:00.000Z' }, teacherCookie)).json();
+
+    const res = await req(app, 'POST', `/api/lessons/${lesson.id}/programs`,
+        { programId: program.id }, teacherCookie);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.programs).toEqual([{ id: program.id, title: 'P' }]);
+    expect(body.exercises.map((e: { name: string }) => e.name)).toEqual(['A']);
+});
+
+test('POST /api/lessons/:id/programs on stranger lesson returns 404', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const otherCookie = await registerAndLogin(app, 'o@example.com', 'secret123', 'O');
+    const lesson = await (await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: '2026-06-01T10:00:00.000Z' }, teacherCookie)).json();
+    const otherProgram = await (await req(app, 'POST', '/api/programs',
+        { title: 'X' }, otherCookie)).json();
+    const res = await req(app, 'POST', `/api/lessons/${lesson.id}/programs`,
+        { programId: otherProgram.id }, otherCookie);
+    expect(res.status).toBe(404);
+});
+
+test('DELETE /api/lessons/:id/programs/:programId detaches the Program', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const program = await (await req(app, 'POST', '/api/programs',
+        { title: 'P' }, teacherCookie)).json();
+    const lesson = await (await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: '2026-06-01T10:00:00.000Z', programId: program.id },
+        teacherCookie)).json();
+
+    const res = await req(app, 'DELETE',
+        `/api/lessons/${lesson.id}/programs/${program.id}`, undefined, teacherCookie);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.programs).toEqual([]);
 });
 
 test('POST /api/lessons with foreign programId returns 404', async () => {

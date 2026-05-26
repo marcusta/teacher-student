@@ -67,6 +67,24 @@ export class LessonsService {
         return result;
     }
 
+    async attachProgram(lessonId: string, programId: string): Promise<Lesson | null> {
+        const result = await request(this.loading, this.error, () =>
+            api.lessons.attachProgram({ id: lessonId, programId }),
+        );
+        if (!result) return null;
+        await this.load();
+        return result;
+    }
+
+    async detachProgram(lessonId: string, programId: string): Promise<Lesson | null> {
+        const result = await request(this.loading, this.error, () =>
+            api.lessons.detachProgram({ id: lessonId, programId }),
+        );
+        if (!result) return null;
+        await this.load();
+        return result;
+    }
+
     async transition(id: string, target: 'completed' | 'cancelled'): Promise<Lesson | null> {
         const result = await request(this.loading, this.error, () =>
             api.lessons.transition({ id, target }),

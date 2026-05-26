@@ -443,8 +443,8 @@ test('create with programId snapshot-copies program exercises in order', async (
         scheduledAt: '2026-06-01T10:00:00.000Z',
         programId: ctx.program.id,
     });
-    expect(lesson.programId).toBe(ctx.program.id);
-    expect(lesson.programTitle).toBe('Uppvärmning');
+    expect(lesson.programs.map((p) => p.id)).toEqual([ctx.program.id]);
+    expect(lesson.programs.map((p) => p.title)).toEqual(['Uppvärmning']);
     expect(lesson.exercises.map((e) => e.name)).toEqual(['Skritt', 'Trav', 'Galopp']);
 });
 
@@ -479,8 +479,7 @@ test('create without programId leaves programId null and exercises empty', async
         studentId: ctx.student.id,
         scheduledAt: '2026-06-01T10:00:00.000Z',
     });
-    expect(lesson.programId).toBeNull();
-    expect(lesson.programTitle).toBeNull();
+    expect(lesson.programs).toEqual([]);
     expect(lesson.exercises).toEqual([]);
 });
 
@@ -501,7 +500,7 @@ test('snapshot is independent of later Program edits', async () => {
     expect(fresh.exercises.map((e) => e.name)).toEqual(['Skritt', 'Trav', 'Galopp']);
 });
 
-test('listForTeacher surfaces programId and programTitle', async () => {
+test('listForTeacher surfaces attached programs', async () => {
     const ctx = await seedConnectedWithProgram();
     await ctx.lessonService.create(ctx.teacher.id, {
         studentId: ctx.student.id,
@@ -509,11 +508,10 @@ test('listForTeacher surfaces programId and programTitle', async () => {
         programId: ctx.program.id,
     });
     const list = await ctx.lessonService.listForTeacher(ctx.teacher.id);
-    expect(list[0].programId).toBe(ctx.program.id);
-    expect(list[0].programTitle).toBe('Uppvärmning');
+    expect(list[0].programs).toEqual([{ id: ctx.program.id, title: 'Uppvärmning' }]);
 });
 
-test('listForUser on student side surfaces programId and programTitle', async () => {
+test('listForUser on student side surfaces attached programs', async () => {
     const ctx = await seedConnectedWithProgram();
     await ctx.lessonService.create(ctx.teacher.id, {
         studentId: ctx.student.id,
@@ -521,8 +519,7 @@ test('listForUser on student side surfaces programId and programTitle', async ()
         programId: ctx.program.id,
     });
     const list = await ctx.lessonService.listForUser(ctx.student.id);
-    expect(list[0].programId).toBe(ctx.program.id);
-    expect(list[0].programTitle).toBe('Uppvärmning');
+    expect(list[0].programs).toEqual([{ id: ctx.program.id, title: 'Uppvärmning' }]);
 });
 
 test('create with programId fills source_program_id on every snapshot row', async () => {
@@ -593,4 +590,124 @@ test('create with programId copies notes and sort_order verbatim into lesson_exe
         { exercise_id: ctx.ex2.id, sort_order: 1, notes: null },
         { exercise_id: ctx.ex3.id, sort_order: 2, notes: 'sista' },
     ]);
+});
+
+test('attachProgram on empty lesson appends all program exercises in order', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    const updated = await ctx.lessonService.attachProgram(ctx.teacher.id, lesson.id, ctx.program.id);
+    expect(updated.programs).toEqual([{ id: ctx.program.id, title: 'Uppvärmning' }]);
+    expect(updated.exercises.map((e) => e.name)).toEqual(['Skritt', 'Trav', 'Galopp']);
+    for (const e of updated.exercises) {
+        expect(e.sourceProgramId).toBe(ctx.program.id);
+    }
+});
+
+test('attachProgram appends only non-duplicate exercises, preserving existing rows', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    // Free-add ex2 first so it's already on the lesson before attach.
+    await ctx.lessonService.addExercise(ctx.teacher.id, lesson.id, ctx.ex2.id);
+    const updated = await ctx.lessonService.attachProgram(ctx.teacher.id, lesson.id, ctx.program.id);
+    // ex2 remains free (source null); ex1 and ex3 get appended with source set.
+    const byId = new Map(updated.exercises.map((e) => [e.exerciseId, e]));
+    expect(byId.get(ctx.ex2.id)!.sourceProgramId).toBeNull();
+    expect(byId.get(ctx.ex1.id)!.sourceProgramId).toBe(ctx.program.id);
+    expect(byId.get(ctx.ex3.id)!.sourceProgramId).toBe(ctx.program.id);
+    expect(updated.exercises.length).toBe(3);
+});
+
+test('attachProgram is idempotent: re-attaching the same program is a no-op', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    });
+    const again = await ctx.lessonService.attachProgram(ctx.teacher.id, lesson.id, ctx.program.id);
+    expect(again.programs.length).toBe(1);
+    expect(again.exercises.length).toBe(3);
+    const junctionRows = await ctx.db.selectFrom('lesson_program')
+        .selectAll().where('lesson_id', '=', lesson.id).execute();
+    expect(junctionRows.length).toBe(1);
+});
+
+test('attachProgram supports multiple distinct programs on one lesson', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    });
+    const p2 = await ctx.programService.create(ctx.teacher.id, { title: 'Stretch' });
+    const exX = await ctx.exerciseService.create(ctx.teacher.id, { name: 'Box' });
+    await ctx.programService.addExercise(ctx.teacher.id, p2.id, exX.id);
+    const updated = await ctx.lessonService.attachProgram(ctx.teacher.id, lesson.id, p2.id);
+    expect(updated.programs.map((p) => p.title)).toEqual(['Uppvärmning', 'Stretch']);
+    expect(updated.exercises.map((e) => e.name)).toEqual(['Skritt', 'Trav', 'Galopp', 'Box']);
+});
+
+test('attachProgram on stranger lesson throws NotFoundError', async () => {
+    const { NotFoundError } = await import('@basics/core/server/auth');
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    const t2 = await ctx.userService.register({
+        email: 't2@example.com', password: 'secret123', displayName: 'T2',
+    });
+    await expect(ctx.lessonService.attachProgram(t2.id, lesson.id, ctx.program.id))
+        .rejects.toBeInstanceOf(NotFoundError);
+});
+
+test('attachProgram with foreign-owned program throws NotFoundError', async () => {
+    const { NotFoundError } = await import('@basics/core/server/auth');
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    const t2 = await ctx.userService.register({
+        email: 't2@example.com', password: 'secret123', displayName: 'T2',
+    });
+    const p2 = await ctx.programService.create(t2.id, { title: 'Other' });
+    await expect(ctx.lessonService.attachProgram(ctx.teacher.id, lesson.id, p2.id))
+        .rejects.toBeInstanceOf(NotFoundError);
+});
+
+test('detachProgram removes junction row but preserves snapshot exercises', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    });
+    const updated = await ctx.lessonService.detachProgram(ctx.teacher.id, lesson.id, ctx.program.id);
+    expect(updated.programs).toEqual([]);
+    // Exercises stick around (with sourceProgramId still set — history).
+    expect(updated.exercises.length).toBe(3);
+    expect(updated.exercises.every((e) => e.sourceProgramId === ctx.program.id)).toBe(true);
+});
+
+test('detachProgram is idempotent when program is not attached', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    const updated = await ctx.lessonService.detachProgram(ctx.teacher.id, lesson.id, ctx.program.id);
+    expect(updated.programs).toEqual([]);
+});
+
+test('detachProgram on stranger lesson throws NotFoundError', async () => {
+    const { NotFoundError } = await import('@basics/core/server/auth');
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    });
+    const t2 = await ctx.userService.register({
+        email: 't2@example.com', password: 'secret123', displayName: 'T2',
+    });
+    await expect(ctx.lessonService.detachProgram(t2.id, lesson.id, ctx.program.id))
+        .rejects.toBeInstanceOf(NotFoundError);
 });

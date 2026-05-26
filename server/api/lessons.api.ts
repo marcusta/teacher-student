@@ -31,6 +31,16 @@ const TransitionInput = Type.Object({
     target: Type.Union([Type.Literal('completed'), Type.Literal('cancelled')]),
 });
 
+const AttachProgramInput = Type.Object({
+    id: Type.String({ minLength: 1 }),
+    programId: Type.String({ minLength: 1 }),
+});
+
+const DetachProgramInput = Type.Object({
+    id: Type.String({ minLength: 1 }),
+    programId: Type.String({ minLength: 1 }),
+});
+
 const UpdateInput = Type.Object({
     id: Type.String({ minLength: 1 }),
     horseId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
@@ -98,6 +108,26 @@ export function createLessonsApi(svc: LessonService) {
             fn: async (input: Static<typeof TransitionInput>, c: Context) => {
                 const user = requireUser(c);
                 return svc.transition(user.id, input.id, input.target);
+            },
+        },
+        attachProgram: {
+            method: 'POST' as const,
+            path: '/lessons/:id/programs',
+            schema: AttachProgramInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof AttachProgramInput>, c: Context) => {
+                const user = requireUser(c);
+                return svc.attachProgram(user.id, input.id, input.programId);
+            },
+        },
+        detachProgram: {
+            method: 'DELETE' as const,
+            path: '/lessons/:id/programs/:programId',
+            schema: DetachProgramInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof DetachProgramInput>, c: Context) => {
+                const user = requireUser(c);
+                return svc.detachProgram(user.id, input.id, input.programId);
             },
         },
         update: {

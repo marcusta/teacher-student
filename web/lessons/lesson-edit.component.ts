@@ -6,6 +6,7 @@ import { s, btn, input } from '../css';
 import { api, type Exercise, type Horse } from '../api';
 import { LessonsService } from './lessons.service';
 import { NotesService } from './notes.service';
+import { ProgramsService } from '../programs/programs.service';
 
 const tpl = template(`
     <div class="lesson-edit" bind="root">
@@ -20,6 +21,8 @@ const tpl = template(`
                 <dt>Häst</dt><dd bind="sumHorse"></dd>
                 <dt>Status</dt><dd bind="sumStatus"></dd>
             </dl>
+            <div bind="sumProgLabel" class="lesson-edit__summary-ex-label">Program</div>
+            <ul bind="sumProgList" class="lesson-edit__summary-ex-list"></ul>
             <div bind="sumExLabel" class="lesson-edit__summary-ex-label">Övningar</div>
             <ul bind="sumExList" class="lesson-edit__summary-ex-list"></ul>
         </section>
@@ -40,6 +43,16 @@ const tpl = template(`
                 <div class="error" bind="error"></div>
             </div>
         </form>
+
+        <section bind="programsSection" class="lesson-edit__programs">
+            <h3>Program</h3>
+            <ul bind="programList" class="lesson-edit__prog-list"></ul>
+            <div bind="programEmpty" class="lesson-edit__prog-empty">Inga program kopplade än.</div>
+            <div class="lesson-edit__prog-add">
+                <div bind="programSelectHost" class="lesson-edit__select-host"></div>
+                <button bind="attachProgram" type="button">Koppla program</button>
+            </div>
+        </section>
 
         <section bind="exercisesSection" class="lesson-edit__exercises">
             <h3>Övningar</h3>
@@ -147,6 +160,55 @@ export class LessonEditComponent extends Component {
             &.missing .lesson-edit__missing { display: block; }
             &.missing .lesson-edit__form { display: none; }
             &.missing .lesson-edit__exercises { display: none; }
+            &.missing .lesson-edit__programs { display: none; }
+            &.student .lesson-edit__programs { display: none; }
+
+            & .lesson-edit__programs {
+                margin-top: ${s('xl')};
+                & h3 { margin: 0 0 ${s('sm')}; font-size: 1rem; }
+            }
+            & .lesson-edit__prog-list {
+                list-style: none;
+                margin: 0 0 ${s('sm')};
+                padding: 0;
+                display: flex;
+                flex-direction: column;
+                gap: ${s('xs')};
+            }
+            & .lesson-edit__prog-item {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: ${s('sm')};
+                padding: ${s('xs')} ${s('sm')};
+                background: ${t('surface')};
+                border-radius: ${t('radius')};
+                font-size: 0.875rem;
+                & button {
+                    background: transparent;
+                    border: none;
+                    color: ${t('error')};
+                    cursor: pointer;
+                    font-size: 0.8125rem;
+                    &:hover { text-decoration: underline; }
+                }
+            }
+            & .lesson-edit__prog-empty {
+                padding: ${s('sm')};
+                opacity: 0.6;
+                font-size: 0.875rem;
+            }
+            & .lesson-edit__prog-empty.hidden { display: none; }
+            & .lesson-edit__prog-add {
+                display: flex;
+                gap: ${s('sm')};
+                align-items: center;
+                & .lesson-edit__select-host {
+                    flex: 1;
+                    & .ui-select { display: block; }
+                }
+                & button { ${btn()} }
+            }
             &.missing .lesson-edit__summary { display: none; }
             &.missing .lesson-edit__notes { display: none; }
 
@@ -346,6 +408,8 @@ export class LessonEditComponent extends Component {
     private router = this.inject(Router);
     private svc = this.inject(LessonsService);
     private notes = this.inject(NotesService);
+    private programs = this.inject(ProgramsService);
+    private programVal = new Signal('');
     private horseVal = new Signal('');
     private whenVal = new Signal('');
     private horses = new Signal<Horse[]>([]);
@@ -363,6 +427,12 @@ export class LessonEditComponent extends Component {
     private horseOptions = new Computed<SelectOption[]>(() =>
         this.horses.get().map((h) => ({ value: h.id, label: h.name })),
     );
+    private programOptions = new Computed<SelectOption[]>(() => {
+        const attached = new Set(this.currentPrograms().map((p) => p.id));
+        return this.programs.items.get()
+            .filter((p) => !attached.has(p.id))
+            .map((p) => ({ value: p.id, label: p.title }));
+    });
     private exerciseOptions = new Computed<SelectOption[]>(() => {
         const linked = new Set(this.currentExercises().map((e) => e.exerciseId));
         return this.library.get()
@@ -402,6 +472,7 @@ export class LessonEditComponent extends Component {
             const [horses, library] = await Promise.all([
                 api.students.listHorses({ id: lesson.studentId }),
                 api.exercises.list(),
+                this.programs.load(),
             ]);
             this.horses.set(horses);
             this.library.set(library);
@@ -420,6 +491,10 @@ export class LessonEditComponent extends Component {
 
     private currentExercises() {
         return this.svc.get(this.lessonId())?.exercises ?? [];
+    }
+
+    private currentPrograms() {
+        return this.svc.get(this.lessonId())?.programs ?? [];
     }
 
     private unattachedLibrary(): Exercise[] {
@@ -454,6 +529,11 @@ export class LessonEditComponent extends Component {
             } },
             sumExLabel: {
                 className: () => this.currentExercises().length === 0
+                    ? 'lesson-edit__summary-ex-label hidden'
+                    : 'lesson-edit__summary-ex-label',
+            },
+            sumProgLabel: {
+                className: () => this.currentPrograms().length === 0
                     ? 'lesson-edit__summary-ex-label hidden'
                     : 'lesson-edit__summary-ex-label',
             },
@@ -499,6 +579,18 @@ export class LessonEditComponent extends Component {
                     const id = this.router.route.get().split('/')[2] ?? '';
                     await this.svc.transition(id, 'cancelled');
                 },
+            },
+            attachProgram: {
+                onclick: async () => {
+                    const programId = this.programVal.get();
+                    if (!programId) return;
+                    const result = await this.svc.attachProgram(this.lessonId(), programId);
+                    if (result) this.programVal.set('');
+                },
+            },
+            programEmpty: {
+                className: () => this.currentPrograms().length === 0
+                    ? 'lesson-edit__prog-empty' : 'lesson-edit__prog-empty hidden',
             },
             addExercise: {
                 onclick: async () => {
@@ -567,6 +659,39 @@ export class LessonEditComponent extends Component {
             }
         }));
 
+        // Attached programs list with detach buttons.
+        const progHost = this.ref(frag, 'programList');
+        this.track(effect(() => {
+            progHost.replaceChildren();
+            for (const p of this.currentPrograms()) {
+                const li = document.createElement('li');
+                li.className = 'lesson-edit__prog-item';
+                const label = document.createElement('span');
+                label.textContent = p.title;
+                const remove = document.createElement('button');
+                remove.type = 'button';
+                remove.textContent = 'Koppla loss';
+                remove.onclick = async () => {
+                    await this.svc.detachProgram(this.lessonId(), p.id);
+                };
+                li.append(label, remove);
+                progHost.appendChild(li);
+            }
+        }));
+
+        this.spawn(SelectComponent, this.ref(frag, 'programSelectHost'), {
+            value: this.programVal,
+            options: this.programOptions,
+            placeholder: '(välj program)',
+        });
+        this.track(effect(() => {
+            const opts = this.programOptions.get();
+            const current = this.programVal.get();
+            if (current && !opts.some((o) => o.value === current)) {
+                this.programVal.set('');
+            }
+        }));
+
         // Library dropdown — SelectComponent handles its own reactivity.
         this.spawn(SelectComponent, this.ref(frag, 'exerciseSelectHost'), {
             value: this.exerciseVal,
@@ -588,6 +713,21 @@ export class LessonEditComponent extends Component {
             options: this.horseOptions,
             placeholder: '(ingen häst)',
         });
+
+        // Read-only programs summary (student view).
+        const sumProgHost = this.ref(frag, 'sumProgList');
+        this.track(effect(() => {
+            const items = this.currentPrograms();
+            sumProgHost.replaceChildren();
+            sumProgHost.className = items.length === 0
+                ? 'lesson-edit__summary-ex-list hidden'
+                : 'lesson-edit__summary-ex-list';
+            for (const p of items) {
+                const li = document.createElement('li');
+                li.textContent = p.title;
+                sumProgHost.appendChild(li);
+            }
+        }));
 
         // Read-only exercises summary (student view).
         const sumExHost = this.ref(frag, 'sumExList');

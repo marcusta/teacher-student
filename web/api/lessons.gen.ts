@@ -9,8 +9,7 @@ export interface Lesson {
     status: 'completed' | 'cancelled' | 'planned';
     horseId: null | string;
     horseName: null | string;
-    programId: null | string;
-    programTitle: null | string;
+    programs: AttachedProgramRef[];
     exercises: LessonExerciseRef[];
     createdAt: string;
     updatedAt: string;
@@ -26,8 +25,7 @@ export interface LessonForUser {
     status: 'completed' | 'cancelled' | 'planned';
     horseId: null | string;
     horseName: null | string;
-    programId: null | string;
-    programTitle: null | string;
+    programs: AttachedProgramRef[];
     exercises: LessonExerciseRef[];
     createdAt: string;
     updatedAt: string;
@@ -41,6 +39,11 @@ export interface LessonExerciseRef {
     sourceProgramId: null | string;
 }
 
+export interface AttachedProgramRef {
+    id: string;
+    title: string;
+}
+
 export interface LessonsApi {
     create(input: { programId?: string; studentId: string; scheduledAt: string }): Promise<Lesson>;
     list(): Promise<LessonForUser[]>;
@@ -48,6 +51,8 @@ export interface LessonsApi {
     removeExercise(input: { id: string; exerciseId: string }): Promise<LessonExerciseRef[]>;
     listExercises(input: { id: string }): Promise<LessonExerciseRef[]>;
     transition(input: { id: string; target: 'completed' | 'cancelled' }): Promise<Lesson>;
+    attachProgram(input: { id: string; programId: string }): Promise<Lesson>;
+    detachProgram(input: { id: string; programId: string }): Promise<Lesson>;
     update(input: { horseId?: null | string; scheduledAt?: string; id: string }): Promise<Lesson>;
 }
 
@@ -83,6 +88,16 @@ export function createLessonsClient(baseUrl: string): LessonsApi {
             for (const [k, v] of Object.entries(input as any))
                 if (!pathParams.has(k)) body[k] = v;
             return apiFetch({ method: 'POST', url: `${baseUrl}/lessons/${input.id}/transition`, body });
+        },
+        async attachProgram(input) {
+            const pathParams = new Set(['id']);
+            const body: Record<string, unknown> = {};
+            for (const [k, v] of Object.entries(input as any))
+                if (!pathParams.has(k)) body[k] = v;
+            return apiFetch({ method: 'POST', url: `${baseUrl}/lessons/${input.id}/programs`, body });
+        },
+        async detachProgram(input) {
+            return apiFetch({ method: 'DELETE', url: `${baseUrl}/lessons/${input.id}/programs/${input.programId}` });
         },
         async update(input) {
             const pathParams = new Set(['id']);

@@ -272,10 +272,10 @@ export class LessonsComponent extends Component {
         who.textContent = rolePrefix + item.counterpartyDisplayName + horseSuffix;
         left.appendChild(when);
         left.appendChild(who);
-        if (item.programTitle) {
+        if (item.programs.length > 0) {
             const pr = document.createElement('div');
             pr.className = 'lessons__item-program';
-            pr.textContent = 'Från program: ' + item.programTitle;
+            pr.textContent = 'Från program: ' + item.programs.map((p) => p.title).join(', ');
             left.appendChild(pr);
         }
         if (item.exercises.length > 0) {

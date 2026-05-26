@@ -13,6 +13,11 @@ export interface LessonExerciseRef {
     sourceProgramId: string | null;
 }
 
+export interface AttachedProgramRef {
+    id: string;
+    title: string;
+}
+
 export interface Lesson {
     id: string;
     teacherId: string;
@@ -21,8 +26,7 @@ export interface Lesson {
     status: LessonStatus;
     horseId: string | null;
     horseName: string | null;
-    programId: string | null;
-    programTitle: string | null;
+    programs: AttachedProgramRef[];
     exercises: LessonExerciseRef[];
     createdAt: string;
     updatedAt: string;
@@ -57,13 +61,15 @@ interface LessonRow {
     status: LessonStatus;
     horse_id: string | null;
     horse_name: string | null;
-    program_id: string | null;
-    program_title: string | null;
     created_at: string;
     updated_at: string;
 }
 
-function toLesson(row: LessonRow, exercises: LessonExerciseRef[]): Lesson {
+function toLesson(
+    row: LessonRow,
+    exercises: LessonExerciseRef[],
+    programs: AttachedProgramRef[],
+): Lesson {
     return {
         id: row.id,
         teacherId: row.teacher_id,
@@ -72,8 +78,7 @@ function toLesson(row: LessonRow, exercises: LessonExerciseRef[]): Lesson {
         status: row.status,
         horseId: row.horse_id,
         horseName: row.horse_name,
-        programId: row.program_id,
-        programTitle: row.program_title,
+        programs,
         exercises,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
@@ -95,7 +100,6 @@ const LESSON_COLUMNS = [
     'lessons.scheduled_at as scheduled_at',
     'lessons.status as status',
     'lessons.horse_id as horse_id',
-    'lessons.program_id as program_id',
     'lessons.created_at as created_at',
     'lessons.updated_at as updated_at',
 ] as const;
@@ -150,10 +154,17 @@ export class LessonService {
                 scheduled_at: scheduledAt,
                 status: 'planned',
                 horse_id: null,
-                program_id: program?.id ?? null,
                 created_at: now,
                 updated_at: now,
             }).execute();
+
+            if (program) {
+                await tx.insertInto('lesson_program').values({
+                    lesson_id: id,
+                    program_id: program.id,
+                    attached_at: now,
+                }).execute();
+            }
 
             if (programRows.length > 0) {
                 await tx.insertInto('lesson_exercise').values(programRows.map((r) => ({
@@ -252,13 +263,14 @@ export class LessonService {
         const rows = await this.db
             .selectFrom('lessons')
             .leftJoin('horses', 'horses.id', 'lessons.horse_id')
-            .leftJoin('programs', 'programs.id', 'lessons.program_id')
-            .select([...LESSON_COLUMNS, 'horses.name as horse_name', 'programs.title as program_title'])
+            .select([...LESSON_COLUMNS, 'horses.name as horse_name'])
             .where('lessons.teacher_id', '=', teacherId)
             .orderBy('lessons.scheduled_at', 'asc')
             .execute();
-        const exMap = await this.exercisesByLesson(rows.map((r) => r.id));
-        return rows.map((r) => toLesson(r as LessonRow, exMap.get(r.id) ?? []));
+        const ids = rows.map((r) => r.id);
+        const exMap = await this.exercisesByLesson(ids);
+        const progMap = await this.programsByLesson(ids);
+        return rows.map((r) => toLesson(r as LessonRow, exMap.get(r.id) ?? [], progMap.get(r.id) ?? []));
     }
 
     /**
@@ -273,11 +285,9 @@ export class LessonService {
             .innerJoin('users as teacher', 'teacher.id', 'lessons.teacher_id')
             .innerJoin('users as student', 'student.id', 'lessons.student_id')
             .leftJoin('horses', 'horses.id', 'lessons.horse_id')
-            .leftJoin('programs', 'programs.id', 'lessons.program_id')
             .select([
                 ...LESSON_COLUMNS,
                 'horses.name as horse_name',
-                'programs.title as program_title',
                 'teacher.display_name as teacher_display_name',
                 'student.display_name as student_display_name',
             ])
@@ -288,11 +298,13 @@ export class LessonService {
             .orderBy('lessons.scheduled_at', 'asc')
             .execute();
 
-        const exMap = await this.exercisesByLesson(rows.map((r) => r.id));
+        const ids = rows.map((r) => r.id);
+        const exMap = await this.exercisesByLesson(ids);
+        const progMap = await this.programsByLesson(ids);
         return rows.map((r) => {
             const isTeacher = r.teacher_id === userId;
             return {
-                ...toLesson(r as LessonRow, exMap.get(r.id) ?? []),
+                ...toLesson(r as LessonRow, exMap.get(r.id) ?? [], progMap.get(r.id) ?? []),
                 role: isTeacher ? 'teacher' : 'student',
                 counterpartyDisplayName: isTeacher ? r.student_display_name : r.teacher_display_name,
             };
@@ -389,12 +401,132 @@ export class LessonService {
         const row = await this.db
             .selectFrom('lessons')
             .leftJoin('horses', 'horses.id', 'lessons.horse_id')
-            .leftJoin('programs', 'programs.id', 'lessons.program_id')
-            .select([...LESSON_COLUMNS, 'horses.name as horse_name', 'programs.title as program_title'])
+            .select([...LESSON_COLUMNS, 'horses.name as horse_name'])
             .where('lessons.id', '=', lessonId)
             .executeTakeFirstOrThrow();
-        const map = await this.exercisesByLesson([lessonId]);
-        return toLesson(row as LessonRow, map.get(lessonId) ?? []);
+        const exMap = await this.exercisesByLesson([lessonId]);
+        const progMap = await this.programsByLesson([lessonId]);
+        return toLesson(row as LessonRow, exMap.get(lessonId) ?? [], progMap.get(lessonId) ?? []);
+    }
+
+    /**
+     * Attach a Program to a Lesson. Total operation: idempotent on the
+     * junction (re-attach is a no-op) and appends only those Program
+     * Exercises whose `exercise_id` isn't already on the Lesson, preserving
+     * Program order and copying `notes` verbatim. NotFoundError (leak-safe)
+     * when either ownership check fails.
+     */
+    async attachProgram(teacherId: string, lessonId: string, programId: string): Promise<Lesson> {
+        const lesson = await this.db
+            .selectFrom('lessons')
+            .select(['id', 'teacher_id'])
+            .where('id', '=', lessonId)
+            .executeTakeFirst();
+        if (!lesson || lesson.teacher_id !== teacherId) {
+            throw new NotFoundError('Lesson not found');
+        }
+        const program = await this.db
+            .selectFrom('programs')
+            .select(['id', 'teacher_id'])
+            .where('id', '=', programId)
+            .executeTakeFirst();
+        if (!program || program.teacher_id !== teacherId) {
+            throw new NotFoundError('Program not found');
+        }
+
+        const programRows = await this.db
+            .selectFrom('program_exercise')
+            .select(['exercise_id', 'sort_order', 'notes'])
+            .where('program_id', '=', programId)
+            .orderBy('sort_order', 'asc')
+            .execute();
+
+        const existing = await this.db
+            .selectFrom('lesson_exercise')
+            .select(['exercise_id', 'sort_order'])
+            .where('lesson_id', '=', lessonId)
+            .execute();
+        const existingIds = new Set(existing.map((e) => e.exercise_id));
+        let nextOrder = existing.reduce((m, e) => Math.max(m, e.sort_order), 0) + 1;
+
+        const toInsert = programRows
+            .filter((r) => !existingIds.has(r.exercise_id))
+            .map((r) => ({
+                id: crypto.randomUUID(),
+                lesson_id: lessonId,
+                exercise_id: r.exercise_id,
+                sort_order: nextOrder++,
+                notes: r.notes,
+                source_program_id: programId,
+            }));
+
+        const now = new Date().toISOString();
+        await this.db.transaction().execute(async (tx) => {
+            const already = await tx
+                .selectFrom('lesson_program')
+                .select('lesson_id')
+                .where('lesson_id', '=', lessonId)
+                .where('program_id', '=', programId)
+                .executeTakeFirst();
+            if (!already) {
+                await tx.insertInto('lesson_program').values({
+                    lesson_id: lessonId,
+                    program_id: programId,
+                    attached_at: now,
+                }).execute();
+            }
+            if (toInsert.length > 0) {
+                await tx.insertInto('lesson_exercise').values(toInsert).execute();
+            }
+        });
+
+        return this.loadOne(lessonId);
+    }
+
+    /**
+     * Detach a Program from a Lesson. Removes only the junction row — the
+     * snapshot-copied `lesson_exercise` rows are preserved (their
+     * `source_program_id` keeps the history). Idempotent. NotFoundError
+     * (leak-safe) when the Lesson isn't owned by the caller.
+     */
+    async detachProgram(teacherId: string, lessonId: string, programId: string): Promise<Lesson> {
+        const lesson = await this.db
+            .selectFrom('lessons')
+            .select(['id', 'teacher_id'])
+            .where('id', '=', lessonId)
+            .executeTakeFirst();
+        if (!lesson || lesson.teacher_id !== teacherId) {
+            throw new NotFoundError('Lesson not found');
+        }
+        await this.db.deleteFrom('lesson_program')
+            .where('lesson_id', '=', lessonId)
+            .where('program_id', '=', programId)
+            .execute();
+        return this.loadOne(lessonId);
+    }
+
+    private async programsByLesson(
+        lessonIds: string[],
+    ): Promise<Map<string, AttachedProgramRef[]>> {
+        const out = new Map<string, AttachedProgramRef[]>();
+        if (lessonIds.length === 0) return out;
+        const rows = await this.db
+            .selectFrom('lesson_program')
+            .innerJoin('programs', 'programs.id', 'lesson_program.program_id')
+            .select([
+                'lesson_program.lesson_id as lesson_id',
+                'programs.id as id',
+                'programs.title as title',
+            ])
+            .where('lesson_program.lesson_id', 'in', lessonIds)
+            .orderBy('lesson_program.attached_at', 'asc')
+            .execute();
+        for (const r of rows) {
+            const list = out.get(r.lesson_id) ?? [];
+            list.push({ id: r.id, title: r.title });
+            out.set(r.lesson_id, list);
+        }
+        return out;
     }
 
     /**

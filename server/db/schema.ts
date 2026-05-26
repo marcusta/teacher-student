@@ -13,6 +13,13 @@ export interface Database {
     training_session_share: TrainingSessionShareTable;
     programs: ProgramsTable;
     program_exercise: ProgramExerciseTable;
+    lesson_program: LessonProgramTable;
+}
+
+export interface LessonProgramTable {
+    lesson_id: string;
+    program_id: string;
+    attached_at: Generated<string>;
 }
 
 export interface ProgramsTable {
@@ -82,7 +89,6 @@ export interface LessonsTable {
     scheduled_at: string;
     status: Generated<LessonStatus>;
     horse_id: string | null;
-    program_id: string | null;
     created_at: Generated<string>;
     updated_at: Generated<string>;
 }
