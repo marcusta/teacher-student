@@ -2,7 +2,7 @@ import { Signal } from '@basics/core/client/core';
 import { request, type RequestError } from '@basics/core/client/request';
 import { api, type Note } from '../api';
 
-type ParentKind = 'lesson' | 'student' | 'training_session' | 'exercise_question';
+type ParentKind = 'lesson' | 'student' | 'training_session' | 'exercise_question' | 'lesson_exercise';
 
 /**
  * Owns Notes for a single parent (e.g. a Lesson) as observable state.

@@ -280,3 +280,83 @@ test('teacher listFor on a private TS throws NotFoundError', async () => {
         parentKind: 'training_session', parentId: privateTs.id,
     })).rejects.toBeInstanceOf(NotFoundError);
 });
+
+async function seedLessonWithExercise() {
+    const ctx = await seedLesson();
+    const ex = await ctx.exerciseService.create(ctx.teacher.id, { name: 'Skritt' });
+    await ctx.lessonService.addExercise(ctx.teacher.id, ctx.lesson.id, ex.id);
+    const refs = await ctx.lessonService.listExercises(ctx.teacher.id, ctx.lesson.id);
+    return { ...ctx, exercise: ex, lessonExerciseId: refs[0]!.id };
+}
+
+test('teacher creates a private note on a lesson_exercise; student does not see it', async () => {
+    const { noteService, teacher, student, lessonExerciseId } = await seedLessonWithExercise();
+    await noteService.create(teacher.id, {
+        parentKind: 'lesson_exercise', parentId: lessonExerciseId,
+        body: 'private prep', visibility: 'private',
+    });
+    const studentList = await noteService.listFor(student.id, {
+        parentKind: 'lesson_exercise', parentId: lessonExerciseId,
+    });
+    expect(studentList).toEqual([]);
+});
+
+test('teacher shared note on a lesson_exercise is visible to the student', async () => {
+    const { noteService, teacher, student, lessonExerciseId } = await seedLessonWithExercise();
+    await noteService.create(teacher.id, {
+        parentKind: 'lesson_exercise', parentId: lessonExerciseId,
+        body: 'good ride', visibility: 'shared',
+    });
+    const studentList = await noteService.listFor(student.id, {
+        parentKind: 'lesson_exercise', parentId: lessonExerciseId,
+    });
+    expect(studentList.map((n) => n.body)).toEqual(['good ride']);
+});
+
+test('student can author a note on a lesson_exercise of their own lesson', async () => {
+    const { noteService, student, lessonExerciseId } = await seedLessonWithExercise();
+    const n = await noteService.create(student.id, {
+        parentKind: 'lesson_exercise', parentId: lessonExerciseId,
+        body: 'tough today', visibility: 'shared',
+    });
+    expect(n.parentKind).toBe('lesson_exercise');
+    expect(n.parentId).toBe(lessonExerciseId);
+});
+
+test('outsider blocked from authoring or listing lesson_exercise notes', async () => {
+    const { noteService, userService, lessonExerciseId } = await seedLessonWithExercise();
+    const outsider = await userService.register({
+        email: 'o@example.com', password: 'secret123', displayName: 'O',
+    });
+    await expect(noteService.create(outsider.id, {
+        parentKind: 'lesson_exercise', parentId: lessonExerciseId,
+        body: 'x', visibility: 'shared',
+    })).rejects.toBeInstanceOf(NotFoundError);
+    await expect(noteService.listFor(outsider.id, {
+        parentKind: 'lesson_exercise', parentId: lessonExerciseId,
+    })).rejects.toBeInstanceOf(NotFoundError);
+});
+
+test('listFor on missing lesson_exercise throws NotFoundError', async () => {
+    const { noteService, teacher } = await seedLessonWithExercise();
+    await expect(noteService.listFor(teacher.id, {
+        parentKind: 'lesson_exercise', parentId: 'does-not-exist',
+    })).rejects.toBeInstanceOf(NotFoundError);
+});
+
+test('listFor on lesson_exercise returns notes ordered by created_at ASC', async () => {
+    const { noteService, teacher, student, lessonExerciseId } = await seedLessonWithExercise();
+    await noteService.create(teacher.id, {
+        parentKind: 'lesson_exercise', parentId: lessonExerciseId,
+        body: 'first', visibility: 'shared',
+    });
+    await new Promise((r) => setTimeout(r, 10));
+    await noteService.create(student.id, {
+        parentKind: 'lesson_exercise', parentId: lessonExerciseId,
+        body: 'second', visibility: 'shared',
+    });
+    const list = await noteService.listFor(teacher.id, {
+        parentKind: 'lesson_exercise', parentId: lessonExerciseId,
+    });
+    expect(list.map((n) => n.body)).toEqual(['first', 'second']);
+});

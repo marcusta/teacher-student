@@ -14,8 +14,8 @@ export interface Note {
 }
 
 export interface NotesApi {
-    create(input: { parentKind: 'lesson' | 'student' | 'training_session' | 'exercise_question'; parentId: string; body: string; visibility: 'private' | 'shared' }): Promise<Note>;
-    list(input: { parentKind: 'lesson' | 'student' | 'training_session' | 'exercise_question'; parentId: string }): Promise<Note[]>;
+    create(input: { parentKind: 'lesson' | 'student' | 'training_session' | 'exercise_question' | 'lesson_exercise'; parentId: string; body: string; visibility: 'private' | 'shared' }): Promise<Note>;
+    list(input: { parentKind: 'lesson' | 'student' | 'training_session' | 'exercise_question' | 'lesson_exercise'; parentId: string }): Promise<Note[]>;
     update(input: { body?: string; visibility?: 'private' | 'shared'; id: string }): Promise<Note>;
     delete(input: { id: string }): Promise<{ ok: boolean }>;
 }

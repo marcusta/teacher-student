@@ -6,6 +6,7 @@ import { s, btn, input } from '../css';
 import { api, type Exercise, type Horse } from '../api';
 import { LessonsService } from './lessons.service';
 import { NotesService } from './notes.service';
+import { ExerciseNotesComponent } from './exercise-notes.component';
 import { ProgramsService } from '../programs/programs.service';
 
 const tpl = template(`
@@ -264,22 +265,41 @@ export class LessonEditComponent extends Component {
 
             & .lesson-edit__ex-item {
                 display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: ${s('sm')};
+                flex-direction: column;
+                gap: ${s('xs')};
                 padding: ${s('xs')} ${s('sm')};
                 background: ${t('surface')};
                 border-radius: ${t('radius')};
                 font-size: 0.875rem;
-
+            }
+            & .lesson-edit__ex-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: ${s('sm')};
+            }
+            & .lesson-edit__ex-actions {
+                display: flex;
+                align-items: center;
+                gap: ${s('sm')};
                 & button {
                     background: transparent;
                     border: none;
-                    color: ${t('error')};
                     cursor: pointer;
                     font-size: 0.8125rem;
+                    color: ${t('error')};
                     &:hover { text-decoration: underline; }
                 }
+                & .lesson-edit__ex-notes-toggle { color: ${t('text')}; opacity: 0.8; }
+            }
+            & .lesson-edit__summary-ex-list .lesson-edit__ex-notes-toggle {
+                background: transparent;
+                border: none;
+                cursor: pointer;
+                font-size: 0.8125rem;
+                color: ${t('text')};
+                opacity: 0.8;
+                &:hover { text-decoration: underline; }
             }
 
             & .lesson-edit__ex-empty {
@@ -423,6 +443,14 @@ export class LessonEditComponent extends Component {
     private editingNoteId = new Signal<string | null>(null);
     private editingBodyVal = new Signal('');
     private editingSharedVal = new Signal(false);
+    private openExNotes = new Signal<Set<string>>(new Set());
+
+    private toggleExNotes(leId: string): void {
+        const next = new Set(this.openExNotes.get());
+        if (next.has(leId)) next.delete(leId);
+        else next.add(leId);
+        this.openExNotes.set(next);
+    }
 
     private horseOptions = new Computed<SelectOption[]>(() =>
         this.horses.get().map((h) => ({ value: h.id, label: h.name })),
@@ -637,15 +665,25 @@ export class LessonEditComponent extends Component {
             noteSharedLabel: { textContent: () => this.sharedLabel() },
         });
 
-        // Render the attached-exercises list reactively.
+        // Render the attached-exercises list reactively (teacher view).
         const exHost = this.ref(frag, 'exerciseList');
         this.track(effect(() => {
+            const open = this.openExNotes.get();
             exHost.replaceChildren();
             for (const ex of this.currentExercises()) {
                 const li = document.createElement('li');
                 li.className = 'lesson-edit__ex-item';
+                const row = document.createElement('div');
+                row.className = 'lesson-edit__ex-row';
                 const label = document.createElement('span');
                 label.textContent = ex.name;
+                const actions = document.createElement('div');
+                actions.className = 'lesson-edit__ex-actions';
+                const notesBtn = document.createElement('button');
+                notesBtn.type = 'button';
+                notesBtn.className = 'lesson-edit__ex-notes-toggle';
+                notesBtn.textContent = open.has(ex.id) ? 'Dölj anteckningar' : 'Anteckningar';
+                notesBtn.onclick = () => this.toggleExNotes(ex.id);
                 const remove = document.createElement('button');
                 remove.type = 'button';
                 remove.textContent = 'Ta bort';
@@ -653,8 +691,17 @@ export class LessonEditComponent extends Component {
                     const id = this.router.route.get().split('/')[2] ?? '';
                     await this.svc.removeExercise(id, ex.exerciseId);
                 };
-                li.appendChild(label);
-                li.appendChild(remove);
+                actions.append(notesBtn, remove);
+                row.append(label, actions);
+                li.appendChild(row);
+                if (open.has(ex.id)) {
+                    const host = document.createElement('div');
+                    li.appendChild(host);
+                    this.spawn(ExerciseNotesComponent, host, {
+                        lessonExerciseId: ex.id,
+                        isStudent: this.role.get() === 'student',
+                    });
+                }
                 exHost.appendChild(li);
             }
         }));
@@ -729,17 +776,36 @@ export class LessonEditComponent extends Component {
             }
         }));
 
-        // Read-only exercises summary (student view).
+        // Read-only exercises summary (student view) with per-row notes disclosure.
         const sumExHost = this.ref(frag, 'sumExList');
         this.track(effect(() => {
             const items = this.currentExercises();
+            const open = this.openExNotes.get();
             sumExHost.replaceChildren();
             sumExHost.className = items.length === 0
                 ? 'lesson-edit__summary-ex-list hidden'
                 : 'lesson-edit__summary-ex-list';
             for (const ex of items) {
                 const li = document.createElement('li');
-                li.textContent = ex.name;
+                const row = document.createElement('div');
+                row.className = 'lesson-edit__ex-row';
+                const label = document.createElement('span');
+                label.textContent = ex.name;
+                const notesBtn = document.createElement('button');
+                notesBtn.type = 'button';
+                notesBtn.className = 'lesson-edit__ex-notes-toggle';
+                notesBtn.textContent = open.has(ex.id) ? 'Dölj anteckningar' : 'Anteckningar';
+                notesBtn.onclick = () => this.toggleExNotes(ex.id);
+                row.append(label, notesBtn);
+                li.appendChild(row);
+                if (open.has(ex.id)) {
+                    const host = document.createElement('div');
+                    li.appendChild(host);
+                    this.spawn(ExerciseNotesComponent, host, {
+                        lessonExerciseId: ex.id,
+                        isStudent: this.role.get() === 'student',
+                    });
+                }
                 sumExHost.appendChild(li);
             }
         }));

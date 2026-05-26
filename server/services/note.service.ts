@@ -155,14 +155,11 @@ export class NoteService {
         parentId: string,
     ): Promise<void> {
         if (parentKind === 'lesson') {
-            const lesson = await this.db
-                .selectFrom('lessons')
-                .select(['id', 'teacher_id', 'student_id'])
-                .where('id', '=', parentId)
-                .executeTakeFirst();
-            if (!lesson || (lesson.teacher_id !== userId && lesson.student_id !== userId)) {
-                throw new NotFoundError('Lesson not found');
-            }
+            await this.assertLessonMember(userId, parentId);
+            return;
+        }
+        if (parentKind === 'lesson_exercise') {
+            await this.assertLessonExerciseMember(userId, parentId);
             return;
         }
         if (parentKind === 'training_session') {
@@ -170,6 +167,34 @@ export class NoteService {
             return;
         }
         throw new NotFoundError('Unsupported parent kind');
+    }
+
+    private async assertLessonMember(userId: string, lessonId: string): Promise<void> {
+        const lesson = await this.db
+            .selectFrom('lessons')
+            .select(['id', 'teacher_id', 'student_id'])
+            .where('id', '=', lessonId)
+            .executeTakeFirst();
+        if (!lesson || (lesson.teacher_id !== userId && lesson.student_id !== userId)) {
+            throw new NotFoundError('Lesson not found');
+        }
+    }
+
+    /**
+     * Resolve the lesson_exercise row to its owning Lesson and apply the
+     * same membership gate as `lesson`. Leak-safe NotFoundError when the
+     * row is missing or the caller isn't a party to the Lesson.
+     */
+    private async assertLessonExerciseMember(userId: string, leId: string): Promise<void> {
+        const row = await this.db
+            .selectFrom('lesson_exercise')
+            .innerJoin('lessons', 'lessons.id', 'lesson_exercise.lesson_id')
+            .select(['lessons.teacher_id as teacher_id', 'lessons.student_id as student_id'])
+            .where('lesson_exercise.id', '=', leId)
+            .executeTakeFirst();
+        if (!row || (row.teacher_id !== userId && row.student_id !== userId)) {
+            throw new NotFoundError('Lesson exercise not found');
+        }
     }
 
     /**
@@ -205,14 +230,11 @@ export class NoteService {
         parentId: string,
     ): Promise<void> {
         if (parentKind === 'lesson') {
-            const lesson = await this.db
-                .selectFrom('lessons')
-                .select(['id', 'teacher_id', 'student_id'])
-                .where('id', '=', parentId)
-                .executeTakeFirst();
-            if (!lesson || (lesson.teacher_id !== userId && lesson.student_id !== userId)) {
-                throw new NotFoundError('Lesson not found');
-            }
+            await this.assertLessonMember(userId, parentId);
+            return;
+        }
+        if (parentKind === 'lesson_exercise') {
+            await this.assertLessonExerciseMember(userId, parentId);
             return;
         }
         if (parentKind === 'training_session') {
