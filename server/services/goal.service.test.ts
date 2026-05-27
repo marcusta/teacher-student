@@ -392,3 +392,92 @@ test('abandon by shared teacher throws NotFoundError (owner-only)', async () => 
     await goalService.share(student.id, g.id, teacher.id);
     await expect(goalService.abandon(teacher.id, g.id)).rejects.toThrow();
 });
+
+// --- 044: Goal–Plan attachment ---
+
+test('attachToPlan links Goal to owned active Plan', async () => {
+    const { goalService, planService, student } = await seedStudent();
+    const g = await goalService.create(student.id, { title: 'G' });
+    const p = await planService.create(student.id, { title: 'P' });
+    await goalService.attachToPlan(student.id, g.id, p.id);
+    const got = await goalService.getForStudent(student.id, g.id);
+    expect(got.planIds).toEqual([p.id]);
+});
+
+test('attachToPlan is idempotent', async () => {
+    const { goalService, planService, student } = await seedStudent();
+    const g = await goalService.create(student.id, { title: 'G' });
+    const p = await planService.create(student.id, { title: 'P' });
+    await goalService.attachToPlan(student.id, g.id, p.id);
+    await goalService.attachToPlan(student.id, g.id, p.id);
+    const got = await goalService.getForStudent(student.id, g.id);
+    expect(got.planIds).toEqual([p.id]);
+});
+
+test('attachToPlan throws NotFoundError when goal not owned', async () => {
+    const ctx = await seedStudent('s1@example.com');
+    const s2 = await ctx.userService.register({
+        email: 's2@example.com', password: 'secret123', displayName: 'S2',
+    });
+    const g = await ctx.goalService.create(s2.id, { title: 'G' });
+    const p = await ctx.planService.create(ctx.student.id, { title: 'P' });
+    await expect(ctx.goalService.attachToPlan(ctx.student.id, g.id, p.id)).rejects.toThrow();
+});
+
+test('attachToPlan throws NotFoundError when plan not owned', async () => {
+    const ctx = await seedStudent('s1@example.com');
+    const s2 = await ctx.userService.register({
+        email: 's2@example.com', password: 'secret123', displayName: 'S2',
+    });
+    const g = await ctx.goalService.create(ctx.student.id, { title: 'G' });
+    const p = await ctx.planService.create(s2.id, { title: 'P' });
+    await expect(ctx.goalService.attachToPlan(ctx.student.id, g.id, p.id)).rejects.toThrow();
+});
+
+test('attachToPlan throws NotFoundError when plan archived', async () => {
+    const { goalService, planService, student } = await seedStudent();
+    const g = await goalService.create(student.id, { title: 'G' });
+    const p = await planService.create(student.id, { title: 'P' });
+    await planService.archive(student.id, p.id);
+    await expect(goalService.attachToPlan(student.id, g.id, p.id)).rejects.toThrow();
+});
+
+test('detachFromPlan removes the link and is idempotent', async () => {
+    const { goalService, planService, student } = await seedStudent();
+    const g = await goalService.create(student.id, { title: 'G' });
+    const p = await planService.create(student.id, { title: 'P' });
+    await goalService.attachToPlan(student.id, g.id, p.id);
+    await goalService.detachFromPlan(student.id, g.id, p.id);
+    await goalService.detachFromPlan(student.id, g.id, p.id);
+    const got = await goalService.getForStudent(student.id, g.id);
+    expect(got.planIds).toEqual([]);
+});
+
+test('detachFromPlan throws NotFoundError when goal not owned', async () => {
+    const ctx = await seedStudent('s1@example.com');
+    const s2 = await ctx.userService.register({
+        email: 's2@example.com', password: 'secret123', displayName: 'S2',
+    });
+    const g = await ctx.goalService.create(s2.id, { title: 'G' });
+    const p = await ctx.planService.create(s2.id, { title: 'P' });
+    await expect(ctx.goalService.detachFromPlan(ctx.student.id, g.id, p.id)).rejects.toThrow();
+});
+
+test('getForTeacher hydrates planIds', async () => {
+    const { goalService, planService, teacher, student } = await seedTeacherWithStudent();
+    const g = await goalService.create(student.id, { title: 'G' });
+    const p = await planService.create(student.id, { title: 'P' });
+    await goalService.attachToPlan(student.id, g.id, p.id);
+    await goalService.share(student.id, g.id, teacher.id);
+    const got = await goalService.getForTeacher(teacher.id, g.id);
+    expect(got.planIds).toEqual([p.id]);
+});
+
+test('listForStudent hydrates planIds', async () => {
+    const { goalService, planService, student } = await seedStudent();
+    const g = await goalService.create(student.id, { title: 'G' });
+    const p = await planService.create(student.id, { title: 'P' });
+    await goalService.attachToPlan(student.id, g.id, p.id);
+    const list = await goalService.listForStudent(student.id);
+    expect(list.find((x) => x.id === g.id)?.planIds).toEqual([p.id]);
+});

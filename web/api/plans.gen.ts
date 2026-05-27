@@ -18,6 +18,7 @@ export interface Plan {
 export interface PlanDetail {
     lessons: LinkedLessonRef[];
     trainingSessions: LinkedTrainingSessionRef[];
+    goals: LinkedGoalRef[];
     id: string;
     studentId: string;
     primaryTeacherId: null | string;
@@ -45,6 +46,13 @@ export interface LinkedTrainingSessionRef {
     durationMin: null | number;
     summary: null | string;
     horseName: null | string;
+}
+
+export interface LinkedGoalRef {
+    id: string;
+    title: string;
+    status: 'active' | 'achieved' | 'abandoned';
+    targetDate: null | string;
 }
 
 export interface PlansApi {

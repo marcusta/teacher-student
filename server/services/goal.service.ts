@@ -12,6 +12,7 @@ export interface Goal {
     achievedAt: string | null;
     status: 'active' | 'achieved' | 'abandoned';
     sharedTeacherIds: string[];
+    planIds: string[];
     createdAt: string;
     updatedAt: string;
 }
@@ -25,6 +26,7 @@ export interface GoalTeacherView {
     targetDate: string | null;
     achievedAt: string | null;
     status: 'active' | 'achieved' | 'abandoned';
+    planIds: string[];
     createdAt: string;
     updatedAt: string;
 }
@@ -56,14 +58,21 @@ function assertCalendarDate(value: string): void {
     }
 }
 
-function toGoal(row: Selectable<GoalTable>, sharedTeacherIds: string[] = []): Goal {
+function toGoal(
+    row: Selectable<GoalTable>,
+    sharedTeacherIds: string[] = [],
+    planIds: string[] = [],
+): Goal {
     return {
-        ...toGoalTeacherView(row),
+        ...toGoalTeacherView(row, planIds),
         sharedTeacherIds,
     };
 }
 
-function toGoalTeacherView(row: Selectable<GoalTable>): GoalTeacherView {
+function toGoalTeacherView(
+    row: Selectable<GoalTable>,
+    planIds: string[] = [],
+): GoalTeacherView {
     return {
         id: row.id,
         studentId: row.student_id,
@@ -72,6 +81,7 @@ function toGoalTeacherView(row: Selectable<GoalTable>): GoalTeacherView {
         targetDate: row.target_date,
         achievedAt: row.achieved_at,
         status: row.status,
+        planIds,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
     };
@@ -120,6 +130,7 @@ export class GoalService {
             achievedAt: null,
             status: 'active',
             sharedTeacherIds: [],
+            planIds: [],
             createdAt: now,
             updatedAt: now,
         };
@@ -137,8 +148,10 @@ export class GoalService {
             .orderBy(GOAL_STATUS_ORDER, 'asc')
             .orderBy('created_at', 'desc')
             .execute();
-        const shares = await this.sharesByGoal(rows.map((r) => r.id));
-        return rows.map((r) => toGoal(r, shares.get(r.id) ?? []));
+        const ids = rows.map((r) => r.id);
+        const shares = await this.sharesByGoal(ids);
+        const plans = await this.plansByGoal(ids);
+        return rows.map((r) => toGoal(r, shares.get(r.id) ?? [], plans.get(r.id) ?? []));
     }
 
     async getForStudent(studentId: string, goalId: string): Promise<Goal> {
@@ -150,7 +163,8 @@ export class GoalService {
             .executeTakeFirst();
         if (!row) throw new NotFoundError('Goal not found');
         const shares = await this.sharesByGoal([goalId]);
-        return toGoal(row, shares.get(goalId) ?? []);
+        const plans = await this.plansByGoal([goalId]);
+        return toGoal(row, shares.get(goalId) ?? [], plans.get(goalId) ?? []);
     }
 
     async update(studentId: string, goalId: string, input: UpdateGoalInput): Promise<Goal> {
@@ -307,7 +321,8 @@ export class GoalService {
             .orderBy(GOAL_STATUS_ORDER, 'asc')
             .orderBy('goal.created_at', 'desc')
             .execute();
-        return rows.map(toGoalTeacherView);
+        const plans = await this.plansByGoal(rows.map((r) => r.id));
+        return rows.map((r) => toGoalTeacherView(r, plans.get(r.id) ?? []));
     }
 
     /** Returns a shared Goal for a Teacher, or NotFoundError (leak-safe). */
@@ -320,7 +335,39 @@ export class GoalService {
             .where('goal_share.teacher_id', '=', teacherId)
             .executeTakeFirst();
         if (!row) throw new NotFoundError('Goal not found');
-        return toGoalTeacherView(row);
+        const plans = await this.plansByGoal([goalId]);
+        return toGoalTeacherView(row, plans.get(goalId) ?? []);
+    }
+
+    /**
+     * Attach this Goal to one of the owning Student's active Plans. Both rows
+     * must be owned by `studentId`; the Plan must be `active`. Idempotent.
+     * Throws `NotFoundError` (leak-safe) when ownership or status fails.
+     */
+    async attachToPlan(studentId: string, goalId: string, planId: string): Promise<void> {
+        await this.assertGoalOwner(studentId, goalId);
+        const plan = await this.db
+            .selectFrom('plans')
+            .select(['status'])
+            .where('id', '=', planId)
+            .where('student_id', '=', studentId)
+            .executeTakeFirst();
+        if (!plan) throw new NotFoundError('Plan not found');
+        if (plan.status !== 'active') throw new NotFoundError('Plan not found');
+
+        await this.db.insertInto('goal_plan')
+            .values({ goal_id: goalId, plan_id: planId })
+            .onConflict((oc) => oc.columns(['goal_id', 'plan_id']).doNothing())
+            .execute();
+    }
+
+    /** Detach this Goal from a Plan. Idempotent. Owner-only (by goal). */
+    async detachFromPlan(studentId: string, goalId: string, planId: string): Promise<void> {
+        await this.assertGoalOwner(studentId, goalId);
+        await this.db.deleteFrom('goal_plan')
+            .where('goal_id', '=', goalId)
+            .where('plan_id', '=', planId)
+            .execute();
     }
 
     /**
@@ -367,6 +414,22 @@ export class GoalService {
             .where('student_id', '=', studentId)
             .executeTakeFirst();
         if (!rel) throw new NotFoundError('Goal not found');
+    }
+
+    private async plansByGoal(ids: string[]): Promise<Map<string, string[]>> {
+        const out = new Map<string, string[]>();
+        if (ids.length === 0) return out;
+        const rows = await this.db
+            .selectFrom('goal_plan')
+            .select(['goal_id', 'plan_id'])
+            .where('goal_id', 'in', ids)
+            .execute();
+        for (const r of rows) {
+            const list = out.get(r.goal_id) ?? [];
+            list.push(r.plan_id);
+            out.set(r.goal_id, list);
+        }
+        return out;
     }
 
     private async sharesByGoal(ids: string[]): Promise<Map<string, string[]>> {

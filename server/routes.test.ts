@@ -1055,6 +1055,39 @@ test('POST /api/goals/:id/reopen clears achieved state', async () => {
     expect(got.achievedAt).toBeNull();
 });
 
+test('POST /api/goals/:id/plans/:planId attaches and surfaces in plan detail', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const goal = await (await req(app, 'POST', '/api/goals', { title: 'G' }, cookie)).json();
+    const plan = await (await req(app, 'POST', '/api/plans', { title: 'P' }, cookie)).json();
+    const res = await req(app, 'POST', `/api/goals/${goal.id}/plans/${plan.id}`, undefined, cookie);
+    expect(res.status).toBe(200);
+    const detail = await (await req(app, 'GET', `/api/plans/${plan.id}`, undefined, cookie)).json();
+    expect(detail.goals.map((g: { id: string }) => g.id)).toEqual([goal.id]);
+});
+
+test('POST /api/goals/:id/plans/:planId on archived plan returns 404', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const goal = await (await req(app, 'POST', '/api/goals', { title: 'G' }, cookie)).json();
+    const plan = await (await req(app, 'POST', '/api/plans', { title: 'P' }, cookie)).json();
+    await req(app, 'POST', `/api/plans/${plan.id}/archive`, undefined, cookie);
+    const res = await req(app, 'POST', `/api/goals/${goal.id}/plans/${plan.id}`, undefined, cookie);
+    expect(res.status).toBe(404);
+});
+
+test('DELETE /api/goals/:id/plans/:planId detaches (idempotent)', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const goal = await (await req(app, 'POST', '/api/goals', { title: 'G' }, cookie)).json();
+    const plan = await (await req(app, 'POST', '/api/plans', { title: 'P' }, cookie)).json();
+    await req(app, 'POST', `/api/goals/${goal.id}/plans/${plan.id}`, undefined, cookie);
+    const res = await req(app, 'DELETE', `/api/goals/${goal.id}/plans/${plan.id}`, undefined, cookie);
+    expect(res.status).toBe(200);
+    const res2 = await req(app, 'DELETE', `/api/goals/${goal.id}/plans/${plan.id}`, undefined, cookie);
+    expect(res2.status).toBe(200);
+});
+
 test('POST /api/goals/:id/abandon by shared teacher returns 404', async () => {
     const { app } = await setup([seedUser]);
     const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');

@@ -9,6 +9,7 @@ export interface Database {
     plans: PlansTable;
     goal: GoalTable;
     goal_share: GoalShareTable;
+    goal_plan: GoalPlanTable;
     lessons: LessonsTable;
     lesson_exercise: LessonExerciseTable;
     notes: NotesTable;
@@ -144,6 +145,12 @@ export interface GoalShareTable {
     goal_id: string;
     teacher_id: string;
     created_at: Generated<string>;
+}
+
+export interface GoalPlanTable {
+    goal_id: string;
+    plan_id: string;
+    attached_at: Generated<string>;
 }
 
 export interface PlansTable {

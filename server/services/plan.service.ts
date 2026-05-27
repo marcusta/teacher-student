@@ -1,4 +1,5 @@
 import type { Kysely, Selectable } from 'kysely';
+import { sql } from 'kysely';
 import { NotFoundError } from '@basics/core/server/auth';
 import type { Database, PlansTable } from '../db/schema';
 
@@ -48,9 +49,17 @@ export interface LinkedTrainingSessionRef {
     horseName: string | null;
 }
 
+export interface LinkedGoalRef {
+    id: string;
+    title: string;
+    status: 'active' | 'achieved' | 'abandoned';
+    targetDate: string | null;
+}
+
 export interface PlanDetail extends Plan {
     lessons: LinkedLessonRef[];
     trainingSessions: LinkedTrainingSessionRef[];
+    goals: LinkedGoalRef[];
 }
 
 function toPlan(row: Selectable<PlansTable>, primaryTeacherDisplayName: string | null = null): Plan {
@@ -192,6 +201,20 @@ export class PlanService {
             .orderBy('lessons.scheduled_at', 'asc')
             .execute();
 
+        const goals = await this.db
+            .selectFrom('goal_plan')
+            .innerJoin('goal', 'goal.id', 'goal_plan.goal_id')
+            .select([
+                'goal.id as id',
+                'goal.title as title',
+                'goal.status as status',
+                'goal.target_date as target_date',
+            ])
+            .where('goal_plan.plan_id', '=', planId)
+            .orderBy(sql`CASE goal.status WHEN 'active' THEN 0 WHEN 'achieved' THEN 1 WHEN 'abandoned' THEN 2 END`, 'asc')
+            .orderBy('goal.created_at', 'desc')
+            .execute();
+
         const trainingSessions = await this.db
             .selectFrom('training_sessions')
             .leftJoin('horses', 'horses.id', 'training_sessions.horse_id')
@@ -221,6 +244,12 @@ export class PlanService {
                 durationMin: ts.duration_min,
                 summary: ts.summary,
                 horseName: ts.horse_name,
+            })),
+            goals: goals.map((g) => ({
+                id: g.id,
+                title: g.title,
+                status: g.status,
+                targetDate: g.target_date,
             })),
         };
     }

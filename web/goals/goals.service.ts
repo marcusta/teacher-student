@@ -99,6 +99,20 @@ export class GoalsService {
         return true;
     }
 
+    async attachPlan(goalId: string, planId: string): Promise<boolean> {
+        const result = await request(this.loading, this.error, () =>
+            api.goals.attachPlan({ id: goalId, planId }),
+        );
+        return result !== null;
+    }
+
+    async detachPlan(goalId: string, planId: string): Promise<boolean> {
+        const result = await request(this.loading, this.error, () =>
+            api.goals.detachPlan({ id: goalId, planId }),
+        );
+        return result !== null;
+    }
+
     async unshare(goalId: string, teacherId: string): Promise<boolean> {
         const result = await request(this.loading, this.error, () =>
             api.goals.unshare({ id: goalId, teacherId }),

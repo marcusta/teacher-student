@@ -10,6 +10,7 @@ export interface Goal {
     achievedAt: null | string;
     status: 'active' | 'achieved' | 'abandoned';
     sharedTeacherIds: string[];
+    planIds: string[];
     createdAt: string;
     updatedAt: string;
 }
@@ -22,6 +23,7 @@ export interface GoalTeacherView {
     targetDate: null | string;
     achievedAt: null | string;
     status: 'active' | 'achieved' | 'abandoned';
+    planIds: string[];
     createdAt: string;
     updatedAt: string;
 }
@@ -41,6 +43,8 @@ export interface GoalsApi {
     reopen(input: { id: string }): Promise<{ ok: true }>;
     share(input: { id: string; teacherId: string }): Promise<{ ok: true }>;
     unshare(input: { id: string; teacherId: string }): Promise<{ ok: true }>;
+    attachPlan(input: { id: string; planId: string }): Promise<{ ok: true }>;
+    detachPlan(input: { id: string; planId: string }): Promise<{ ok: true }>;
     listShares(input: { id: string }): Promise<SharedTeacherRef[]>;
 }
 
@@ -97,6 +101,16 @@ export function createGoalsClient(baseUrl: string): GoalsApi {
         },
         async unshare(input) {
             return apiFetch({ method: 'DELETE', url: `${baseUrl}/goals/${input.id}/shares/${input.teacherId}` });
+        },
+        async attachPlan(input) {
+            const pathParams = new Set(['id', 'planId']);
+            const body: Record<string, unknown> = {};
+            for (const [k, v] of Object.entries(input as any))
+                if (!pathParams.has(k)) body[k] = v;
+            return apiFetch({ method: 'POST', url: `${baseUrl}/goals/${input.id}/plans/${input.planId}`, body });
+        },
+        async detachPlan(input) {
+            return apiFetch({ method: 'DELETE', url: `${baseUrl}/goals/${input.id}/plans/${input.planId}` });
         },
         async listShares(input) {
             const pathParams = new Set(['id']);

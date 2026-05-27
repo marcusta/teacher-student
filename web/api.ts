@@ -20,7 +20,7 @@ export type { Lesson, LessonForUser, LessonExerciseRef } from './api/lessons.gen
 export type { Note } from './api/notes.gen';
 export type { TrainingSession, TrainingSessionExerciseRef, AttachedProgramRef } from './api/training-sessions.gen';
 export type { Program, ProgramExerciseRef } from './api/programs.gen';
-export type { Plan, PlanDetail, LinkedLessonRef, LinkedTrainingSessionRef } from './api/plans.gen';
+export type { Plan, PlanDetail, LinkedLessonRef, LinkedTrainingSessionRef, LinkedGoalRef } from './api/plans.gen';
 export type { Goal, SharedTeacherRef } from './api/goals.gen';
 export type { GoalTeacherView } from './api/students.gen';
 /** Server reuses RelationService.Student for the teachers endpoint; alias for clarity. */

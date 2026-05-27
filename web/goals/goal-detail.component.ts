@@ -3,7 +3,8 @@ import { AuthService } from '@basics/core/client/auth';
 import { t } from '../theme';
 import { s } from '../css';
 import { GoalsService } from './goals.service';
-import type { GoalTeacherView } from '../api';
+import { PlansService } from '../plans/plans.service';
+import type { GoalTeacherView, Plan } from '../api';
 
 const STATUS_LABEL: Record<GoalTeacherView['status'], string> = {
     active: 'Aktiv',
@@ -23,6 +24,11 @@ const tpl = template(`
                 <dt>Status</dt><dd bind="statusRead"></dd>
                 <dt>Måldatum</dt><dd bind="targetRead"></dd>
             </dl>
+        </section>
+
+        <section bind="plansSection" class="goal-detail__plans">
+            <h3>Tillhör planer</h3>
+            <ul bind="plansList" class="goal-detail__plans-list"></ul>
         </section>
     </div>
 `);
@@ -67,14 +73,44 @@ export class GoalDetailComponent extends Component {
                 & dt { opacity: 0.7; }
                 & dd { margin: 0; }
             }
+
+            & .goal-detail__plans { margin-top: ${s('xl')}; }
+            & .goal-detail__plans.hidden { display: none; }
+            & .goal-detail__plans h3 { margin: 0 0 ${s('sm')}; font-size: 1rem; }
+            & .goal-detail__plans-list {
+                list-style: none; margin: 0; padding: 0;
+                display: flex; flex-direction: column; gap: ${s('xs')};
+
+                & li {
+                    display: flex; align-items: center; gap: ${s('sm')};
+                    padding: ${s('sm')} ${s('md')};
+                    background: ${t('surface')};
+                    border-radius: ${t('radius')};
+                    font-size: 0.875rem;
+                }
+            }
         }
     `;
 
     private auth = this.inject(AuthService);
     private router = this.inject(Router);
     private svc = this.inject(GoalsService);
+    private plansSvc = this.inject(PlansService);
     private goal = new Signal<GoalTeacherView | null>(null);
     private resolved = new Signal(false);
+    private linkedPlanIds = new Signal<string[]>([]);
+
+    private isOwner = new Computed(() => {
+        const g = this.goal.get();
+        const me = this.auth.currentUser.get();
+        return !!g && !!me && g.studentId === me.id;
+    });
+
+    private pickerPlans = new Computed<Plan[]>(() => {
+        const owned = this.plansSvc.items.get();
+        const linked = new Set(this.linkedPlanIds.get());
+        return owned.filter((p) => p.status === 'active' || linked.has(p.id));
+    });
 
     private backHref = new Computed(() => {
         const g = this.goal.get();
@@ -94,11 +130,16 @@ export class GoalDetailComponent extends Component {
     private async load(): Promise<void> {
         const detail = await this.svc.loadDetail(this.goalId());
         this.goal.set(detail);
+        this.linkedPlanIds.set(detail?.planIds ?? []);
         this.resolved.set(true);
+        const me = this.auth.currentUser.get();
+        if (detail && me && detail.studentId === me.id) {
+            void this.plansSvc.load();
+        }
     }
 
     render(): DocumentFragment {
-        return this.wire(tpl, {
+        const frag = this.wire(tpl, {
             root: {
                 className: () => this.resolved.get() && !this.goal.get()
                     ? 'goal-detail missing' : 'goal-detail',
@@ -125,6 +166,55 @@ export class GoalDetailComponent extends Component {
             targetRead: {
                 textContent: () => this.goal.get()?.targetDate ?? '(inget)',
             },
+            plansSection: {
+                className: () => this.isOwner.get() ? 'goal-detail__plans' : 'goal-detail__plans hidden',
+            },
         });
+
+        const plansHost = this.ref(frag, 'plansList');
+        this.$each(
+            plansHost,
+            this.pickerPlans,
+            (p) => this.renderPlanRow(p),
+            (p) => `${p.id}:${p.status}:${this.linkedPlanIds.get().includes(p.id)}`,
+        );
+
+        return frag;
+    }
+
+    private renderPlanRow(plan: Plan): HTMLElement {
+        const li = document.createElement('li');
+        const linkedIds = this.linkedPlanIds.get();
+        const linked = linkedIds.includes(plan.id);
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = linked;
+        cb.disabled = plan.status === 'archived';
+        cb.addEventListener('change', async () => {
+            const goalId = this.goal.get()?.id;
+            if (!goalId) return;
+            const ok = cb.checked
+                ? await this.svc.attachPlan(goalId, plan.id)
+                : await this.svc.detachPlan(goalId, plan.id);
+            if (!ok) {
+                cb.checked = !cb.checked;
+                return;
+            }
+            const next = cb.checked
+                ? [...this.linkedPlanIds.get(), plan.id]
+                : this.linkedPlanIds.get().filter((id) => id !== plan.id);
+            this.linkedPlanIds.set(next);
+        });
+        li.appendChild(cb);
+
+        const label = document.createElement('span');
+        const bits = [plan.title];
+        if (plan.status === 'archived') bits.push('(arkiverad)');
+        label.textContent = bits.join(' ');
+        label.style.flex = '1';
+        li.appendChild(label);
+
+        return li;
     }
 }

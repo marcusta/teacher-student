@@ -5,7 +5,13 @@ import { t } from '../theme';
 import { s, btn, input } from '../css';
 import { PlansService } from './plans.service';
 import { TeachersService } from '../training-sessions/teachers.service';
-import type { LinkedLessonRef, LinkedTrainingSessionRef, PlanDetail, Teacher } from '../api';
+import type { LinkedGoalRef, LinkedLessonRef, LinkedTrainingSessionRef, PlanDetail, Teacher } from '../api';
+
+const GOAL_STATUS_LABEL: Record<LinkedGoalRef['status'], string> = {
+    active: 'Aktiv',
+    achieved: 'Uppnått',
+    abandoned: 'Arkiverad',
+};
 
 const DATETIME_FORMAT = new Intl.DateTimeFormat('sv-SE', {
     dateStyle: 'medium',
@@ -67,6 +73,12 @@ const tpl = template(`
             <h3>Träningspass</h3>
             <div bind="tsEmpty" class="plan-detail__empty">Inga kopplade träningspass.</div>
             <ul bind="tsList" class="plan-detail__list"></ul>
+        </section>
+
+        <section class="plan-detail__section">
+            <h3>Mål</h3>
+            <div bind="goalsEmpty" class="plan-detail__empty">Inga kopplade mål.</div>
+            <ul bind="goalsList" class="plan-detail__list"></ul>
         </section>
     </div>
 `);
@@ -324,6 +336,10 @@ export class PlanDetailComponent extends Component {
                 className: () => (this.detail.get()?.trainingSessions.length ?? 0) === 0
                     ? 'plan-detail__empty' : 'plan-detail__empty hidden',
             },
+            goalsEmpty: {
+                className: () => (this.detail.get()?.goals.length ?? 0) === 0
+                    ? 'plan-detail__empty' : 'plan-detail__empty hidden',
+            },
         });
 
         this.spawn(SelectComponent, this.ref(frag, 'teacherSelectHost'), {
@@ -337,7 +353,36 @@ export class PlanDetailComponent extends Component {
         const tsHost = this.ref(frag, 'tsList');
         this.$each(tsHost, () => this.detail.get()?.trainingSessions ?? [], (ts) => this.renderTs(ts), (ts) => ts.id);
 
+        const goalsHost = this.ref(frag, 'goalsList');
+        this.$each(
+            goalsHost,
+            () => this.detail.get()?.goals ?? [],
+            (g) => this.renderGoal(g),
+            (g) => `${g.id}:${g.status}:${g.title}:${g.targetDate ?? ''}`,
+        );
+
         return frag;
+    }
+
+    private renderGoal(item: LinkedGoalRef): HTMLElement {
+        const li = document.createElement('li');
+        const a = document.createElement('a');
+        a.className = 'plan-detail__item';
+        const path = `/mal/${item.id}`;
+        a.href = path;
+        a.onclick = (e) => { e.preventDefault(); this.router.navigate(path); };
+        const title = document.createElement('div');
+        title.className = 'plan-detail__item-title';
+        title.textContent = item.title;
+        a.appendChild(title);
+        const meta = document.createElement('div');
+        meta.className = 'plan-detail__item-meta';
+        const bits = [GOAL_STATUS_LABEL[item.status]];
+        if (item.targetDate) bits.push(item.targetDate);
+        meta.textContent = bits.join(' · ');
+        a.appendChild(meta);
+        li.appendChild(a);
+        return li;
     }
 
     private renderLesson(item: LinkedLessonRef): HTMLElement {

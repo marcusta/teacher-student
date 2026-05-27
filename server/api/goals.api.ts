@@ -45,6 +45,11 @@ const ListSharesInput = Type.Object({
     id: Type.String({ minLength: 1 }),
 });
 
+const PlanLinkInput = Type.Object({
+    id: Type.String({ minLength: 1 }),
+    planId: Type.String({ minLength: 1 }),
+});
+
 export function createGoalsApi(svc: GoalService) {
     return {
         create: {
@@ -145,6 +150,28 @@ export function createGoalsApi(svc: GoalService) {
             fn: async (input: Static<typeof UnshareInput>, c: Context) => {
                 const user = requireUser(c);
                 await svc.unshare(user.id, input.id, input.teacherId);
+                return { ok: true as const };
+            },
+        },
+        attachPlan: {
+            method: 'POST' as const,
+            path: '/goals/:id/plans/:planId',
+            schema: PlanLinkInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof PlanLinkInput>, c: Context) => {
+                const user = requireUser(c);
+                await svc.attachToPlan(user.id, input.id, input.planId);
+                return { ok: true as const };
+            },
+        },
+        detachPlan: {
+            method: 'DELETE' as const,
+            path: '/goals/:id/plans/:planId',
+            schema: PlanLinkInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof PlanLinkInput>, c: Context) => {
+                const user = requireUser(c);
+                await svc.detachFromPlan(user.id, input.id, input.planId);
                 return { ok: true as const };
             },
         },

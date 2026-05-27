@@ -298,3 +298,33 @@ test('getDetail lists only items with matching plan_id', async () => {
     const detail = await ctx.planService.getDetail(ctx.student.id, plan.id);
     expect(detail.lessons.length).toBe(1);
 });
+
+// --- 044: PlanDetail.goals ---
+
+test('getDetail hydrates linked goals in status then created_at DESC order', async () => {
+    const ctx = await seedTeacherWithStudent();
+    const plan = await ctx.planService.create(ctx.student.id, { title: 'Plan' });
+    const active1 = await ctx.goalService.create(ctx.student.id, { title: 'Active 1' });
+    await new Promise((r) => setTimeout(r, 5));
+    const active2 = await ctx.goalService.create(ctx.student.id, { title: 'Active 2' });
+    const done = await ctx.goalService.create(ctx.student.id, { title: 'Done' });
+    await ctx.db.updateTable('goal').set({ status: 'achieved' }).where('id', '=', done.id).execute();
+    const unattached = await ctx.goalService.create(ctx.student.id, { title: 'Unattached' });
+
+    await ctx.goalService.attachToPlan(ctx.student.id, active1.id, plan.id);
+    await ctx.goalService.attachToPlan(ctx.student.id, active2.id, plan.id);
+    await ctx.goalService.attachToPlan(ctx.student.id, done.id, plan.id);
+
+    const detail = await ctx.planService.getDetail(ctx.student.id, plan.id);
+    expect(detail.goals.map((g) => g.id)).toEqual([active2.id, active1.id, done.id]);
+    expect(detail.goals.every((g) => g.id !== unattached.id)).toBe(true);
+});
+
+test('getDetail surfaces goals to connected teacher even when goal not individually shared', async () => {
+    const ctx = await seedTeacherWithStudent();
+    const plan = await ctx.planService.create(ctx.student.id, { title: 'Plan' });
+    const g = await ctx.goalService.create(ctx.student.id, { title: 'Private goal' });
+    await ctx.goalService.attachToPlan(ctx.student.id, g.id, plan.id);
+    const detail = await ctx.planService.getDetail(ctx.teacher.id, plan.id);
+    expect(detail.goals.map((x) => x.id)).toEqual([g.id]);
+});

@@ -38,6 +38,7 @@ export interface GoalTeacherView {
     targetDate: null | string;
     achievedAt: null | string;
     status: 'active' | 'achieved' | 'abandoned';
+    planIds: string[];
     createdAt: string;
     updatedAt: string;
 }
