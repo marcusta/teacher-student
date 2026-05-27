@@ -4,7 +4,8 @@ import { SelectComponent, type SelectOption } from '@basics/core/client/ui/selec
 import { t } from '../theme';
 import { s, btn, input } from '../css';
 import { NotesService } from '../lessons/notes.service';
-import { api, type AttachedProgramRef, type Exercise, type Program, type TrainingSession, type TrainingSessionExerciseRef } from '../api';
+import { ExerciseNotesComponent } from '../lessons/exercise-notes.component';
+import { api, type AttachedProgramRef, type Exercise, type Program, type TrainingSession } from '../api';
 
 const tpl = template(`
     <div class="tsd" bind="root">
@@ -284,6 +285,7 @@ export class TrainingSessionDetailComponent extends Component {
     private editingSharedVal = new Signal(false);
     private exerciseVal = new Signal('');
     private programVal = new Signal('');
+    private openExNotes = new Signal<Set<string>>(new Set());
     private catalog = new Signal<Exercise[]>([]);
     private programCatalog = new Signal<Program[]>([]);
     private exerciseOptions = new Computed<SelectOption[]>(() => {
@@ -305,6 +307,12 @@ export class TrainingSessionDetailComponent extends Component {
 
     private session(): TrainingSession | null {
         return this.ts.get();
+    }
+
+    private toggleExNotes(id: string): void {
+        const next = new Set(this.openExNotes.get());
+        if (next.has(id)) next.delete(id); else next.add(id);
+        this.openExNotes.set(next);
     }
 
     private isOwner(): boolean {
@@ -475,12 +483,52 @@ export class TrainingSessionDetailComponent extends Component {
         }));
 
         const exHost = this.ref(frag, 'exerciseList');
-        this.$each(
-            exHost,
-            new Computed(() => this.ts.get()?.exercises ?? []),
-            (ex) => this.renderExercise(ex),
-            (ex) => `${ex.id}:${ex.sortOrder}:${ex.sourceProgramId ?? ''}`,
-        );
+        this.track(effect(() => {
+            const open = this.openExNotes.get();
+            const exercises = this.ts.get()?.exercises ?? [];
+            const me = this.auth.currentUser.get()?.id;
+            const tsStudentId = this.ts.get()?.studentId;
+            const viewerIsStudent = !!(me && tsStudentId && tsStudentId === me);
+            exHost.replaceChildren();
+            for (const ex of exercises) {
+                const li = document.createElement('li');
+                li.className = 'tsd__ex-item';
+                const row = document.createElement('div');
+                row.className = 'tsd__ex-row';
+                const label = document.createElement('span');
+                label.textContent = ex.name;
+                const actions = document.createElement('div');
+                actions.className = 'tsd__ex-actions';
+                const notesBtn = document.createElement('button');
+                notesBtn.type = 'button';
+                notesBtn.textContent = open.has(ex.id) ? 'Dölj anteckningar' : 'Anteckningar';
+                notesBtn.onclick = () => this.toggleExNotes(ex.id);
+                actions.appendChild(notesBtn);
+                if (this.isOwner()) {
+                    const remove = document.createElement('button');
+                    remove.type = 'button';
+                    remove.textContent = 'Ta bort';
+                    remove.onclick = async () => {
+                        const id = this.sessionId();
+                        await api.trainingSessions.removeExercise({ id, exerciseId: ex.exerciseId });
+                        await this.reloadSession();
+                    };
+                    actions.appendChild(remove);
+                }
+                row.append(label, actions);
+                li.appendChild(row);
+                if (open.has(ex.id)) {
+                    const host = document.createElement('div');
+                    li.appendChild(host);
+                    this.spawn(ExerciseNotesComponent, host, {
+                        parentKind: 'training_session_exercise',
+                        parentId: ex.id,
+                        isStudent: viewerIsStudent,
+                    });
+                }
+                exHost.appendChild(li);
+            }
+        }));
 
         const progHost = this.ref(frag, 'programList');
         this.$each(
@@ -583,29 +631,6 @@ export class TrainingSessionDetailComponent extends Component {
         }));
 
         return frag;
-    }
-
-    private renderExercise(ex: TrainingSessionExerciseRef): HTMLElement {
-        const li = document.createElement('li');
-        li.className = 'tsd__ex-item';
-        const label = document.createElement('span');
-        label.textContent = ex.name;
-        li.appendChild(label);
-        if (this.isOwner()) {
-            const actions = document.createElement('div');
-            actions.className = 'tsd__ex-actions';
-            const remove = document.createElement('button');
-            remove.type = 'button';
-            remove.textContent = 'Ta bort';
-            remove.onclick = async () => {
-                const id = this.sessionId();
-                await api.trainingSessions.removeExercise({ id, exerciseId: ex.exerciseId });
-                await this.reloadSession();
-            };
-            actions.appendChild(remove);
-            li.appendChild(actions);
-        }
-        return li;
     }
 
     private renderProgram(p: AttachedProgramRef): HTMLElement {

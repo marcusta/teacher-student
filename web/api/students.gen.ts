@@ -87,7 +87,7 @@ export interface Note {
     id: string;
     authorId: string;
     authorDisplayName: string;
-    parentKind: 'lesson' | 'student' | 'training_session' | 'exercise_question' | 'lesson_exercise' | 'goal';
+    parentKind: 'lesson' | 'student' | 'training_session' | 'training_session_exercise' | 'exercise_question' | 'lesson_exercise' | 'goal';
     parentId: string;
     body: string;
     visibility: 'private' | 'shared';

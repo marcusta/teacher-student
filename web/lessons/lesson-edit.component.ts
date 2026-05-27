@@ -736,7 +736,7 @@ export class LessonEditComponent extends Component {
                     const host = document.createElement('div');
                     li.appendChild(host);
                     this.spawn(ExerciseNotesComponent, host, {
-                        lessonExerciseId: ex.id,
+                        parentKind: 'lesson_exercise', parentId: ex.id,
                         isStudent: this.role.get() === 'student',
                     });
                 }
@@ -848,7 +848,7 @@ export class LessonEditComponent extends Component {
                     const host = document.createElement('div');
                     li.appendChild(host);
                     this.spawn(ExerciseNotesComponent, host, {
-                        lessonExerciseId: ex.id,
+                        parentKind: 'lesson_exercise', parentId: ex.id,
                         isStudent: this.role.get() === 'student',
                     });
                 }

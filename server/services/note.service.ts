@@ -166,6 +166,10 @@ export class NoteService {
             await this.assertTrainingSessionViewer(userId, parentId);
             return;
         }
+        if (parentKind === 'training_session_exercise') {
+            await this.assertTrainingSessionExerciseViewer(userId, parentId);
+            return;
+        }
         if (parentKind === 'goal') {
             await this.assertGoalViewer(userId, parentId);
             return;
@@ -227,6 +231,24 @@ export class NoteService {
         if (!share) throw new NotFoundError('Training Session not found');
     }
 
+    /**
+     * Resolve the training_session_exercise row to its owning Training
+     * Session and apply the same viewer rule as `training_session`.
+     * Leak-safe NotFoundError when row missing or caller not allowed.
+     */
+    private async assertTrainingSessionExerciseViewer(
+        userId: string,
+        tseId: string,
+    ): Promise<void> {
+        const row = await this.db
+            .selectFrom('training_session_exercise')
+            .select(['training_session_id'])
+            .where('id', '=', tseId)
+            .executeTakeFirst();
+        if (!row) throw new NotFoundError('Training Session exercise not found');
+        await this.assertTrainingSessionViewer(userId, row.training_session_id);
+    }
+
     /** Read-side authorization. Lessons: either teacher or student. */
     private async assertCanRead(
         userId: string,
@@ -243,6 +265,10 @@ export class NoteService {
         }
         if (parentKind === 'training_session') {
             await this.assertTrainingSessionViewer(userId, parentId);
+            return;
+        }
+        if (parentKind === 'training_session_exercise') {
+            await this.assertTrainingSessionExerciseViewer(userId, parentId);
             return;
         }
         if (parentKind === 'goal') {

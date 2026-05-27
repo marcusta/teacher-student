@@ -5,13 +5,15 @@ import { s, btn, input } from '../css';
 import { NotesService } from './notes.service';
 
 /**
- * Self-contained note thread for one `lesson_exercise` row. Owns its
- * own NotesService instance (no DI — DI is per-singleton) so multiple
+ * Self-contained note thread for one per-exercise row (either a
+ * `lesson_exercise` or a `training_session_exercise`). Owns its own
+ * NotesService instance (no DI — DI is per-singleton) so multiple
  * threads can coexist on the same page. Mirrors the lesson-level
  * thread UI from slice 017.
  */
 export interface ExerciseNotesProps {
-    lessonExerciseId: string;
+    parentKind: 'lesson_exercise' | 'training_session_exercise';
+    parentId: string;
     /** Whether to render the student-facing wording on the "shared" label. */
     isStudent: boolean;
 }
@@ -147,7 +149,7 @@ export class ExerciseNotesComponent extends Component<ExerciseNotesProps> {
     private editingShared = new Signal(false);
 
     onMount(): void {
-        void this.notes.load('lesson_exercise', this.props.lessonExerciseId);
+        void this.notes.load(this.props.parentKind, this.props.parentId);
     }
 
     private sharedLabelText(): string {
