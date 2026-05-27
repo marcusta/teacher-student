@@ -311,3 +311,84 @@ test('getForTeacher throws NotFoundError for non-relation teacher', async () => 
     });
     await expect(ctx.goalService.getForTeacher(stranger.id, g.id)).rejects.toThrow();
 });
+
+// --- 043: status transitions ---
+
+test('markAchieved by owner sets status=achieved and achieved_at', async () => {
+    const { goalService, student } = await seedStudent();
+    const g = await goalService.create(student.id, { title: 'X' });
+    await goalService.markAchieved(student.id, g.id);
+    const got = await goalService.getForStudent(student.id, g.id);
+    expect(got.status).toBe('achieved');
+    expect(got.achievedAt).toBeString();
+});
+
+test('markAchieved by shared teacher transitions the Goal', async () => {
+    const { goalService, teacher, student } = await seedTeacherWithStudent();
+    const g = await goalService.create(student.id, { title: 'X' });
+    await goalService.share(student.id, g.id, teacher.id);
+    await goalService.markAchieved(teacher.id, g.id);
+    const got = await goalService.getForStudent(student.id, g.id);
+    expect(got.status).toBe('achieved');
+});
+
+test('markAchieved by unshared teacher throws NotFoundError', async () => {
+    const { goalService, teacher, student } = await seedTeacherWithStudent();
+    const g = await goalService.create(student.id, { title: 'X' });
+    await expect(goalService.markAchieved(teacher.id, g.id)).rejects.toThrow();
+});
+
+test('markAchieved is idempotent — achieved_at is not rewritten', async () => {
+    const { goalService, student } = await seedStudent();
+    const g = await goalService.create(student.id, { title: 'X' });
+    await goalService.markAchieved(student.id, g.id);
+    const first = (await goalService.getForStudent(student.id, g.id)).achievedAt;
+    await new Promise((r) => setTimeout(r, 10));
+    await goalService.markAchieved(student.id, g.id);
+    const second = (await goalService.getForStudent(student.id, g.id)).achievedAt;
+    expect(second).toBe(first);
+});
+
+test('markAchieved from abandoned throws ConflictError', async () => {
+    const { ConflictError } = await import('@basics/core/server/auth');
+    const { goalService, db, student } = await seedStudent();
+    const g = await goalService.create(student.id, { title: 'X' });
+    await db.updateTable('goal').set({ status: 'abandoned' }).where('id', '=', g.id).execute();
+    await expect(goalService.markAchieved(student.id, g.id)).rejects.toBeInstanceOf(ConflictError);
+});
+
+test('reopen clears achieved_at and flips status to active', async () => {
+    const { goalService, student } = await seedStudent();
+    const g = await goalService.create(student.id, { title: 'X' });
+    await goalService.markAchieved(student.id, g.id);
+    await goalService.reopen(student.id, g.id);
+    const got = await goalService.getForStudent(student.id, g.id);
+    expect(got.status).toBe('active');
+    expect(got.achievedAt).toBeNull();
+});
+
+test('reopen by shared teacher transitions the Goal', async () => {
+    const { goalService, teacher, student } = await seedTeacherWithStudent();
+    const g = await goalService.create(student.id, { title: 'X' });
+    await goalService.share(student.id, g.id, teacher.id);
+    await goalService.markAchieved(student.id, g.id);
+    await goalService.reopen(teacher.id, g.id);
+    const got = await goalService.getForStudent(student.id, g.id);
+    expect(got.status).toBe('active');
+});
+
+test('reopen is idempotent when already active', async () => {
+    const { goalService, student } = await seedStudent();
+    const g = await goalService.create(student.id, { title: 'X' });
+    await goalService.reopen(student.id, g.id);
+    const got = await goalService.getForStudent(student.id, g.id);
+    expect(got.status).toBe('active');
+    expect(got.achievedAt).toBeNull();
+});
+
+test('abandon by shared teacher throws NotFoundError (owner-only)', async () => {
+    const { goalService, teacher, student } = await seedTeacherWithStudent();
+    const g = await goalService.create(student.id, { title: 'X' });
+    await goalService.share(student.id, g.id, teacher.id);
+    await expect(goalService.abandon(teacher.id, g.id)).rejects.toThrow();
+});

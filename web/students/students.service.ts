@@ -50,6 +50,20 @@ export class StudentsService {
         return result ?? null;
     }
 
+    async achieveGoal(goalId: string): Promise<boolean> {
+        const result = await request(this.loading, this.error, () =>
+            api.goals.achieve({ id: goalId }),
+        );
+        return result !== null;
+    }
+
+    async reopenGoal(goalId: string): Promise<boolean> {
+        const result = await request(this.loading, this.error, () =>
+            api.goals.reopen({ id: goalId }),
+        );
+        return result !== null;
+    }
+
     async exerciseHistory(
         studentId: string,
         exerciseId: string,

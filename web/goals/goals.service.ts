@@ -57,6 +57,27 @@ export class GoalsService {
         return result;
     }
 
+    async achieve(id: string): Promise<boolean> {
+        const result = await request(this.loading, this.error, () => api.goals.achieve({ id }));
+        if (!result) return false;
+        const now = new Date().toISOString();
+        this.items.set(sortGoals(this.items.get().map((g) =>
+            g.id === id && g.status !== 'achieved'
+                ? { ...g, status: 'achieved' as const, achievedAt: g.achievedAt ?? now }
+                : g,
+        )));
+        return true;
+    }
+
+    async reopen(id: string): Promise<boolean> {
+        const result = await request(this.loading, this.error, () => api.goals.reopen({ id }));
+        if (!result) return false;
+        this.items.set(sortGoals(this.items.get().map((g) =>
+            g.id === id ? { ...g, status: 'active' as const, achievedAt: null } : g,
+        )));
+        return true;
+    }
+
     async abandon(id: string): Promise<boolean> {
         const result = await request(this.loading, this.error, () => api.goals.abandon({ id }));
         if (!result) return false;

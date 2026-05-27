@@ -14,6 +14,18 @@ export interface Goal {
     updatedAt: string;
 }
 
+export interface GoalTeacherView {
+    id: string;
+    studentId: string;
+    title: string;
+    description: null | string;
+    targetDate: null | string;
+    achievedAt: null | string;
+    status: 'active' | 'achieved' | 'abandoned';
+    createdAt: string;
+    updatedAt: string;
+}
+
 export interface SharedTeacherRef {
     teacherId: string;
     displayName: string;
@@ -22,9 +34,11 @@ export interface SharedTeacherRef {
 export interface GoalsApi {
     create(input: { description?: string; targetDate?: string; title: string }): Promise<Goal>;
     list(): Promise<Goal[]>;
-    get(input: { id: string }): Promise<Goal>;
+    get(input: { id: string }): Promise<GoalTeacherView>;
     update(input: { title?: string; description?: null | string; targetDate?: null | string; id: string }): Promise<Goal>;
     abandon(input: { id: string }): Promise<{ ok: true }>;
+    achieve(input: { id: string }): Promise<{ ok: true }>;
+    reopen(input: { id: string }): Promise<{ ok: true }>;
     share(input: { id: string; teacherId: string }): Promise<{ ok: true }>;
     unshare(input: { id: string; teacherId: string }): Promise<{ ok: true }>;
     listShares(input: { id: string }): Promise<SharedTeacherRef[]>;
@@ -59,6 +73,20 @@ export function createGoalsClient(baseUrl: string): GoalsApi {
             for (const [k, v] of Object.entries(input as any))
                 if (!pathParams.has(k)) body[k] = v;
             return apiFetch({ method: 'POST', url: `${baseUrl}/goals/${input.id}/abandon`, body });
+        },
+        async achieve(input) {
+            const pathParams = new Set(['id']);
+            const body: Record<string, unknown> = {};
+            for (const [k, v] of Object.entries(input as any))
+                if (!pathParams.has(k)) body[k] = v;
+            return apiFetch({ method: 'POST', url: `${baseUrl}/goals/${input.id}/achieve`, body });
+        },
+        async reopen(input) {
+            const pathParams = new Set(['id']);
+            const body: Record<string, unknown> = {};
+            for (const [k, v] of Object.entries(input as any))
+                if (!pathParams.has(k)) body[k] = v;
+            return apiFetch({ method: 'POST', url: `${baseUrl}/goals/${input.id}/reopen`, body });
         },
         async share(input) {
             const pathParams = new Set(['id']);

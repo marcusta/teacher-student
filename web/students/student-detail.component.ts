@@ -198,6 +198,10 @@ export class StudentDetailComponent extends Component {
         const goalsHost = this.ref(frag, 'goalsList');
         this.$each(goalsHost, this.goals, (g) => {
             const li = document.createElement('li');
+            li.style.display = 'flex';
+            li.style.alignItems = 'center';
+            li.style.gap = s('sm');
+
             const link = document.createElement('a');
             const path = `/mal/${g.id}`;
             link.href = path;
@@ -207,7 +211,29 @@ export class StudentDetailComponent extends Component {
             link.textContent = bits.join(' · ');
             link.style.color = 'inherit';
             link.style.textDecoration = 'none';
+            link.style.flex = '1';
             li.appendChild(link);
+
+            if (g.status !== 'abandoned') {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.textContent = g.status === 'achieved' ? 'Återöppna' : 'Markera klart';
+                btn.addEventListener('click', async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const studentId = this.student.get()?.id;
+                    if (!studentId) return;
+                    const ok = g.status === 'achieved'
+                        ? await this.svc.reopenGoal(g.id)
+                        : await this.svc.achieveGoal(g.id);
+                    if (ok) {
+                        const list = await this.svc.listGoals(studentId);
+                        if (list) this.goals.set(list);
+                    }
+                });
+                li.appendChild(btn);
+            }
+
             return li;
         }, (g) => `${g.id}:${g.status}:${g.title}:${g.targetDate ?? ''}`);
 

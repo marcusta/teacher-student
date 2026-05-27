@@ -1,6 +1,6 @@
 import { Type, type Static } from '@sinclair/typebox';
 import type { Context } from 'hono';
-import { requireAuth, requireUser } from '@basics/core/server/auth';
+import { NotFoundError, requireAuth, requireUser } from '@basics/core/server/auth';
 import type { GoalService } from '../services/goal.service';
 
 const CreateInput = Type.Object({
@@ -20,6 +20,14 @@ const UpdateInput = Type.Object({
 });
 
 const AbandonInput = Type.Object({
+    id: Type.String({ minLength: 1 }),
+});
+
+const AchieveInput = Type.Object({
+    id: Type.String({ minLength: 1 }),
+});
+
+const ReopenInput = Type.Object({
     id: Type.String({ minLength: 1 }),
 });
 
@@ -64,7 +72,14 @@ export function createGoalsApi(svc: GoalService) {
             middleware: [requireAuth()],
             fn: async (input: { id: string }, c: Context) => {
                 const user = requireUser(c);
-                return svc.getForStudent(user.id, input.id);
+                try {
+                    return await svc.getForStudent(user.id, input.id);
+                } catch (e) {
+                    if (e instanceof NotFoundError) {
+                        return svc.getForTeacher(user.id, input.id);
+                    }
+                    throw e;
+                }
             },
         },
         update: {
@@ -86,6 +101,28 @@ export function createGoalsApi(svc: GoalService) {
             fn: async (input: Static<typeof AbandonInput>, c: Context) => {
                 const user = requireUser(c);
                 await svc.abandon(user.id, input.id);
+                return { ok: true as const };
+            },
+        },
+        achieve: {
+            method: 'POST' as const,
+            path: '/goals/:id/achieve',
+            schema: AchieveInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof AchieveInput>, c: Context) => {
+                const user = requireUser(c);
+                await svc.markAchieved(user.id, input.id);
+                return { ok: true as const };
+            },
+        },
+        reopen: {
+            method: 'POST' as const,
+            path: '/goals/:id/reopen',
+            schema: ReopenInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof ReopenInput>, c: Context) => {
+                const user = requireUser(c);
+                await svc.reopen(user.id, input.id);
                 return { ok: true as const };
             },
         },

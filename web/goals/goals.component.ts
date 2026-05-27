@@ -377,6 +377,24 @@ export class GoalsComponent extends Component {
             editBtn.addEventListener('click', () => this.startEdit(item));
             actions.appendChild(editBtn);
 
+            if (item.status === 'achieved') {
+                const reopenBtn = document.createElement('button');
+                reopenBtn.type = 'button';
+                reopenBtn.textContent = 'Återöppna';
+                reopenBtn.addEventListener('click', async () => {
+                    await this.svc.reopen(item.id);
+                });
+                actions.appendChild(reopenBtn);
+            } else {
+                const achieveBtn = document.createElement('button');
+                achieveBtn.type = 'button';
+                achieveBtn.textContent = 'Markera klart';
+                achieveBtn.addEventListener('click', async () => {
+                    await this.svc.achieve(item.id);
+                });
+                actions.appendChild(achieveBtn);
+            }
+
             const abandonBtn = document.createElement('button');
             abandonBtn.type = 'button';
             abandonBtn.textContent = 'Arkivera';

@@ -1,6 +1,6 @@
 import type { Kysely, Selectable } from 'kysely';
 import { sql } from 'kysely';
-import { NotFoundError } from '@basics/core/server/auth';
+import { ConflictError, NotFoundError } from '@basics/core/server/auth';
 import type { Database, GoalTable } from '../db/schema';
 
 export interface Goal {
@@ -211,6 +211,40 @@ export class GoalService {
             .execute();
     }
 
+    /**
+     * Transition a Goal to `achieved`. Allowed for the owner or a shared
+     * teacher. Idempotent (does not rewrite `achieved_at`). Rejects with
+     * `ConflictError` when current status is `abandoned` (reopen first).
+     */
+    async markAchieved(actorId: string, goalId: string): Promise<void> {
+        const row = await this.assertActorCanTransition(actorId, goalId);
+        if (row.status === 'achieved') return;
+        if (row.status === 'abandoned') {
+            throw new ConflictError('Goal is abandoned; reopen before achieving');
+        }
+        const now = new Date().toISOString();
+        await this.db
+            .updateTable('goal')
+            .set({ status: 'achieved', achieved_at: now, updated_at: now })
+            .where('id', '=', goalId)
+            .execute();
+    }
+
+    /**
+     * Transition a Goal back to `active`, clearing `achieved_at`. Allowed for
+     * the owner or a shared teacher. Idempotent.
+     */
+    async reopen(actorId: string, goalId: string): Promise<void> {
+        const row = await this.assertActorCanTransition(actorId, goalId);
+        if (row.status === 'active') return;
+        const now = new Date().toISOString();
+        await this.db
+            .updateTable('goal')
+            .set({ status: 'active', achieved_at: null, updated_at: now })
+            .where('id', '=', goalId)
+            .execute();
+    }
+
     /** Share a Goal with a connected Teacher. Idempotent. Owner-only. */
     async share(studentId: string, goalId: string, teacherId: string): Promise<void> {
         await this.assertGoalOwner(studentId, goalId);
@@ -287,6 +321,32 @@ export class GoalService {
             .executeTakeFirst();
         if (!row) throw new NotFoundError('Goal not found');
         return toGoalTeacherView(row);
+    }
+
+    /**
+     * Returns the goal row if `actorId` is either the owning student or a
+     * teacher with an active share. Throws `NotFoundError` otherwise
+     * (leak-safe).
+     */
+    private async assertActorCanTransition(
+        actorId: string,
+        goalId: string,
+    ): Promise<{ status: 'active' | 'achieved' | 'abandoned' }> {
+        const row = await this.db
+            .selectFrom('goal')
+            .select(['student_id', 'status'])
+            .where('id', '=', goalId)
+            .executeTakeFirst();
+        if (!row) throw new NotFoundError('Goal not found');
+        if (row.student_id === actorId) return { status: row.status };
+        const share = await this.db
+            .selectFrom('goal_share')
+            .select('teacher_id')
+            .where('goal_id', '=', goalId)
+            .where('teacher_id', '=', actorId)
+            .executeTakeFirst();
+        if (!share) throw new NotFoundError('Goal not found');
+        return { status: row.status };
     }
 
     private async assertGoalOwner(studentId: string, goalId: string): Promise<void> {
