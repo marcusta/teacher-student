@@ -79,7 +79,7 @@ export interface TrainingSessionProgramTable {
 }
 
 /** SCOPE.md: unified Note table. MVP wires only parent_kind='lesson'. */
-export type NoteParentKind = 'lesson' | 'student' | 'training_session' | 'exercise_question' | 'lesson_exercise';
+export type NoteParentKind = 'lesson' | 'student' | 'training_session' | 'exercise_question' | 'lesson_exercise' | 'goal';
 export type NoteVisibility = 'private' | 'shared';
 
 export interface NotesTable {

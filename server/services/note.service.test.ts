@@ -360,3 +360,84 @@ test('listFor on lesson_exercise returns notes ordered by created_at ASC', async
     });
     expect(list.map((n) => n.body)).toEqual(['first', 'second']);
 });
+
+// --- 045: Goal notes ---
+
+async function seedGoal() {
+    const ctx = await createTestDb();
+    const teacher = await ctx.userService.register({
+        email: 'teacher@example.com', password: 'secret123', displayName: 'T',
+    });
+    const student = await ctx.userService.register({
+        email: 'student@example.com', password: 'secret123', displayName: 'S',
+    });
+    const inv = await ctx.invitationService.createInvitation(teacher.id, 'student@example.com');
+    await ctx.invitationService.acceptInvitation(inv.id, student.id, 'student@example.com');
+    const goal = await ctx.goalService.create(student.id, { title: 'G' });
+    return { ...ctx, teacher, student, goal };
+}
+
+test('owning Student authors a Goal note', async () => {
+    const { noteService, student, goal } = await seedGoal();
+    const n = await noteService.create(student.id, {
+        parentKind: 'goal', parentId: goal.id,
+        body: 'Reflection', visibility: 'private',
+    });
+    expect(n.authorId).toBe(student.id);
+    expect(n.parentKind).toBe('goal');
+    expect(n.parentId).toBe(goal.id);
+});
+
+test('shared Teacher authors a Goal note', async () => {
+    const { noteService, goalService, teacher, student, goal } = await seedGoal();
+    await goalService.share(student.id, goal.id, teacher.id);
+    const n = await noteService.create(teacher.id, {
+        parentKind: 'goal', parentId: goal.id,
+        body: 'Coach note', visibility: 'shared',
+    });
+    expect(n.authorId).toBe(teacher.id);
+});
+
+test('connected but unshared Teacher cannot author Goal note', async () => {
+    const { noteService, teacher, goal } = await seedGoal();
+    await expect(noteService.create(teacher.id, {
+        parentKind: 'goal', parentId: goal.id,
+        body: 'no', visibility: 'shared',
+    })).rejects.toBeInstanceOf(NotFoundError);
+});
+
+test('stranger cannot author or read Goal notes (leak-safe)', async () => {
+    const { noteService, userService, goal } = await seedGoal();
+    const stranger = await userService.register({
+        email: 'x@example.com', password: 'secret123', displayName: 'X',
+    });
+    await expect(noteService.create(stranger.id, {
+        parentKind: 'goal', parentId: goal.id,
+        body: 'no', visibility: 'shared',
+    })).rejects.toBeInstanceOf(NotFoundError);
+    await expect(noteService.listFor(stranger.id, {
+        parentKind: 'goal', parentId: goal.id,
+    })).rejects.toBeInstanceOf(NotFoundError);
+});
+
+test('shared Teacher sees own private + everyone-shared on a Goal; not authors private of others', async () => {
+    const { noteService, goalService, teacher, student, goal } = await seedGoal();
+    await goalService.share(student.id, goal.id, teacher.id);
+    await noteService.create(student.id, {
+        parentKind: 'goal', parentId: goal.id,
+        body: 'student-private', visibility: 'private',
+    });
+    await noteService.create(student.id, {
+        parentKind: 'goal', parentId: goal.id,
+        body: 'student-shared', visibility: 'shared',
+    });
+    await noteService.create(teacher.id, {
+        parentKind: 'goal', parentId: goal.id,
+        body: 'teacher-private', visibility: 'private',
+    });
+
+    const teacherList = await noteService.listFor(teacher.id, {
+        parentKind: 'goal', parentId: goal.id,
+    });
+    expect(teacherList.map((n) => n.body).sort()).toEqual(['student-shared', 'teacher-private']);
+});

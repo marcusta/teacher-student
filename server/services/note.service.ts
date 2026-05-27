@@ -166,6 +166,10 @@ export class NoteService {
             await this.assertTrainingSessionViewer(userId, parentId);
             return;
         }
+        if (parentKind === 'goal') {
+            await this.assertGoalViewer(userId, parentId);
+            return;
+        }
         throw new NotFoundError('Unsupported parent kind');
     }
 
@@ -241,7 +245,33 @@ export class NoteService {
             await this.assertTrainingSessionViewer(userId, parentId);
             return;
         }
+        if (parentKind === 'goal') {
+            await this.assertGoalViewer(userId, parentId);
+            return;
+        }
         throw new NotFoundError('Unsupported parent kind');
+    }
+
+    /**
+     * Shared author/read gate for `goal` notes. The owning Student always
+     * passes; a Teacher passes only when a `goal_share` row addresses them.
+     * Leak-safe NotFoundError otherwise (mirrors training_session rule).
+     */
+    private async assertGoalViewer(userId: string, goalId: string): Promise<void> {
+        const goal = await this.db
+            .selectFrom('goal')
+            .select(['id', 'student_id'])
+            .where('id', '=', goalId)
+            .executeTakeFirst();
+        if (!goal) throw new NotFoundError('Goal not found');
+        if (goal.student_id === userId) return;
+        const share = await this.db
+            .selectFrom('goal_share')
+            .select('teacher_id')
+            .where('goal_id', '=', goalId)
+            .where('teacher_id', '=', userId)
+            .executeTakeFirst();
+        if (!share) throw new NotFoundError('Goal not found');
     }
 
     private async loadOne(id: string): Promise<Note> {

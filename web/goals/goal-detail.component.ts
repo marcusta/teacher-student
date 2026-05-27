@@ -1,8 +1,9 @@
-import { Component, Computed, Router, Signal, template } from '@basics/core/client/core';
+import { Component, Computed, Router, Signal, effect, template } from '@basics/core/client/core';
 import { AuthService } from '@basics/core/client/auth';
 import { t } from '../theme';
 import { s } from '../css';
 import { GoalsService } from './goals.service';
+import { GoalNotesComponent } from './goal-notes.component';
 import { PlansService } from '../plans/plans.service';
 import type { GoalTeacherView, Plan } from '../api';
 
@@ -30,6 +31,8 @@ const tpl = template(`
             <h3>Tillhör planer</h3>
             <ul bind="plansList" class="goal-detail__plans-list"></ul>
         </section>
+
+        <div bind="notesHost"></div>
     </div>
 `);
 
@@ -178,6 +181,18 @@ export class GoalDetailComponent extends Component {
             (p) => this.renderPlanRow(p),
             (p) => `${p.id}:${p.status}:${this.linkedPlanIds.get().includes(p.id)}`,
         );
+
+        const notesHost = this.ref(frag, 'notesHost');
+        this.track(effect(() => {
+            const g = this.goal.get();
+            const me = this.auth.currentUser.get();
+            notesHost.replaceChildren();
+            if (!g || !me) return;
+            this.spawn(GoalNotesComponent, notesHost, {
+                goalId: g.id,
+                isStudent: g.studentId === me.id,
+            });
+        }));
 
         return frag;
     }

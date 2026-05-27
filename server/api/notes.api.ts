@@ -9,6 +9,7 @@ const ParentKind = Type.Union([
     Type.Literal('training_session'),
     Type.Literal('exercise_question'),
     Type.Literal('lesson_exercise'),
+    Type.Literal('goal'),
 ]);
 const Visibility = Type.Union([Type.Literal('private'), Type.Literal('shared')]);
 
