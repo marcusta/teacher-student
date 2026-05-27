@@ -1,7 +1,9 @@
-import { Component, Router, template } from '@basics/core/client/core';
+import { Component, Computed, Router, template } from '@basics/core/client/core';
 import { t } from '../theme';
 import { s } from '../css';
 import { InboxService } from '../inbox/inbox.service';
+import { StudentsService } from '../students/students.service';
+import { TeachersService } from '../training-sessions/teachers.service';
 
 const tpl = template(`
     <nav class="nav">
@@ -12,6 +14,7 @@ const tpl = template(`
         <a bind="programsLink" href="/program">Program</a>
         <a bind="stableLink" href="/hastar">Hästar</a>
         <a bind="plansLink" href="/planer">Planer</a>
+        <a bind="goalsLink" href="/mal">Mål</a>
         <a bind="lessonsLink" href="/lektioner">Lektioner</a>
         <a bind="trainingSessionsLink" href="/traningspass">Träningspass</a>
         <a bind="inboxLink" href="/inbox">
@@ -57,6 +60,7 @@ export class NavComponent extends Component {
                 text-align: center;
             }
             & .nav__badge.hidden { display: none; }
+            & .nav__link-hidden { display: none; }
 
             @media (max-width: 640px) {
                 flex-direction: row;
@@ -67,12 +71,24 @@ export class NavComponent extends Component {
 
     private router = this.inject(Router);
     private inbox = this.inject(InboxService);
+    private students = this.inject(StudentsService);
+    private teachers = this.inject(TeachersService);
+
+    /** Hide Mål for teacher-only users (roster but no connected teachers). */
+    private showGoalsLink = new Computed(() => {
+        const hasStudents = this.students.items.get().length > 0;
+        const hasTeachers = this.teachers.items.get().length > 0;
+        return !hasStudents || hasTeachers;
+    });
 
     onMount(): void {
         void this.inbox.load();
+        void this.students.load();
+        void this.teachers.load();
     }
 
     render(): DocumentFragment {
+        const malLink = this.router.link('/mal');
         return this.wire(tpl, {
             homeLink: this.router.link('/home'),
             invitationsLink: this.router.link('/invitations'),
@@ -81,6 +97,13 @@ export class NavComponent extends Component {
             programsLink: this.router.link('/program'),
             stableLink: this.router.link('/hastar'),
             plansLink: this.router.link('/planer'),
+            goalsLink: {
+                onclick: malLink.onclick,
+                className: () => {
+                    const base = malLink.className();
+                    return this.showGoalsLink.get() ? base : `${base} nav__link-hidden`.trim();
+                },
+            },
             lessonsLink: this.router.link('/lektioner'),
             trainingSessionsLink: this.router.link('/traningspass'),
             inboxLink: this.router.link('/inbox'),

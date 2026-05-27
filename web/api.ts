@@ -9,6 +9,7 @@ import { createTrainingSessionsClient } from './api/training-sessions.gen';
 import { createTeachersClient, type Student as TeacherDto } from './api/teachers.gen';
 import { createProgramsClient } from './api/programs.gen';
 import { createPlansClient } from './api/plans.gen';
+import { createGoalsClient } from './api/goals.gen';
 
 export { ApiError } from '@basics/core/client/api-error';
 export type { Invitation, InboxInvitation } from './api/invitations.gen';
@@ -20,6 +21,8 @@ export type { Note } from './api/notes.gen';
 export type { TrainingSession, TrainingSessionExerciseRef, AttachedProgramRef } from './api/training-sessions.gen';
 export type { Program, ProgramExerciseRef } from './api/programs.gen';
 export type { Plan, PlanDetail, LinkedLessonRef, LinkedTrainingSessionRef } from './api/plans.gen';
+export type { Goal, SharedTeacherRef } from './api/goals.gen';
+export type { GoalTeacherView } from './api/students.gen';
 /** Server reuses RelationService.Student for the teachers endpoint; alias for clarity. */
 export type Teacher = TeacherDto;
 
@@ -35,4 +38,5 @@ export const api = {
     teachers: createTeachersClient('/api'),
     programs: createProgramsClient('/api'),
     plans: createPlansClient('/api'),
+    goals: createGoalsClient('/api'),
 };

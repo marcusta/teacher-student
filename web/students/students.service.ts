@@ -1,6 +1,6 @@
 import { Signal } from '@basics/core/client/core';
 import { request, type RequestError } from '@basics/core/client/request';
-import { api, type Student, type Horse, type TrainingSession, type ExerciseHistoryEntry, type Plan } from '../api';
+import { api, type Student, type Horse, type TrainingSession, type ExerciseHistoryEntry, type Plan, type GoalTeacherView } from '../api';
 
 /**
  * Owns the teacher's roster of Students plus lookup-by-id for the detail
@@ -39,6 +39,13 @@ export class StudentsService {
     async listPlans(studentId: string): Promise<Plan[] | null> {
         const result = await request(this.loading, this.error, () =>
             api.students.listPlans({ id: studentId }),
+        );
+        return result ?? null;
+    }
+
+    async listGoals(studentId: string): Promise<GoalTeacherView[] | null> {
+        const result = await request(this.loading, this.error, () =>
+            api.students.listGoals({ id: studentId }),
         );
         return result ?? null;
     }

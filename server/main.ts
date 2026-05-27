@@ -16,6 +16,7 @@ import { createTrainingSessionsApi } from './api/training-sessions.api';
 import { createTeachersApi } from './api/teachers.api';
 import { createProgramsApi } from './api/programs.api';
 import { createPlansApi } from './api/plans.api';
+import { createGoalsApi } from './api/goals.api';
 
 // --- Composition root ---
 
@@ -24,7 +25,7 @@ const { app, db, bootstrapAuth } = await createApp<Database>(path.join(import.me
 const {
     userService, invitationService, relationService,
     exerciseService, horseService, lessonService, noteService,
-    trainingSessionService, programService, planService,
+    trainingSessionService, programService, planService, goalService,
 } = createServices(db);
 
 const { sessions } = await bootstrapAuth({
@@ -37,7 +38,7 @@ const { sessions } = await bootstrapAuth({
 mount(app, '/api', createRegisterApi(userService, sessions));
 mount(app, '/api', createInvitationsApi(invitationService));
 mount(app, '/api', createStudentsApi(
-    relationService, horseService, planService, trainingSessionService, lessonService,
+    relationService, horseService, planService, trainingSessionService, lessonService, goalService,
 ));
 mount(app, '/api', createExercisesApi(exerciseService));
 mount(app, '/api', createHorsesApi(horseService));
@@ -47,6 +48,7 @@ mount(app, '/api', createTrainingSessionsApi(trainingSessionService));
 mount(app, '/api', createTeachersApi(relationService));
 mount(app, '/api', createProgramsApi(programService));
 mount(app, '/api', createPlansApi(planService));
+mount(app, '/api', createGoalsApi(goalService));
 
 // --- Dev seed ---
 

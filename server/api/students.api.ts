@@ -6,12 +6,15 @@ import type { PlanService } from '../services/plan.service';
 import type { TrainingSessionService } from '../services/training-session.service';
 import type { LessonService } from '../services/lesson.service';
 
+import type { GoalService } from '../services/goal.service';
+
 export function createStudentsApi(
     svc: RelationService,
     horseService: HorseService,
     planService: PlanService,
     trainingSessionService: TrainingSessionService,
     lessonService: LessonService,
+    goalService: GoalService,
 ) {
     return {
         list: {
@@ -51,6 +54,15 @@ export function createStudentsApi(
             fn: async (input: { id: string }, c: Context) => {
                 const user = requireUser(c);
                 return planService.listForStudentAsTeacher(user.id, input.id);
+            },
+        },
+        listGoals: {
+            method: 'GET' as const,
+            path: '/students/:id/goals',
+            middleware: [requireAuth()],
+            fn: async (input: { id: string }, c: Context) => {
+                const user = requireUser(c);
+                return goalService.listForStudentAsTeacher(user.id, input.id);
             },
         },
         listTrainingSessions: {

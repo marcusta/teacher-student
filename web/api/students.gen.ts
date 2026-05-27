@@ -30,6 +30,18 @@ export interface Plan {
     updatedAt: string;
 }
 
+export interface GoalTeacherView {
+    id: string;
+    studentId: string;
+    title: string;
+    description: null | string;
+    targetDate: null | string;
+    achievedAt: null | string;
+    status: 'active' | 'achieved' | 'abandoned';
+    createdAt: string;
+    updatedAt: string;
+}
+
 export interface TrainingSession {
     id: string;
     studentId: string;
@@ -87,6 +99,7 @@ export interface StudentsApi {
     get(input: { id: string }): Promise<Student>;
     listHorses(input: { id: string }): Promise<Horse[]>;
     listPlans(input: { id: string }): Promise<Plan[]>;
+    listGoals(input: { id: string }): Promise<GoalTeacherView[]>;
     listTrainingSessions(input: { id: string }): Promise<TrainingSession[]>;
     exerciseHistory(input: { id: string; exerciseId: string }): Promise<ExerciseHistoryEntry[]>;
 }
@@ -119,6 +132,14 @@ export function createStudentsClient(baseUrl: string): StudentsApi {
                 if (!pathParams.has(k) && v !== undefined) params.set(k, String(v));
             const qs = params.toString();
             return apiFetch({ method: 'GET', url: `${baseUrl}/students/${input.id}/plans${qs ? '?' + qs : ''}` });
+        },
+        async listGoals(input) {
+            const pathParams = new Set(['id']);
+            const params = new URLSearchParams();
+            for (const [k, v] of Object.entries(input as any))
+                if (!pathParams.has(k) && v !== undefined) params.set(k, String(v));
+            const qs = params.toString();
+            return apiFetch({ method: 'GET', url: `${baseUrl}/students/${input.id}/goals${qs ? '?' + qs : ''}` });
         },
         async listTrainingSessions(input) {
             const pathParams = new Set(['id']);

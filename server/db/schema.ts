@@ -7,6 +7,8 @@ export interface Database {
     exercises: ExercisesTable;
     horses: HorsesTable;
     plans: PlansTable;
+    goal: GoalTable;
+    goal_share: GoalShareTable;
     lessons: LessonsTable;
     lesson_exercise: LessonExerciseTable;
     notes: NotesTable;
@@ -124,6 +126,25 @@ export interface HorsesTable {
 }
 
 export type PlanStatus = 'active' | 'archived';
+export type GoalStatus = 'active' | 'achieved' | 'abandoned';
+
+export interface GoalTable {
+    id: string;
+    student_id: string;
+    title: string;
+    description: string | null;
+    target_date: string | null;
+    achieved_at: string | null;
+    status: Generated<GoalStatus>;
+    created_at: Generated<string>;
+    updated_at: Generated<string>;
+}
+
+export interface GoalShareTable {
+    goal_id: string;
+    teacher_id: string;
+    created_at: Generated<string>;
+}
 
 export interface PlansTable {
     id: string;

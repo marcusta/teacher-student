@@ -2,7 +2,13 @@ import { Component, Router, Signal, template } from '@basics/core/client/core';
 import { t } from '../theme';
 import { s } from '../css';
 import { StudentsService } from './students.service';
-import type { Student, Horse, TrainingSession, Plan } from '../api';
+import type { Student, Horse, TrainingSession, Plan, GoalTeacherView } from '../api';
+
+const STATUS_LABEL: Record<GoalTeacherView['status'], string> = {
+    active: 'Aktiv',
+    achieved: 'Uppnått',
+    abandoned: 'Arkiverad',
+};
 
 const tpl = template(`
     <div class="student-detail" bind="root">
@@ -19,6 +25,11 @@ const tpl = template(`
             <h3>Träningsplaner</h3>
             <div bind="plansEmpty" class="student-detail__empty">Inga träningsplaner.</div>
             <ul bind="plansList" class="student-detail__horses"></ul>
+        </section>
+        <section class="student-detail__section">
+            <h3>Mål</h3>
+            <div bind="goalsEmpty" class="student-detail__empty">Inga delade mål.</div>
+            <ul bind="goalsList" class="student-detail__horses"></ul>
         </section>
         <section class="student-detail__section">
             <h3>Träningspass</h3>
@@ -104,6 +115,7 @@ export class StudentDetailComponent extends Component {
     private horses = new Signal<Horse[]>([]);
     private trainingSessions = new Signal<TrainingSession[]>([]);
     private plans = new Signal<Plan[]>([]);
+    private goals = new Signal<GoalTeacherView[]>([]);
 
     onMount(): void {
         const id = this.router.route.get().split('/')[2] ?? '';
@@ -119,6 +131,9 @@ export class StudentDetailComponent extends Component {
                 });
                 void this.svc.listPlans(id).then((list) => {
                     if (list) this.plans.set(list);
+                });
+                void this.svc.listGoals(id).then((list) => {
+                    if (list) this.goals.set(list);
                 });
             }
         });
@@ -143,6 +158,10 @@ export class StudentDetailComponent extends Component {
             },
             plansEmpty: {
                 className: () => this.plans.get().length === 0
+                    ? 'student-detail__empty' : 'student-detail__empty hidden',
+            },
+            goalsEmpty: {
+                className: () => this.goals.get().length === 0
                     ? 'student-detail__empty' : 'student-detail__empty hidden',
             },
         });
@@ -175,6 +194,22 @@ export class StudentDetailComponent extends Component {
             li.appendChild(link);
             return li;
         }, (p) => `${p.id}:${p.title}:${p.startDate ?? ''}:${p.endDate ?? ''}:${p.primaryTeacherDisplayName ?? ''}`);
+
+        const goalsHost = this.ref(frag, 'goalsList');
+        this.$each(goalsHost, this.goals, (g) => {
+            const li = document.createElement('li');
+            const link = document.createElement('a');
+            const path = `/mal/${g.id}`;
+            link.href = path;
+            link.onclick = (e) => { e.preventDefault(); this.router.navigate(path); };
+            const bits = [g.title, STATUS_LABEL[g.status]];
+            if (g.targetDate) bits.push(g.targetDate);
+            link.textContent = bits.join(' · ');
+            link.style.color = 'inherit';
+            link.style.textDecoration = 'none';
+            li.appendChild(link);
+            return li;
+        }, (g) => `${g.id}:${g.status}:${g.title}:${g.targetDate ?? ''}`);
 
         const tsHost = this.ref(frag, 'tsList');
         const fmt = new Intl.DateTimeFormat('sv-SE', { dateStyle: 'medium', timeStyle: 'short' });
