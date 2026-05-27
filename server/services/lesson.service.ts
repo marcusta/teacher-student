@@ -1,4 +1,4 @@
-import type { Kysely } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 import { ConflictError, NotFoundError } from '@basics/core/server/auth';
 import type { Database, LessonStatus } from '../db/schema';
 import { NoteService, type Note } from './note.service';
@@ -654,6 +654,7 @@ export class LessonService {
             ])
             .where('lesson_program.lesson_id', 'in', lessonIds)
             .orderBy('lesson_program.attached_at', 'asc')
+            .orderBy(sql`lesson_program.rowid`, 'asc')
             .execute();
         for (const r of rows) {
             const list = out.get(r.lesson_id) ?? [];

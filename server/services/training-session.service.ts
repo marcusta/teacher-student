@@ -1,4 +1,4 @@
-import type { Kysely } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 import { NotFoundError } from '@basics/core/server/auth';
 import type { Database } from '../db/schema';
 import { PlanService } from './plan.service';
@@ -676,6 +676,7 @@ export class TrainingSessionService {
             ])
             .where('training_session_program.training_session_id', 'in', sessionIds)
             .orderBy('training_session_program.attached_at', 'asc')
+            .orderBy(sql`training_session_program.rowid`, 'asc')
             .execute();
         for (const r of rows) {
             const list = out.get(r.training_session_id) ?? [];

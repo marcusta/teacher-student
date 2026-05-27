@@ -753,6 +753,31 @@ test('attachProgram supports multiple distinct programs on one lesson', async ()
     expect(updated.exercises.map((e) => e.name)).toEqual(['Skritt', 'Trav', 'Galopp', 'Box']);
 });
 
+test('lesson_program ordering is stable when attached_at timestamps tie', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    const p2 = await ctx.programService.create(ctx.teacher.id, { title: 'Stretch' });
+    const p3 = await ctx.programService.create(ctx.teacher.id, { title: 'Cooldown' });
+    // Force tied timestamps to expose ordering flake.
+    const sameTs = '2026-06-01T09:00:00.000Z';
+    await ctx.db.deleteFrom('lesson_program').where('lesson_id', '=', lesson.id).execute();
+    await ctx.db.insertInto('lesson_program').values({
+        lesson_id: lesson.id, program_id: ctx.program.id, attached_at: sameTs,
+    }).execute();
+    await ctx.db.insertInto('lesson_program').values({
+        lesson_id: lesson.id, program_id: p2.id, attached_at: sameTs,
+    }).execute();
+    await ctx.db.insertInto('lesson_program').values({
+        lesson_id: lesson.id, program_id: p3.id, attached_at: sameTs,
+    }).execute();
+
+    const list = await ctx.lessonService.listForTeacher(ctx.teacher.id);
+    const found = list.find((l) => l.id === lesson.id);
+    expect(found!.programs.map((p) => p.title)).toEqual(['Uppvärmning', 'Stretch', 'Cooldown']);
+});
+
 test('attachProgram on stranger lesson throws NotFoundError', async () => {
     const { NotFoundError } = await import('@basics/core/server/auth');
     const ctx = await seedConnectedWithProgram();
