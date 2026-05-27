@@ -1,4 +1,4 @@
-import { Component, Computed, Router, template } from '@basics/core/client/core';
+import { Component, Router, template } from '@basics/core/client/core';
 import { t } from '../theme';
 import { s } from '../css';
 import { InboxService } from '../inbox/inbox.service';
@@ -60,7 +60,6 @@ export class NavComponent extends Component {
                 text-align: center;
             }
             & .nav__badge.hidden { display: none; }
-            & .nav__link-hidden { display: none; }
 
             @media (max-width: 640px) {
                 flex-direction: row;
@@ -73,13 +72,6 @@ export class NavComponent extends Component {
     private inbox = this.inject(InboxService);
     private students = this.inject(StudentsService);
     private teachers = this.inject(TeachersService);
-
-    /** Hide Mål for teacher-only users (roster but no connected teachers). */
-    private showGoalsLink = new Computed(() => {
-        const hasStudents = this.students.items.get().length > 0;
-        const hasTeachers = this.teachers.items.get().length > 0;
-        return !hasStudents || hasTeachers;
-    });
 
     onMount(): void {
         void this.inbox.load();
@@ -97,13 +89,7 @@ export class NavComponent extends Component {
             programsLink: this.router.link('/program'),
             stableLink: this.router.link('/hastar'),
             plansLink: this.router.link('/planer'),
-            goalsLink: {
-                onclick: malLink.onclick,
-                className: () => {
-                    const base = malLink.className();
-                    return this.showGoalsLink.get() ? base : `${base} nav__link-hidden`.trim();
-                },
-            },
+            goalsLink: malLink,
             lessonsLink: this.router.link('/lektioner'),
             trainingSessionsLink: this.router.link('/traningspass'),
             inboxLink: this.router.link('/inbox'),
