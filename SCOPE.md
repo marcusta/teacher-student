@@ -4,7 +4,7 @@ iOS- och webbapp för tränare och elever inom hästdressyr. Server-baserad så 
 
 ## Roller
 
-En användare kan vara både lärare och elev samtidigt (rollen är kontextuell — bestäms av sidan av en `teacher_student`-relation, inte av en kolumn på `user`).
+En användare kan vara både lärare och elev samtidigt (rollen är kontextuell — bestäms av sidan av en `teacher_student`-relation, inte av en kolumn på `user`). En användare utan aktiva relationer kan ändå äga egna mål och egna träningspass.
 
 ### Lärare kan
 - Se sina elever
@@ -131,9 +131,24 @@ note                               [unifierad, polymorf parent]
   visibility:  private | shared
 
 goal                               [elevens långsiktiga mål]
-  id, student_id, plan_id?, title, description?, target_date?,
-  status, created_at
-  status: active | archived | achieved | abandoned
+  id, student_id, title, description?, target_date?,
+  achieved_at?, status, created_at, updated_at
+  status: active | achieved | abandoned
+  (planer länkas via goal_plan-junction, ej direkt FK; en goal
+   kan tillhöra noll eller flera planer)
+
+goal_share                         [delning av mål med en lärare]
+  goal_id, teacher_id, created_at
+  PK(goal_id, teacher_id)
+  läraren måste vara i aktiv relation med målets ägare; eleven
+  förvaltar share-listan. Delad lärare kan läsa målet och
+  byta status, men ej redigera titel/beskrivning/share-listan.
+
+goal_plan                          [koppling mål ↔ plan]
+  goal_id, plan_id, attached_at
+  PK(goal_id, plan_id)
+  båda måste tillhöra samma elev; planen måste vara active när
+  länken skapas. Många-till-många.
 
 question                           [elev frågar om övning]
   id, student_id, exercise_id, body, status, created_at
