@@ -123,12 +123,18 @@ export class PlanService {
     async listForStudent(studentId: string): Promise<Plan[]> {
         const rows = await this.db
             .selectFrom('plans')
-            .selectAll()
-            .where('student_id', '=', studentId)
-            .orderBy('status', 'asc')
-            .orderBy('created_at', 'desc')
+            .leftJoin('users as primary_teacher', 'primary_teacher.id', 'plans.primary_teacher_id')
+            .select([
+                'plans.id', 'plans.student_id', 'plans.primary_teacher_id',
+                'plans.title', 'plans.description', 'plans.start_date', 'plans.end_date',
+                'plans.status', 'plans.created_at', 'plans.updated_at',
+                'primary_teacher.display_name as primary_teacher_display_name',
+            ])
+            .where('plans.student_id', '=', studentId)
+            .orderBy('plans.status', 'asc')
+            .orderBy('plans.created_at', 'desc')
             .execute();
-        return rows.map((r) => toPlan(r));
+        return rows.map((r) => toPlan(r, r.primary_teacher_display_name));
     }
 
     async getForStudent(studentId: string, planId: string): Promise<Plan> {
@@ -150,8 +156,14 @@ export class PlanService {
     async getDetail(actorId: string, planId: string): Promise<PlanDetail> {
         const row = await this.db
             .selectFrom('plans')
-            .selectAll()
-            .where('id', '=', planId)
+            .leftJoin('users as primary_teacher', 'primary_teacher.id', 'plans.primary_teacher_id')
+            .select([
+                'plans.id', 'plans.student_id', 'plans.primary_teacher_id',
+                'plans.title', 'plans.description', 'plans.start_date', 'plans.end_date',
+                'plans.status', 'plans.created_at', 'plans.updated_at',
+                'primary_teacher.display_name as primary_teacher_display_name',
+            ])
+            .where('plans.id', '=', planId)
             .executeTakeFirst();
         if (!row) throw new NotFoundError('Plan not found');
 
@@ -195,7 +207,7 @@ export class PlanService {
             .execute();
 
         return {
-            ...toPlan(row),
+            ...toPlan(row, row.primary_teacher_display_name),
             lessons: lessons.map((l) => ({
                 id: l.id,
                 scheduledAt: l.scheduled_at,
