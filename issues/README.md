@@ -77,3 +77,13 @@ Handoff for implementers: [HANDOFF-033-034.md](HANDOFF-033-034.md)
 | [038](038-plan-detail-and-linked-items.md) | Plan detail + linked items | AFK | 036, 037 |
 
 Handoff for implementers: [HANDOFF-035-038.md](HANDOFF-035-038.md)
+
+### Group E — Hem dashboard (IA §3.1, slice 6 in IA §6)
+
+| # | Titel | Type | Blocked by |
+|---|-------|------|------------|
+| [047](047-dashboard-read-model.md) | Dashboard read model (`GET /api/dashboard`) | AFK | — |
+| [048](048-hem-dashboard-view.md) | Hem dashboard view | AFK | 047 |
+
+Read contract is frozen before implementation, per IA §6: the Dashboard slice ships "only after its
+read contract is fixed".

@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&amp;family=Open+Sans:ital,wght@0,300..800;1,300..800&amp;display=swap" rel="stylesheet">
+<style>
+:root{
+  --font-display:Lora,Georgia,'Times New Roman',serif;
+  --font-ui:'Open Sans','Segoe UI',system-ui,sans-serif;
+  --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;--space-7:48px;--space-8:64px;
+  --radius-sm:4px;--radius-md:8px;--radius-pill:999px;
+  --dur-fast:120ms;--dur-base:200ms;--dur-slow:320ms;--ease-standard:cubic-bezier(.2,.7,.3,1);
+}
+:root,.t-light,[data-theme="light"]{
+  --bg:#F6F4F1;--surface:#FFFFFF;--surface-2:#EFEBE4;
+  --text:#1C1F21;--text-muted:#696159;
+  --border:#DED7CF;--border-strong:#9A8E7B;
+  --accent:#845C24;--accent-strong:#6B4A1D;--accent-soft:#F3EADD;--on-accent:#FFFFFF;
+  --brass-line:#CFAA81;--cream:#FFE9C2;
+  --success:#2E6047;--success-soft:#E4EFE8;
+  --warning:#9A4A1E;--warning-soft:#F7E9DE;
+  --danger:#A3292F;--danger-soft:#F8E6E6;--on-danger:#FFFFFF;
+  --info:#3E5974;--info-soft:#E3EAF1;
+  --shadow-1:0 1px 2px rgba(28,31,33,.06);--shadow-2:0 4px 12px rgba(28,31,33,.10);--shadow-3:0 16px 40px rgba(28,31,33,.22);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#131A20;--surface:#1C1F21;--surface-2:#262A2B;
+    --text:#F1ECE3;--text-muted:#AFA698;
+    --border:#3B372F;--border-strong:#7A7059;
+    --accent:#CFAA81;--accent-strong:#E2C29C;--accent-soft:#2C271F;--on-accent:#1C1F21;
+    --brass-line:#8A6B45;--cream:#FFE9C2;
+    --success:#8CC5A4;--success-soft:#1E2B23;
+    --warning:#E1955F;--warning-soft:#2E231A;
+    --danger:#E39396;--danger-soft:#332122;--on-danger:#1C1F21;
+    --info:#93B3CE;--info-soft:#1E2733;
+    --shadow-1:0 1px 2px rgba(0,0,0,.4);--shadow-2:0 4px 14px rgba(0,0,0,.5);--shadow-3:0 16px 44px rgba(0,0,0,.6);
+  }
+}
+.t-dark,[data-theme="dark"]{
+  --bg:#131A20;--surface:#1C1F21;--surface-2:#262A2B;
+  --text:#F1ECE3;--text-muted:#AFA698;
+  --border:#3B372F;--border-strong:#7A7059;
+  --accent:#CFAA81;--accent-strong:#E2C29C;--accent-soft:#2C271F;--on-accent:#1C1F21;
+  --brass-line:#8A6B45;--cream:#FFE9C2;
+  --success:#8CC5A4;--success-soft:#1E2B23;
+  --warning:#E1955F;--warning-soft:#2E231A;
+  --danger:#E39396;--danger-soft:#332122;--on-danger:#1C1F21;
+  --info:#93B3CE;--info-soft:#1E2733;
+  --shadow-1:0 1px 2px rgba(0,0,0,.4);--shadow-2:0 4px 14px rgba(0,0,0,.5);--shadow-3:0 16px 44px rgba(0,0,0,.6);
+}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font-ui)}
+a{color:var(--accent);text-decoration:underline;text-decoration-color:var(--brass-line);text-underline-offset:3px}
+a:hover{color:var(--accent-strong);text-decoration-color:var(--accent-strong)}
+button,input,select,textarea{font-family:var(--font-ui)}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}}
+</style>
+</helmet>
+<div data-theme="{{ pageTheme }}" style="min-height:100vh;background:var(--bg);color:var(--text);font-family:var(--font-ui);font-size:15px;line-height:1.6">
+
+<header data-screen-label="Sidhuvud" style="max-width:1120px;margin:0 auto;padding:72px 32px 40px;text-align:center">
+  <div style="font:700 11px/16px var(--font-ui);letter-spacing:.18em;text-transform:uppercase;color:var(--text-muted)">Lindgren Equestrian · Produktdesignsystem</div>
+  <div style="width:56px;height:1px;background:var(--brass-line);margin:20px auto"></div>
+  <h1 style="margin:0;font:500 42px/52px var(--font-display);letter-spacing:.14em;text-transform:uppercase;color:var(--text)">Teacher–Student</h1>
+  <p style="max-width:620px;margin:16px auto 0;font:400 16px/26px var(--font-ui);color:var(--text-muted);text-wrap:pretty">Designspråk och komponentbibliotek för en vardagsapp där ridlärare och elever möts: lektioner, träningspass, planer, mål och hästar. Ljust först, hög kontrast — mässingen används med disciplin.</p>
+  <div style="margin-top:20px;font:400 12px/18px var(--font-ui);color:var(--text-muted);font-variant-numeric:tabular-nums">Version 1.0 · Juli 2026 · Gränssnittsspråk: svenska</div>
+  <nav style="display:flex;justify-content:center;flex-wrap:wrap;gap:8px 24px;margin-top:28px;padding-top:20px;border-top:1px solid var(--border);font:600 12px/18px var(--font-ui);letter-spacing:.08em;text-transform:uppercase">
+    <a href="#farg" style="text-decoration:none;color:var(--accent)">01 Färg &amp; tokens</a>
+    <a href="#typografi" style="text-decoration:none;color:var(--accent)">02 Typografi</a>
+    <a href="#rytm" style="text-decoration:none;color:var(--accent)">03 Rytm &amp; rörelse</a>
+    <a href="#komponenter" style="text-decoration:none;color:var(--accent)">04 Komponenter</a>
+    <a href="#donts" style="text-decoration:none;color:var(--accent)">05 Så bryts varumärket</a>
+  </nav>
+</header>
+
+<section id="farg" data-screen-label="01 Färg och tokens" style="max-width:1120px;margin:0 auto;padding:40px 32px 24px">
+  <div style="font:700 11px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--accent)">01 · Färg &amp; tokens</div>
+  <h2 style="margin:8px 0 0;font:500 26px/34px var(--font-display)">Från mörk scen till ljus vardag</h2>
+  <p style="max-width:720px;margin:12px 0 0;color:var(--text-muted);text-wrap:pretty">Marknadssajten är ett mörkt, atmosfäriskt skyltfönster. Appen är ett dagligt verktyg — därför är den <strong style="color:var(--text)">ljus först och högkontrast</strong>. Varumärket bärs av typbehandlingen, hårfina mässingslinjer och en disciplinerad accent — inte av kolsvarta ytor. Den ljusa mässingen <code style="font:600 12px ui-monospace,monospace">hsl(31 45% 66%)</code> klarar inte AA som text på vitt; den funktionella accenten hämtas därför djupare ur samma familj.</p>
+
+  <div style="margin-top:28px">
+    <div style="font:700 11px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)">Källfärger — lindgreneq.se</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-top:12px">
+      <div><div style="height:44px;border-radius:var(--radius-sm);background:#1C1F21"></div><div style="font:600 11px/15px var(--font-ui);margin-top:6px">Charcoal</div><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">hsl(204 8% 12%)</code></div>
+      <div><div style="height:44px;border-radius:var(--radius-sm);background:#131A20"></div><div style="font:600 11px/15px var(--font-ui);margin-top:6px">Navy-charcoal</div><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">hsl(208 25% 10%)</code></div>
+      <div><div style="height:44px;border-radius:var(--radius-sm);background:#262A2B"></div><div style="font:600 11px/15px var(--font-ui);margin-top:6px">Overlay</div><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">hsl(204 6% 16%)</code></div>
+      <div><div style="height:44px;border-radius:var(--radius-sm);background:#CFAA81"></div><div style="font:600 11px/15px var(--font-ui);margin-top:6px">Ljus mässing</div><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">hsl(31 45% 66%)</code></div>
+      <div><div style="height:44px;border-radius:var(--radius-sm);background:#9B7441"></div><div style="font:600 11px/15px var(--font-ui);margin-top:6px">Mellanmässing</div><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">hsl(34 41% 43%)</code></div>
+      <div><div style="height:44px;border-radius:var(--radius-sm);background:#845C24"></div><div style="font:600 11px/15px var(--font-ui);margin-top:6px">Djup mässing</div><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">hsl(35 57% 33%)</code></div>
+      <div><div style="height:44px;border-radius:var(--radius-sm);background:#584128"></div><div style="font:600 11px/15px var(--font-ui);margin-top:6px">Bronsbrun</div><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">hsl(31 38% 25%)</code></div>
+      <div><div style="height:44px;border-radius:var(--radius-sm);background:#FFE9C2;border:1px solid var(--border)"></div><div style="font:600 11px/15px var(--font-ui);margin-top:6px">Krämguld</div><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">hsl(38 100% 88%)</code></div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(480px,1fr));gap:20px;margin-top:32px">
+    <div class="t-light" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:24px">
+      <div style="font:700 11px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text);margin-bottom:4px">Ljust tema</div>
+      <div style="font:400 12px/18px var(--font-ui);color:var(--text-muted);margin-bottom:16px">Standard. Kontrast mätt mot angiven grund.</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">
+        <sc-for list="{{ lightTokens }}" as="tk" hint-placeholder-count="12">
+          <div style="border:1px solid var(--border);border-radius:6px;overflow:hidden;background:var(--surface)">
+            <div style="height:48px;background:{{ tk.hex }};border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center"><span style="color:{{ tk.sc }};font:600 13px var(--font-ui)">{{ tk.sample }}</span></div>
+            <div style="padding:9px 11px;display:flex;flex-direction:column;gap:3px">
+              <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><code style="font:700 11px ui-monospace,monospace;color:var(--text)">{{ tk.n }}</code><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">{{ tk.hex }}</code></div>
+              <div style="font:400 11px/16px var(--font-ui);color:var(--text-muted)">{{ tk.u }}</div>
+              <sc-if value="{{ showContrast }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;gap:6px;align-items:baseline;font-variant-numeric:tabular-nums"><code style="font:700 11px ui-monospace,monospace;color:var(--text)">{{ tk.ratio }}</code><span style="font:700 10px var(--font-ui);letter-spacing:.06em;text-transform:uppercase;color:{{ tk.mc }}">{{ tk.mark }}</span><span style="font:400 10px var(--font-ui);color:var(--text-muted)">{{ tk.gl }}</span></div>
+              </sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font:700 11px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text);margin:20px 0 12px">Semantik — aldrig mässing</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">
+        <sc-for list="{{ semLight }}" as="tk" hint-placeholder-count="4">
+          <div style="border:1px solid var(--border);border-radius:6px;overflow:hidden;background:var(--surface)">
+            <div style="height:48px;background:{{ tk.hex }};border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center"><span style="color:{{ tk.sc }};font:600 13px var(--font-ui)">{{ tk.sample }}</span></div>
+            <div style="padding:9px 11px;display:flex;flex-direction:column;gap:3px">
+              <div><code style="font:700 11px ui-monospace,monospace;color:var(--text)">{{ tk.n }}</code></div>
+              <div style="font:400 11px/16px var(--font-ui);color:var(--text-muted)">{{ tk.u }}</div>
+              <sc-if value="{{ showContrast }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;gap:6px;align-items:baseline;font-variant-numeric:tabular-nums"><code style="font:700 11px ui-monospace,monospace;color:var(--text)">{{ tk.ratio }}</code><span style="font:700 10px var(--font-ui);letter-spacing:.06em;text-transform:uppercase;color:{{ tk.mc }}">{{ tk.mark }}</span><span style="font:400 10px var(--font-ui);color:var(--text-muted)">{{ tk.gl }}</span></div>
+              </sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div class="t-dark" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:24px;color:var(--text)">
+      <div style="font:700 11px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text);margin-bottom:4px">Mörkt tema</div>
+      <div style="font:400 12px/18px var(--font-ui);color:var(--text-muted);margin-bottom:16px">Marknadssajtens atmosfär — men med samma kontrastkrav.</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">
+        <sc-for list="{{ darkTokens }}" as="tk" hint-placeholder-count="12">
+          <div style="border:1px solid var(--border);border-radius:6px;overflow:hidden;background:var(--surface)">
+            <div style="height:48px;background:{{ tk.hex }};border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center"><span style="color:{{ tk.sc }};font:600 13px var(--font-ui)">{{ tk.sample }}</span></div>
+            <div style="padding:9px 11px;display:flex;flex-direction:column;gap:3px">
+              <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><code style="font:700 11px ui-monospace,monospace;color:var(--text)">{{ tk.n }}</code><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">{{ tk.hex }}</code></div>
+              <div style="font:400 11px/16px var(--font-ui);color:var(--text-muted)">{{ tk.u }}</div>
+              <sc-if value="{{ showContrast }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;gap:6px;align-items:baseline;font-variant-numeric:tabular-nums"><code style="font:700 11px ui-monospace,monospace;color:var(--text)">{{ tk.ratio }}</code><span style="font:700 10px var(--font-ui);letter-spacing:.06em;text-transform:uppercase;color:{{ tk.mc }}">{{ tk.mark }}</span><span style="font:400 10px var(--font-ui);color:var(--text-muted)">{{ tk.gl }}</span></div>
+              </sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font:700 11px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text);margin:20px 0 12px">Semantik — aldrig mässing</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">
+        <sc-for list="{{ semDark }}" as="tk" hint-placeholder-count="4">
+          <div style="border:1px solid var(--border);border-radius:6px;overflow:hidden;background:var(--surface)">
+            <div style="height:48px;background:{{ tk.hex }};border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center"><span style="color:{{ tk.sc }};font:600 13px var(--font-ui)">{{ tk.sample }}</span></div>
+            <div style="padding:9px 11px;display:flex;flex-direction:column;gap:3px">
+              <div><code style="font:700 11px ui-monospace,monospace;color:var(--text)">{{ tk.n }}</code></div>
+              <div style="font:400 11px/16px var(--font-ui);color:var(--text-muted)">{{ tk.u }}</div>
+              <sc-if value="{{ showContrast }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;gap:6px;align-items:baseline;font-variant-numeric:tabular-nums"><code style="font:700 11px ui-monospace,monospace;color:var(--text)">{{ tk.ratio }}</code><span style="font:700 10px var(--font-ui);letter-spacing:.06em;text-transform:uppercase;color:{{ tk.mc }}">{{ tk.mark }}</span><span style="font:400 10px var(--font-ui);color:var(--text-muted)">{{ tk.gl }}</span></div>
+              </sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+  <p style="margin:16px 0 0;font:400 13px/20px var(--font-ui);color:var(--text-muted);max-width:720px">Tokens definieras på <code style="font:600 12px ui-monospace,monospace">:root</code>, skrivs över under <code style="font:600 12px ui-monospace,monospace">@media (prefers-color-scheme: dark)</code> och igen under <code style="font:600 12px ui-monospace,monospace">:root[data-theme="dark"]</code> / <code style="font:600 12px ui-monospace,monospace">:root[data-theme="light"]</code> — exakt så är den här sidan byggd.</p>
+</section>
+
+<section id="typografi" data-screen-label="02 Typografi" style="max-width:1120px;margin:0 auto;padding:48px 32px 24px">
+  <div style="height:1px;background:var(--border);margin-bottom:40px"></div>
+  <div style="font:700 11px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--accent)">02 · Typografi</div>
+  <h2 style="margin:8px 0 0;font:500 26px/34px var(--font-display)">Open Sans arbetar, Lora talar</h2>
+  <p style="max-width:720px;margin:12px 0 0;color:var(--text-muted);text-wrap:pretty">Sajtens Ovo/Lato används inte i appen. Elegansen skapas i stället genom behandling: spärrade versaletiketter, viktkontrast och hårfina mässingslinjer. <strong style="color:var(--text)">Lora</strong> är reserverad för rubriknivåerna; <strong style="color:var(--text)">Open Sans</strong> gör allt annat. Systemfallback: <code style="font:600 12px ui-monospace,monospace">Georgia, serif</code> respektive <code style="font:600 12px ui-monospace,monospace">'Segoe UI', system-ui, sans-serif</code>.</p>
+  <div style="margin-top:28px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);overflow:hidden">
+    <div style="display:grid;grid-template-columns:1fr 280px;gap:24px;padding:20px 24px;border-bottom:1px solid var(--border);align-items:center">
+      <div style="font:500 22px/30px var(--font-display);letter-spacing:.18em;text-transform:uppercase">Lindgren Equestrian</div>
+      <div style="font:400 12px/18px var(--font-ui);color:var(--text-muted)"><strong style="color:var(--text)">Display, versal</strong> · Lora 500 · 22/30 · spärrning .18em<br>Varumärkesögonblick: inloggning, tomlägen. Max en per vy.</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 280px;gap:24px;padding:20px 24px;border-bottom:1px solid var(--border);align-items:center">
+      <div style="font:500 28px/36px var(--font-display)">Mina träningspass</div>
+      <div style="font:400 12px/18px var(--font-ui);color:var(--text-muted)"><strong style="color:var(--text)">Sidtitel</strong> · Lora 500 · 28/36<br>En per sida, alltid överst.</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 280px;gap:24px;padding:20px 24px;border-bottom:1px solid var(--border);align-items:center">
+      <div style="font:500 20px/28px var(--font-display)">Kommande lektioner</div>
+      <div style="font:400 12px/18px var(--font-ui);color:var(--text-muted)"><strong style="color:var(--text)">Sektionsrubrik</strong> · Lora 500 · 20/28<br>Kort- och sektionstitlar, dialogtitlar.</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 280px;gap:24px;padding:20px 24px;border-bottom:1px solid var(--border);align-items:center">
+      <div style="font:700 11px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)">Planering &amp; stall</div>
+      <div style="font:400 12px/18px var(--font-ui);color:var(--text-muted)"><strong style="color:var(--text)">Overline / etikett</strong> · Open Sans 700 · 11/16 · versal · .14em<br>Navgrupper, fältetiketter, gruppindelning i listor.</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 280px;gap:24px;padding:20px 24px;border-bottom:1px solid var(--border);align-items:center">
+      <div style="font:400 15px/24px var(--font-ui)">Anna loggade ett träningspass med Luna och delade det med sin lärare. Betoning görs med <strong>vikt 600</strong>, aldrig med kursiv serif.</div>
+      <div style="font:400 12px/18px var(--font-ui);color:var(--text-muted)"><strong style="color:var(--text)">Brödtext</strong> · Open Sans 400 · 15/24<br>Liten text 13/20, bildtext 12/16 i --text-muted.</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 280px;gap:24px;padding:20px 24px;align-items:center">
+      <div style="font:600 15px/24px var(--font-ui);font-variant-numeric:tabular-nums">2026-07-22 · 17:00–18:00 · 60 cm · 3 av 5 delmål</div>
+      <div style="font:400 12px/18px var(--font-ui);color:var(--text-muted)"><strong style="color:var(--text)">Siffror i linje</strong> · <code style="font:600 11px ui-monospace,monospace">font-variant-numeric: tabular-nums</code><br>Obligatoriskt i tabeller, listrader, tider och räknare.</div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-top:16px">
+    <div style="border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);padding:18px 20px">
+      <div style="font:700 11px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--success)">Serifen är tillåten</div>
+      <div style="margin-top:8px;font:400 13px/22px var(--font-ui);color:var(--text-muted)">Sidtitlar · sektions- och korttitlar · dialogtitlar · tomlägesrubriker · display-ögonblick (inloggning). Alltid vikt 400–600, aldrig fet.</div>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);padding:18px 20px">
+      <div style="font:700 11px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--danger)">Serifen är förbjuden</div>
+      <div style="margin-top:8px;font:400 13px/22px var(--font-ui);color:var(--text-muted)">Knappar · formulärfält · navigering · pills &amp; chips · tabellceller · tidsstämplar · brödtext · valideringstext. Där arbetar Open Sans.</div>
+    </div>
+  </div>
+</section>
+
+<section id="rytm" data-screen-label="03 Rytm och rörelse" style="max-width:1120px;margin:0 auto;padding:48px 32px 24px">
+  <div style="height:1px;background:var(--border);margin-bottom:40px"></div>
+  <div style="font:700 11px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--accent)">03 · Rytm &amp; rörelse</div>
+  <h2 style="margin:8px 0 0;font:500 26px/34px var(--font-display)">Mellanrum, radier, elevation, rörelse</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-top:24px">
+    <div style="border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);padding:20px">
+      <div style="font:700 11px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)">Mellanrum — 4-bas</div>
+      <div style="display:flex;align-items:flex-end;gap:10px;margin-top:14px">
+        <div><div style="width:4px;height:4px;background:var(--accent)"></div><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">1·4</code></div>
+        <div><div style="width:8px;height:8px;background:var(--accent)"></div><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">2·8</code></div>
+        <div><div style="width:12px;height:12px;background:var(--accent)"></div><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">3·12</code></div>
+        <div><div style="width:16px;height:16px;background:var(--accent)"></div><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">4·16</code></div>
+        <div><div style="width:24px;height:24px;background:var(--accent)"></div><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">5·24</code></div>
+        <div><div style="width:32px;height:32px;background:var(--accent)"></div><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">6·32</code></div>
+        <div><div style="width:48px;height:48px;background:var(--accent)"></div><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">7·48</code></div>
+        <div><div style="width:64px;height:64px;background:var(--accent)"></div><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">8·64</code></div>
+      </div>
+      <div style="margin-top:12px;font:400 12px/18px var(--font-ui);color:var(--text-muted)">Fältinre 8–12 · kortinre 16–24 · mellan kort 16 · mellan sektioner 48.</div>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);padding:20px">
+      <div style="font:700 11px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)">Radier — lugna hörn</div>
+      <div style="display:flex;gap:14px;margin-top:14px;align-items:center">
+        <div style="text-align:center"><div style="width:64px;height:40px;border:1px solid var(--border-strong);border-radius:4px"></div><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">sm 4 · fält, knappar</code></div>
+        <div style="text-align:center"><div style="width:64px;height:40px;border:1px solid var(--border-strong);border-radius:8px"></div><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">md 8 · kort, dialoger</code></div>
+        <div style="text-align:center"><div style="width:64px;height:26px;border:1px solid var(--border-strong);border-radius:999px"></div><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">pill · status, chips</code></div>
+      </div>
+      <div style="margin-top:12px;font:400 12px/18px var(--font-ui);color:var(--text-muted)">Inga radier över 8 utom pill. Mjuka bubblor hör inte hemma här.</div>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);padding:20px">
+      <div style="font:700 11px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)">Elevation — tre nivåer</div>
+      <div style="display:flex;gap:14px;margin-top:14px">
+        <div style="flex:1;height:56px;border-radius:var(--radius-sm);background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow-1);display:flex;align-items:center;justify-content:center"><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">1 · rad-hover</code></div>
+        <div style="flex:1;height:56px;border-radius:var(--radius-sm);background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow-2);display:flex;align-items:center;justify-content:center"><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">2 · poppers</code></div>
+        <div style="flex:1;height:56px;border-radius:var(--radius-sm);background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow-3);display:flex;align-items:center;justify-content:center"><code style="font:400 10px ui-monospace,monospace;color:var(--text-muted)">3 · dialoger</code></div>
+      </div>
+      <div style="margin-top:12px;font:400 12px/18px var(--font-ui);color:var(--text-muted)">Skuggor är varmtonade av kolfärgen — aldrig blåsvarta. Ytor skiljs i första hand med hårlinjer, inte skugga.</div>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);padding:20px">
+      <div style="font:700 11px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)">Rörelse — diskret</div>
+      <div style="margin-top:12px;font:400 13px/22px var(--font-ui);color:var(--text-muted)"><code style="font:600 12px ui-monospace,monospace;color:var(--text)">--dur-fast 120ms</code> hover, fokus · <code style="font:600 12px ui-monospace,monospace;color:var(--text)">--dur-base 200ms</code> chips, flikar · <code style="font:600 12px ui-monospace,monospace;color:var(--text)">--dur-slow 320ms</code> dialog, toast · <code style="font:600 12px ui-monospace,monospace;color:var(--text)">--ease-standard cubic-bezier(.2,.7,.3,1)</code></div>
+      <pre style="margin:12px 0 0;padding:12px 14px;background:var(--surface-2);border-radius:var(--radius-sm);font:400 11px/17px ui-monospace,monospace;color:var(--text);overflow:auto">@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}</pre>
+      <div style="margin-top:10px;font:400 12px/18px var(--font-ui);color:var(--text-muted)">Ingen parallax, inga studsande easings. Rörelse bekräftar — den uppträder inte.</div>
+    </div>
+  </div>
+</section>
+
+<section id="komponenter" data-screen-label="04 Komponenter" style="max-width:1120px;margin:0 auto;padding:48px 32px 0">
+  <div style="height:1px;background:var(--border);margin-bottom:40px"></div>
+  <div style="font:700 11px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--accent)">04 · Komponenter</div>
+  <h2 style="margin:8px 0 0;font:500 26px/34px var(--font-display)">Komponentspråket</h2>
+  <p style="max-width:720px;margin:12px 0 0;color:var(--text-muted);text-wrap:pretty">Varje komponent visas skarpt i båda teman, med verkligt svenskt innehåll. Två personor delar samma språk: läraren (schemalägger, författar övningar, ger feedback) och eleven (loggar pass, sätter mål, delar selektivt). Hierarkin är Mål → Plan → Lektion/Träningspass → Övning → Anteckning.</p>
+
+  <div style="margin-top:44px" data-screen-label="4.1 Appskal">
+    <div style="display:flex;gap:12px;align-items:baseline"><code style="font:700 12px ui-monospace,monospace;color:var(--accent)">4.1</code><h3 style="margin:0;font:500 20px/28px var(--font-display)">Appskal — navigering</h3></div>
+    <sc-if value="{{ showUsage }}" hint-placeholder-val="{{ true }}"><p style="margin:6px 0 0;max-width:760px;font:400 13px/20px var(--font-ui);color:var(--text-muted)"><strong style="color:var(--success)">Använd:</strong> grupperade länkar med spärrade versaletiketter; aktivt läge = 2&nbsp;px mässingslist + accenttonad fyllnad. Gruppen Undervisning är förmågestyrd och renderas bara för lärare. <strong style="color:var(--danger)">Undvik:</strong> ikoner som ensam bärare av betydelse, mer än fyra grupper, accentfärg på oaktiva länkar.</p></sc-if>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:16px;margin-top:16px">
+      <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+        <div class="{{ t.cls }}" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px;color:var(--text)">
+          <div style="font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:14px">{{ t.label }}</div>
+          <div style="display:flex;border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;background:var(--surface)">
+            <nav style="width:200px;flex:none;padding:16px 10px;display:flex;flex-direction:column;gap:2px;background:var(--bg)">
+              <div style="padding:0 12px 12px"><div style="font:500 12px/16px var(--font-display);letter-spacing:.16em;text-transform:uppercase">Teacher–Student</div><div style="width:28px;height:1px;background:var(--brass-line);margin-top:8px"></div></div>
+              <a style="display:flex;justify-content:space-between;align-items:center;padding:6px 12px;border-left:2px solid transparent;font:600 13px/20px var(--font-ui);color:var(--text-muted);text-decoration:none">Hem</a>
+              <a style="display:flex;justify-content:space-between;align-items:center;padding:6px 12px;border-left:2px solid transparent;font:600 13px/20px var(--font-ui);color:var(--text-muted);text-decoration:none">Inkorg<span style="font:700 10px/16px var(--font-ui);background:var(--accent);color:var(--on-accent);padding:0 7px;border-radius:var(--radius-pill);font-variant-numeric:tabular-nums">2</span></a>
+              <div style="padding:14px 12px 4px;font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)">Träning</div>
+              <a style="display:block;padding:6px 12px;border-left:2px solid var(--accent);background:var(--accent-soft);font:600 13px/20px var(--font-ui);color:var(--accent);text-decoration:none">Lektioner</a>
+              <a style="display:block;padding:6px 12px;border-left:2px solid transparent;font:600 13px/20px var(--font-ui);color:var(--text-muted);text-decoration:none">Träningspass</a>
+              <div style="padding:14px 12px 4px;font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)">Planering &amp; stall</div>
+              <a style="display:block;padding:6px 12px;border-left:2px solid transparent;font:600 13px/20px var(--font-ui);color:var(--text-muted);text-decoration:none">Planer</a>
+              <a style="display:block;padding:6px 12px;border-left:2px solid transparent;font:600 13px/20px var(--font-ui);color:var(--text-muted);text-decoration:none">Mål</a>
+              <a style="display:block;padding:6px 12px;border-left:2px solid transparent;font:600 13px/20px var(--font-ui);color:var(--text-muted);text-decoration:none">Hästar</a>
+              <div style="display:flex;align-items:center;gap:8px;padding:14px 12px 4px"><span style="font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)">Undervisning</span><span style="font:700 9px/13px var(--font-ui);letter-spacing:.08em;text-transform:uppercase;color:var(--accent);border:1px solid var(--brass-line);border-radius:var(--radius-pill);padding:0 6px">Lärare</span></div>
+              <a style="display:block;padding:6px 12px;border-left:2px solid transparent;font:600 13px/20px var(--font-ui);color:var(--text-muted);text-decoration:none">Bibliotek</a>
+              <a style="display:block;padding:6px 12px;border-left:2px solid transparent;font:600 13px/20px var(--font-ui);color:var(--text-muted);text-decoration:none">Mina elever</a>
+            </nav>
+            <div style="flex:1;border-left:1px solid var(--border);padding:24px">
+              <div style="font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)">Träning</div>
+              <div style="font:500 24px/32px var(--font-display);margin-top:4px">Lektioner</div>
+              <div style="margin-top:12px;height:1px;background:var(--border)"></div>
+              <div style="margin-top:12px;font:400 13px/20px var(--font-ui);color:var(--text-muted)">Sidans innehåll börjar här — alltid på ljus yta i ljust tema.</div>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="margin-top:44px" data-screen-label="4.2 Dashboardkort">
+    <div style="display:flex;gap:12px;align-items:baseline"><code style="font:700 12px ui-monospace,monospace;color:var(--accent)">4.2</code><h3 style="margin:0;font:500 20px/28px var(--font-display)">Dashboardkort</h3></div>
+    <sc-if value="{{ showUsage }}" hint-placeholder-val="{{ true }}"><p style="margin:6px 0 0;max-width:760px;font:400 13px/20px var(--font-ui);color:var(--text-muted)"><strong style="color:var(--success)">Använd:</strong> sammanfattning först — ett faktum, en siffra eller ett citat per kort, med en enda länk vidare. Stora tal alltid i Open Sans med tabellsiffror. <strong style="color:var(--danger)">Undvik:</strong> diagram på hemskärmen, mer än fyra kort, flera handlingar per kort.</p></sc-if>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:16px;margin-top:16px">
+      <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+        <div class="{{ t.cls }}" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px;color:var(--text)">
+          <div style="font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:14px">{{ t.label }}</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:16px 18px;box-shadow:var(--shadow-1);display:flex;flex-direction:column;gap:6px">
+              <div style="font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)">Nästa lektion</div>
+              <div style="font:500 18px/24px var(--font-display)">Hoppträning 60 cm</div>
+              <div style="font:400 12px/18px var(--font-ui);color:var(--text-muted);font-variant-numeric:tabular-nums">Ons 22 juli · 17:00 · Caspian</div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px"><span style="display:inline-flex;align-items:center;gap:6px;padding:1px 10px;border-radius:var(--radius-pill);border:1px solid var(--info);color:var(--info);font:600 12px/18px var(--font-ui)"><span style="width:6px;height:6px;border-radius:50%;border:1.5px solid var(--info)"></span>Planerad</span><a style="font:600 12px/18px var(--font-ui);color:var(--accent);text-decoration:none">Visa lektion →</a></div>
+            </div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:16px 18px;box-shadow:var(--shadow-1);display:flex;flex-direction:column;gap:2px">
+              <div style="font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)">Väntar på feedback</div>
+              <div style="font:600 34px/42px var(--font-ui);font-variant-numeric:tabular-nums">3</div>
+              <div style="font:400 12px/18px var(--font-ui);color:var(--text-muted)">träningspass från 2 elever</div>
+              <a style="font:600 12px/18px var(--font-ui);color:var(--accent);text-decoration:none;margin-top:auto">Öppna inkorgen →</a>
+            </div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:16px 18px;box-shadow:var(--shadow-1);display:flex;flex-direction:column;gap:8px">
+              <div style="font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)">Senaste feedback</div>
+              <div style="font:400 13px/20px var(--font-ui)">”Bra rytm i serpentinerna — nästa gång vill jag se mer framåtbjudning i övergångarna.”</div>
+              <div style="display:flex;align-items:center;gap:8px"><span style="font:700 9px/14px var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);padding:1px 7px;border-radius:3px">Lärare</span><span style="font:400 11px/16px var(--font-ui);color:var(--text-muted);font-variant-numeric:tabular-nums">Alva · i går 19:32</span></div>
+            </div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:16px 18px;box-shadow:var(--shadow-1);display:flex;flex-direction:column;gap:8px">
+              <div style="font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)">Målframsteg</div>
+              <div style="font:600 13px/20px var(--font-ui)">Rida LB:1 dressyr i höst</div>
+              <div style="height:6px;border-radius:var(--radius-pill);background:var(--surface-2);overflow:hidden"><div style="width:60%;height:100%;background:var(--accent)"></div></div>
+              <div style="font:400 11px/16px var(--font-ui);color:var(--text-muted);font-variant-numeric:tabular-nums">3 av 5 delmål uppnådda</div>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="margin-top:44px" data-screen-label="4.3 Listrader">
+    <div style="display:flex;gap:12px;align-items:baseline"><code style="font:700 12px ui-monospace,monospace;color:var(--accent)">4.3</code><h3 style="margin:0;font:500 20px/28px var(--font-display)">Listrader — grupperade</h3></div>
+    <sc-if value="{{ showUsage }}" hint-placeholder-val="{{ true }}"><p style="margin:6px 0 0;max-width:760px;font:400 13px/20px var(--font-ui);color:var(--text-muted)"><strong style="color:var(--success)">Använd:</strong> gruppering Kommande/Tidigare med versaletikett; datumblock med tabellsiffror; delning och status alltid synliga i raden. Inställda rader dämpas. <strong style="color:var(--danger)">Undvik:</strong> zebraränder, mer än två rader text per rad, status enbart som färgprick.</p></sc-if>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:16px;margin-top:16px">
+      <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+        <div class="{{ t.cls }}" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px;color:var(--text)">
+          <div style="font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:14px">{{ t.label }}</div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden">
+            <div style="padding:8px 16px;background:var(--surface-2);font:700 10px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)">Kommande · 2</div>
+            <div style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-top:1px solid var(--border);cursor:pointer" style-hover="background:var(--surface-2)">
+              <div style="width:44px;flex:none;text-align:center"><div style="font:700 15px/20px var(--font-ui);font-variant-numeric:tabular-nums">22</div><div style="font:700 9px/12px var(--font-ui);letter-spacing:.12em;color:var(--text-muted)">JUL</div><div style="font:400 11px/16px var(--font-ui);color:var(--text-muted);font-variant-numeric:tabular-nums">17:00</div></div>
+              <div style="flex:1;min-width:0"><div style="font:600 14px/20px var(--font-ui)">Hoppträning 60 cm</div><div style="font:400 12px/18px var(--font-ui);color:var(--text-muted)">Caspian · 2 anteckningar</div></div>
+              <span style="display:inline-flex;align-items:center;gap:5px;padding:1px 9px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent);font:600 11px/17px var(--font-ui)"><span style="width:5px;height:5px;border-radius:50%;background:var(--accent)"></span>Delad: Alva</span>
+              <span style="display:inline-flex;align-items:center;gap:5px;padding:1px 9px;border-radius:var(--radius-pill);border:1px solid var(--info);color:var(--info);font:600 11px/17px var(--font-ui)"><span style="width:5px;height:5px;border-radius:50%;border:1.5px solid var(--info)"></span>Planerad</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-top:1px solid var(--border);cursor:pointer" style-hover="background:var(--surface-2)">
+              <div style="width:44px;flex:none;text-align:center"><div style="font:700 15px/20px var(--font-ui);font-variant-numeric:tabular-nums">25</div><div style="font:700 9px/12px var(--font-ui);letter-spacing:.12em;color:var(--text-muted)">JUL</div><div style="font:400 11px/16px var(--font-ui);color:var(--text-muted);font-variant-numeric:tabular-nums">09:30</div></div>
+              <div style="flex:1;min-width:0"><div style="font:600 14px/20px var(--font-ui)">Markarbete i longering</div><div style="font:400 12px/18px var(--font-ui);color:var(--text-muted)">Luna · inga anteckningar</div></div>
+              <span style="display:inline-flex;align-items:center;gap:5px;padding:1px 9px;border-radius:var(--radius-pill);border:1px solid var(--border-strong);color:var(--text-muted);font:600 11px/17px var(--font-ui)"><span style="width:5px;height:5px;border-radius:50%;border:1.5px solid var(--border-strong)"></span>Privat</span>
+              <span style="display:inline-flex;align-items:center;gap:5px;padding:1px 9px;border-radius:var(--radius-pill);border:1px solid var(--info);color:var(--info);font:600 11px/17px var(--font-ui)"><span style="width:5px;height:5px;border-radius:50%;border:1.5px solid var(--info)"></span>Planerad</span>
+            </div>
+            <div style="padding:8px 16px;background:var(--surface-2);border-top:1px solid var(--border);font:700 10px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)">Tidigare · 2</div>
+            <div style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-top:1px solid var(--border);cursor:pointer" style-hover="background:var(--surface-2)">
+              <div style="width:44px;flex:none;text-align:center"><div style="font:700 15px/20px var(--font-ui);font-variant-numeric:tabular-nums">14</div><div style="font:700 9px/12px var(--font-ui);letter-spacing:.12em;color:var(--text-muted)">JUL</div><div style="font:400 11px/16px var(--font-ui);color:var(--text-muted);font-variant-numeric:tabular-nums">18:00</div></div>
+              <div style="flex:1;min-width:0"><div style="font:600 14px/20px var(--font-ui)">Dressyr — övergångar</div><div style="font:400 12px/18px var(--font-ui);color:var(--text-muted)">Luna · 3 anteckningar</div></div>
+              <span style="display:inline-flex;align-items:center;gap:5px;padding:1px 9px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent);font:600 11px/17px var(--font-ui)"><span style="width:5px;height:5px;border-radius:50%;background:var(--accent)"></span>Delad: Alva</span>
+              <span style="display:inline-flex;align-items:center;gap:5px;padding:1px 9px;border-radius:var(--radius-pill);background:var(--success-soft);color:var(--success);font:600 11px/17px var(--font-ui)"><span style="width:5px;height:5px;border-radius:50%;background:var(--success)"></span>Utförd</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;padding:12px 16px;border-top:1px solid var(--border);opacity:.65">
+              <div style="width:44px;flex:none;text-align:center"><div style="font:700 15px/20px var(--font-ui);font-variant-numeric:tabular-nums">11</div><div style="font:700 9px/12px var(--font-ui);letter-spacing:.12em;color:var(--text-muted)">JUL</div><div style="font:400 11px/16px var(--font-ui);color:var(--text-muted);font-variant-numeric:tabular-nums">08:00</div></div>
+              <div style="flex:1;min-width:0"><div style="font:600 14px/20px var(--font-ui)">Uteritt i skogen</div><div style="font:400 12px/18px var(--font-ui);color:var(--text-muted)">Caspian · inga anteckningar</div></div>
+              <span style="display:inline-flex;align-items:center;gap:5px;padding:1px 9px;border-radius:var(--radius-pill);border:1px solid var(--border-strong);color:var(--text-muted);font:600 11px/17px var(--font-ui)"><span style="width:5px;height:5px;border-radius:50%;border:1.5px solid var(--border-strong)"></span>Privat</span>
+              <span style="display:inline-flex;align-items:center;gap:5px;padding:1px 9px;border-radius:var(--radius-pill);border:1px dashed var(--border-strong);color:var(--text-muted);font:600 11px/17px var(--font-ui)"><span style="font-size:9px;line-height:1">✕</span>Inställd</span>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="margin-top:44px" data-screen-label="4.4 Statuspiller">
+    <div style="display:flex;gap:12px;align-items:baseline"><code style="font:700 12px ui-monospace,monospace;color:var(--accent)">4.4</code><h3 style="margin:0;font:500 20px/28px var(--font-display)">Statuspiller</h3></div>
+    <sc-if value="{{ showUsage }}" hint-placeholder-val="{{ true }}"><p style="margin:6px 0 0;max-width:760px;font:400 13px/20px var(--font-ui);color:var(--text-muted)"><strong style="color:var(--success)">Använd:</strong> en formgrammatik som fungerar utan färg — <em>kontur</em> = pågående/framtid, <em>fylld</em> = slutförd, <em>streckad</em> = avbruten. Färgen kommer alltid ur semantikskalan. <strong style="color:var(--danger)">Undvik:</strong> mässing som statusfärg, egna nyanser per vy, fler än en status per rad.</p></sc-if>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:16px;margin-top:16px">
+      <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+        <div class="{{ t.cls }}" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px;color:var(--text)">
+          <div style="font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:14px">{{ t.label }}</div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:18px 20px;display:flex;flex-direction:column;gap:16px">
+            <div>
+              <div style="font:700 10px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">Lektion &amp; träningspass</div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px">
+                <span style="display:inline-flex;align-items:center;gap:6px;padding:2px 11px;border-radius:var(--radius-pill);border:1px solid var(--info);color:var(--info);font:600 12px/19px var(--font-ui)"><span style="width:6px;height:6px;border-radius:50%;border:1.5px solid var(--info)"></span>Planerad</span>
+                <span style="display:inline-flex;align-items:center;gap:6px;padding:2px 11px;border-radius:var(--radius-pill);background:var(--success-soft);color:var(--success);font:600 12px/19px var(--font-ui)"><span style="width:6px;height:6px;border-radius:50%;background:var(--success)"></span>Utförd</span>
+                <span style="display:inline-flex;align-items:center;gap:6px;padding:2px 11px;border-radius:var(--radius-pill);border:1px dashed var(--border-strong);color:var(--text-muted);font:600 12px/19px var(--font-ui)"><span style="font-size:9px;line-height:1">✕</span>Inställd</span>
+              </div>
+            </div>
+            <div style="height:1px;background:var(--border)"></div>
+            <div>
+              <div style="font:700 10px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">Mål</div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px">
+                <span style="display:inline-flex;align-items:center;gap:6px;padding:2px 11px;border-radius:var(--radius-pill);border:1px solid var(--info);color:var(--info);font:600 12px/19px var(--font-ui)"><span style="width:6px;height:6px;border-radius:50%;border:1.5px solid var(--info)"></span>Aktiv</span>
+                <span style="display:inline-flex;align-items:center;gap:6px;padding:2px 11px;border-radius:var(--radius-pill);background:var(--success-soft);color:var(--success);font:600 12px/19px var(--font-ui)"><span style="width:6px;height:6px;border-radius:50%;background:var(--success)"></span>Uppnådd</span>
+                <span style="display:inline-flex;align-items:center;gap:6px;padding:2px 11px;border-radius:var(--radius-pill);border:1px dashed var(--danger);color:var(--danger);font:600 12px/19px var(--font-ui)"><span style="font-size:9px;line-height:1">✕</span>Avbruten</span>
+                <span style="display:inline-flex;align-items:center;gap:6px;padding:2px 11px;border-radius:var(--radius-pill);background:var(--surface-2);color:var(--text-muted);font:600 12px/19px var(--font-ui)"><span style="width:6px;height:6px;border-radius:50%;background:var(--border-strong)"></span>Arkiverad</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="margin-top:44px" data-screen-label="4.5 Delningschips">
+    <div style="display:flex;gap:12px;align-items:baseline"><code style="font:700 12px ui-monospace,monospace;color:var(--accent)">4.5</code><h3 style="margin:0;font:500 20px/28px var(--font-display)">Delningschips — förtroendeytan</h3></div>
+    <sc-if value="{{ showUsage }}" hint-placeholder-val="{{ true }}"><p style="margin:6px 0 0;max-width:760px;font:400 13px/20px var(--font-ui);color:var(--text-muted)"><strong style="color:var(--success)">Använd:</strong> vid varje författandepunkt och i varje listrad. Privat = neutral kontur; Delad = accenttonad med namngiven mottagare — aldrig bara ”Delad”. <strong style="color:var(--danger)">Undvik:</strong> att gömma delningsläget i en meny, semantikfärger (grönt/rött) för delning, ikoner utan text.</p></sc-if>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:16px;margin-top:16px">
+      <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+        <div class="{{ t.cls }}" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px;color:var(--text)">
+          <div style="font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:14px">{{ t.label }}</div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:18px 20px;display:flex;flex-direction:column;gap:16px">
+            <div>
+              <div style="font:700 10px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">Lägen</div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+                <span style="display:inline-flex;align-items:center;gap:6px;padding:2px 11px;border-radius:var(--radius-pill);border:1px solid var(--border-strong);color:var(--text-muted);font:600 12px/19px var(--font-ui)"><span style="width:6px;height:6px;border-radius:50%;border:1.5px solid var(--border-strong)"></span>Privat</span>
+                <span style="display:inline-flex;align-items:center;gap:6px;padding:2px 11px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent);font:600 12px/19px var(--font-ui)"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></span>Delad: Alva</span>
+                <span style="display:inline-flex;align-items:center;gap:6px;padding:2px 11px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent);font:600 12px/19px var(--font-ui)"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></span>Delad: Alva +1</span>
+              </div>
+            </div>
+            <div style="height:1px;background:var(--border)"></div>
+            <div>
+              <div style="font:700 10px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">Vid författande — väljare i formulärfot</div>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <span style="font:600 12px/18px var(--font-ui);color:var(--text-muted)">Synlighet:</span>
+                <button style="display:inline-flex;align-items:center;gap:6px;padding:4px 13px;border-radius:var(--radius-pill);border:1px solid var(--border-strong);background:transparent;color:var(--text-muted);font:600 12px/19px var(--font-ui);cursor:pointer">Privat</button>
+                <button style="display:inline-flex;align-items:center;gap:6px;padding:4px 13px;border-radius:var(--radius-pill);border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent);font:600 12px/19px var(--font-ui);cursor:pointer"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></span>Delad: Alva</button>
+                <span style="font:400 11px/16px var(--font-ui);color:var(--text-muted)">Läraren ser passet och kan kommentera.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="margin-top:44px" data-screen-label="4.6 Personmarkeringar">
+    <div style="display:flex;gap:12px;align-items:baseline"><code style="font:700 12px ui-monospace,monospace;color:var(--accent)">4.6</code><h3 style="margin:0;font:500 20px/28px var(--font-display)">Personmarkeringar</h3></div>
+    <sc-if value="{{ showUsage }}" hint-placeholder-val="{{ true }}"><p style="margin:6px 0 0;max-width:760px;font:400 13px/20px var(--font-ui);color:var(--text-muted)"><strong style="color:var(--success)">Använd:</strong> vid författarnamn i anteckningar, inkorg och historik. Lärare bär accenttonen, elev bär neutral — samma vikt, ingen hierarki i storlek. <strong style="color:var(--danger)">Undvik:</strong> avatarer som ersättning, markering när kontexten redan är entydig (t.ex. elevens egen logg).</p></sc-if>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:16px;margin-top:16px">
+      <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+        <div class="{{ t.cls }}" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px;color:var(--text)">
+          <div style="font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:14px">{{ t.label }}</div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:18px 20px;display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;align-items:center;gap:8px"><span style="font:600 14px/20px var(--font-ui)">Alva Lindgren</span><span style="font:700 9px/14px var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);padding:1px 7px;border-radius:3px">Lärare</span></div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="font:600 14px/20px var(--font-ui)">Anna Ekström</span><span style="font:700 9px/14px var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);background:var(--surface-2);padding:1px 7px;border-radius:3px">Elev</span></div>
+            <div style="height:1px;background:var(--border)"></div>
+            <div style="font:400 12px/18px var(--font-ui);color:var(--text-muted)">I rader: <span style="font:600 12px/18px var(--font-ui);color:var(--text)">Alva</span> <span style="font:700 8px/12px var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);padding:1px 6px;border-radius:3px">Lärare</span> kommenterade ditt pass · <span style="font-variant-numeric:tabular-nums">19:32</span></div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="margin-top:44px" data-screen-label="4.7 Anteckningstråd">
+    <div style="display:flex;gap:12px;align-items:baseline"><code style="font:700 12px ui-monospace,monospace;color:var(--accent)">4.7</code><h3 style="margin:0;font:500 20px/28px var(--font-display)">Antecknings- och feedbacktråd</h3></div>
+    <sc-if value="{{ showUsage }}" hint-placeholder-val="{{ true }}"><p style="margin:6px 0 0;max-width:760px;font:400 13px/20px var(--font-ui);color:var(--text-muted)"><strong style="color:var(--success)">Använd:</strong> på lektioner, pass, mål och enskilda övningar. Kontextraden överst säger alltid vad tråden sitter på. Lärarens inlägg bär en hårfin mässingslist. <strong style="color:var(--danger)">Undvik:</strong> pratbubblor, växlande vänster/höger-layout, att kapa långa anteckningar.</p></sc-if>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:16px;margin-top:16px">
+      <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+        <div class="{{ t.cls }}" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px;color:var(--text)">
+          <div style="font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:14px">{{ t.label }}</div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:12px 18px;background:var(--surface-2)">
+              <span style="font:700 10px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)">Anteckningar · 2</span>
+              <span style="font:400 11px/16px var(--font-ui);color:var(--text-muted);font-variant-numeric:tabular-nums">Träningspass · 14 juli · Luna</span>
+            </div>
+            <div style="padding:14px 18px;border-top:1px solid var(--border)">
+              <div style="display:flex;align-items:center;gap:8px"><span style="font:700 13px/20px var(--font-ui)">Anna</span><span style="font:700 9px/14px var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);background:var(--surface-2);padding:1px 7px;border-radius:3px">Elev</span><span style="margin-left:auto;font:400 11px/16px var(--font-ui);color:var(--text-muted);font-variant-numeric:tabular-nums">14 juli 19:04</span></div>
+              <div style="margin-top:6px;font:400 13px/21px var(--font-ui)">Kändes ostabil i vänster galopp, särskilt på volten. Ska jag byta ned till trav tidigare nästa gång?</div>
+            </div>
+            <div style="padding:14px 18px 14px 16px;border-top:1px solid var(--border);border-left:2px solid var(--brass-line)">
+              <div style="display:flex;align-items:center;gap:8px"><span style="font:700 13px/20px var(--font-ui)">Alva</span><span style="font:700 9px/14px var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--accent);background:var(--accent-soft);padding:1px 7px;border-radius:3px">Lärare</span><span style="display:inline-flex;align-items:center;padding:0 8px;border-radius:var(--radius-pill);border:1px solid var(--border);color:var(--text-muted);font:600 10px/16px var(--font-ui)">Övning: Övergångar</span><span style="margin-left:auto;font:400 11px/16px var(--font-ui);color:var(--text-muted);font-variant-numeric:tabular-nums">14 juli 19:32</span></div>
+              <div style="margin-top:6px;font:400 13px/21px var(--font-ui)">Bra iakttagelse. Kör övergångar galopp–trav på rakt spår innan volten — fem repetitioner per varv, så bygger ni balansen innan böjningen.</div>
+            </div>
+            <div style="display:flex;gap:10px;padding:12px 18px;border-top:1px solid var(--border);background:var(--bg)">
+              <input placeholder="Skriv en anteckning …" style="flex:1;padding:8px 12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font:400 13px/20px var(--font-ui)" style-focus="outline:2px solid var(--accent);outline-offset:1px">
+              <button style="padding:8px 16px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:transparent;color:var(--text);font:600 13px/20px var(--font-ui);cursor:pointer" style-hover="border-color:var(--accent);color:var(--accent)">Lägg till</button>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+<div style="margin-top:44px" data-screen-label="4.8 Formulär">
+    <div style="display:flex;gap:12px;align-items:baseline"><code style="font:700 12px ui-monospace,monospace;color:var(--accent)">4.8</code><h3 style="margin:0;font:500 20px/28px var(--font-display)">Formulär</h3></div>
+    <sc-if value="{{ showUsage }}" hint-placeholder-val="{{ true }}"><p style="margin:6px 0 0;max-width:760px;font:400 13px/20px var(--font-ui);color:var(--text-muted)"><strong style="color:var(--success)">Använd:</strong> för lektioner, pass, mål, planer, hästar och övningar. Etiketter är spärrade versaler; fältkonturer använder --border-strong (3:1). Felmeddelanden förklarar vad som är fel och hur det rättas — inga ursäkter. <strong style="color:var(--danger)">Undvik:</strong> flytande etiketter, placeholder som enda etikett, mer än en primärknapp.</p></sc-if>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:16px;margin-top:16px">
+      <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+        <div class="{{ t.cls }}" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px;color:var(--text)">
+          <div style="font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:14px">{{ t.label }}</div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px 22px">
+            <div style="font:500 19px/26px var(--font-display)">Ny lektion</div>
+            <div style="display:flex;flex-direction:column;gap:14px;margin-top:16px">
+              <div style="display:flex;flex-direction:column;gap:5px">
+                <label style="font:700 11px/16px var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted)">Titel</label>
+                <input value="Hoppträning 60 cm" style="padding:10px 12px;border:1px solid var(--border);border-bottom:2px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);font:400 14px/21px var(--font-ui);transition:border-color var(--dur-fast) var(--ease-standard),box-shadow var(--dur-fast) var(--ease-standard),background var(--dur-fast) var(--ease-standard)" style-focus="outline:none;border-color:var(--accent);background:var(--surface);box-shadow:0 0 0 3px var(--accent-soft)">
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div style="display:flex;flex-direction:column;gap:5px">
+                  <label style="font:700 11px/16px var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted)">Datum &amp; tid</label>
+                  <input type="datetime-local" value="2026-07-12T17:00" style="padding:10px 12px;border:1px solid var(--border);border-bottom:2px solid var(--danger);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);font:400 14px/21px var(--font-ui);font-variant-numeric:tabular-nums;transition:border-color var(--dur-fast) var(--ease-standard),box-shadow var(--dur-fast) var(--ease-standard),background var(--dur-fast) var(--ease-standard)" style-focus="outline:none;border-color:var(--danger);background:var(--surface);box-shadow:0 0 0 3px var(--danger-soft)">
+                  <div style="font:600 12px/17px var(--font-ui);color:var(--danger)">Tidpunkten har redan passerat. Välj en tid efter i dag.</div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:5px">
+                  <label style="font:700 11px/16px var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted)">Häst</label>
+                  <div style="position:relative;display:flex">
+                    <select style="width:100%;box-sizing:border-box;appearance:none;-webkit-appearance:none;-moz-appearance:none;padding:10px 34px 10px 12px;border:1px solid var(--border);border-bottom:2px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);font:400 14px/21px var(--font-ui);cursor:pointer;transition:border-color var(--dur-fast) var(--ease-standard),box-shadow var(--dur-fast) var(--ease-standard),background var(--dur-fast) var(--ease-standard)" style-focus="outline:none;border-color:var(--accent);background:var(--surface);box-shadow:0 0 0 3px var(--accent-soft)">
+                      <option>Caspian</option><option>Luna</option><option>Herkules</option>
+                    </select>
+                    <span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none;display:flex;color:var(--text-muted)"><svg width="12" height="8" viewBox="0 0 12 8" fill="none"><path d="M1 1.5 6 6.5 11 1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:5px">
+                <label style="font:700 11px/16px var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted)">Beskrivning</label>
+                <textarea rows="2" style="padding:10px 12px;border:1px solid var(--border);border-bottom:2px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);font:400 14px/21px var(--font-ui);resize:vertical;transition:border-color var(--dur-fast) var(--ease-standard),box-shadow var(--dur-fast) var(--ease-standard),background var(--dur-fast) var(--ease-standard)" style-focus="outline:none;border-color:var(--accent);background:var(--surface);box-shadow:0 0 0 3px var(--accent-soft)">Banhoppning med fokus på rytm mellan hindren.</textarea>
+              </div>
+              <div style="display:flex;gap:6px;align-items:center;justify-content:flex-end;padding-top:14px;margin-top:4px;border-top:1px solid var(--border)">
+                <button style="padding:9px 14px;border:1px solid transparent;border-radius:var(--radius-sm);background:transparent;color:var(--text-muted);font:600 13px/20px var(--font-ui);cursor:pointer;transition:color var(--dur-fast),background var(--dur-fast)" style-hover="color:var(--accent);background:var(--accent-soft)">Avbryt</button>
+                <button style="padding:9px 20px;border:1px solid var(--accent);border-radius:var(--radius-sm);background:var(--accent);color:var(--on-accent);font:600 13px/20px var(--font-ui);cursor:pointer;box-shadow:var(--shadow-1);transition:background var(--dur-fast),border-color var(--dur-fast)" style-hover="background:var(--accent-strong);border-color:var(--accent-strong)" style-focus="outline:none;box-shadow:0 0 0 3px var(--accent-soft)">Skapa lektion</button>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:14px">
+            <span style="font:700 10px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)">Knappar:</span>
+            <button style="padding:9px 18px;border:1px solid var(--accent);border-radius:var(--radius-sm);background:var(--accent);color:var(--on-accent);font:600 13px/20px var(--font-ui);cursor:pointer;box-shadow:var(--shadow-1)" style-hover="background:var(--accent-strong);border-color:var(--accent-strong)">Primär</button>
+            <button style="padding:9px 18px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:transparent;color:var(--text);font:600 13px/20px var(--font-ui);cursor:pointer" style-hover="border-color:var(--accent);color:var(--accent)">Sekundär</button>
+            <button style="padding:9px 14px;border:1px solid transparent;border-radius:var(--radius-sm);background:transparent;color:var(--text-muted);font:600 13px/20px var(--font-ui);cursor:pointer" style-hover="color:var(--accent);background:var(--accent-soft)">Text</button>
+            <button style="padding:9px 18px;border:1px solid var(--danger);border-radius:var(--radius-sm);background:transparent;color:var(--danger);font:600 13px/20px var(--font-ui);cursor:pointer" style-hover="background:var(--danger);color:var(--on-danger)">Ta bort</button>
+            <button disabled style="padding:7px 16px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text-muted);font:600 13px/20px var(--font-ui);opacity:.7">Inaktiv</button>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="margin-top:44px" data-screen-label="4.9 Väljare">
+    <div style="display:flex;gap:12px;align-items:baseline"><code style="font:700 12px ui-monospace,monospace;color:var(--accent)">4.9</code><h3 style="margin:0;font:500 20px/28px var(--font-display)">Väljare — övningskatalog &amp; delning</h3></div>
+    <sc-if value="{{ showUsage }}" hint-placeholder-val="{{ true }}"><p style="margin:6px 0 0;max-width:760px;font:400 13px/20px var(--font-ui);color:var(--text-muted)"><strong style="color:var(--success)">Använd:</strong> katalogen grupperas alltid efter ägande lärare — upphov är en del av innehållet. Vald rad markeras med kryssruta + accenttonad fyllnad. <strong style="color:var(--danger)">Undvik:</strong> att blanda egna och lärarens övningar i samma grupp, dolt antal valda.</p></sc-if>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:16px;margin-top:16px">
+      <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+        <div class="{{ t.cls }}" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px;color:var(--text)">
+          <div style="font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:14px">{{ t.label }}</div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden">
+            <div style="padding:12px 16px;border-bottom:1px solid var(--border)"><input placeholder="Sök övning …" style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font:400 13px/20px var(--font-ui)" style-focus="outline:2px solid var(--accent);outline-offset:1px"></div>
+            <div style="padding:8px 16px;background:var(--surface-2);font:700 10px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)">Alva Lindgren · Lindgren Equestrian</div>
+            <label style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-top:1px solid var(--border);background:var(--accent-soft);cursor:pointer"><input type="checkbox" defaultChecked="{{ true }}" style="accent-color:var(--accent);width:15px;height:15px"><span style="flex:1"><span style="display:block;font:600 13px/19px var(--font-ui)">Övergångar galopp–trav</span><span style="display:block;font:400 11px/16px var(--font-ui);color:var(--text-muted)">Dressyr · Program: Grundhoppning A</span></span></label>
+            <label style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-top:1px solid var(--border);cursor:pointer" style-hover="background:var(--surface-2)"><input type="checkbox" style="accent-color:var(--accent);width:15px;height:15px"><span style="flex:1"><span style="display:block;font:600 13px/19px var(--font-ui)">Serpentiner 3 bågar</span><span style="display:block;font:400 11px/16px var(--font-ui);color:var(--text-muted)">Dressyr · Böjning &amp; balans</span></span></label>
+            <label style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-top:1px solid var(--border);background:var(--accent-soft);cursor:pointer"><input type="checkbox" defaultChecked="{{ true }}" style="accent-color:var(--accent);width:15px;height:15px"><span style="flex:1"><span style="display:block;font:600 13px/19px var(--font-ui)">Cavaletti på volt</span><span style="display:block;font:400 11px/16px var(--font-ui);color:var(--text-muted)">Hoppning · Rytm &amp; taxering</span></span></label>
+            <div style="padding:8px 16px;background:var(--surface-2);border-top:1px solid var(--border);font:700 10px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)">Egna övningar</div>
+            <label style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-top:1px solid var(--border);cursor:pointer" style-hover="background:var(--surface-2)"><input type="checkbox" style="accent-color:var(--accent);width:15px;height:15px"><span style="flex:1"><span style="display:block;font:600 13px/19px var(--font-ui)">Tölt på rakt spår</span><span style="display:block;font:400 11px/16px var(--font-ui);color:var(--text-muted)">Egen · utan program</span></span></label>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-top:1px solid var(--border);background:var(--bg)">
+              <span style="font:600 12px/18px var(--font-ui);color:var(--text-muted);font-variant-numeric:tabular-nums">2 valda</span>
+              <button style="padding:7px 16px;border:1px solid var(--accent);border-radius:var(--radius-sm);background:var(--accent);color:var(--on-accent);font:600 13px/20px var(--font-ui);cursor:pointer" style-hover="background:var(--accent-strong);border-color:var(--accent-strong)">Lägg till 2 övningar</button>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px">
+            <span style="font:700 10px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)">Dela med:</span>
+            <button style="display:inline-flex;align-items:center;gap:6px;padding:4px 13px;border-radius:var(--radius-pill);border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent);font:600 12px/19px var(--font-ui);cursor:pointer"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></span>Alva Lindgren</button>
+            <button style="display:inline-flex;align-items:center;gap:6px;padding:4px 13px;border-radius:var(--radius-pill);border:1px solid var(--border-strong);background:transparent;color:var(--text-muted);font:600 12px/19px var(--font-ui);cursor:pointer" style-hover="border-color:var(--accent);color:var(--accent)">Johan Berg</button>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="margin-top:44px" data-screen-label="4.10 Detaljsidhuvud">
+    <div style="display:flex;gap:12px;align-items:baseline"><code style="font:700 12px ui-monospace,monospace;color:var(--accent)">4.10</code><h3 style="margin:0;font:500 20px/28px var(--font-display)">Detaljsidhuvud</h3></div>
+    <sc-if value="{{ showUsage }}" hint-placeholder-val="{{ true }}"><p style="margin:6px 0 0;max-width:760px;font:400 13px/20px var(--font-ui);color:var(--text-muted)"><strong style="color:var(--success)">Använd:</strong> titel i Lora, status och föräldrachips (plan, källprogram, delning) direkt under, handlingar samlade till höger. <strong style="color:var(--danger)">Undvik:</strong> mer än en primärhandling, chips som inte är klickbara vägar uppåt i hierarkin.</p></sc-if>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:16px;margin-top:16px">
+      <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+        <div class="{{ t.cls }}" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px;color:var(--text)">
+          <div style="font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:14px">{{ t.label }}</div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px 22px">
+            <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap">
+              <div style="min-width:0">
+                <div style="font:700 10px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted)">Lektion</div>
+                <div style="font:500 25px/33px var(--font-display);margin-top:2px">Hoppträning 60 cm</div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center">
+                  <span style="display:inline-flex;align-items:center;gap:6px;padding:1px 10px;border-radius:var(--radius-pill);border:1px solid var(--info);color:var(--info);font:600 12px/19px var(--font-ui)"><span style="width:6px;height:6px;border-radius:50%;border:1.5px solid var(--info)"></span>Planerad</span>
+                  <a style="display:inline-flex;padding:1px 10px;border-radius:var(--radius-pill);border:1px solid var(--border);color:var(--text-muted);font:600 12px/19px var(--font-ui);text-decoration:none;cursor:pointer" style-hover="border-color:var(--accent);color:var(--accent)">Plan: Hoppsäsong vår 2026</a>
+                  <a style="display:inline-flex;padding:1px 10px;border-radius:var(--radius-pill);border:1px solid var(--border);color:var(--text-muted);font:600 12px/19px var(--font-ui);text-decoration:none;cursor:pointer" style-hover="border-color:var(--accent);color:var(--accent)">Program: Grundhoppning A</a>
+                  <span style="display:inline-flex;align-items:center;gap:6px;padding:1px 10px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent);font:600 12px/19px var(--font-ui)"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></span>Delad: Alva</span>
+                </div>
+              </div>
+              <div style="display:flex;gap:10px;align-items:center;flex:none">
+                <button style="padding:7px 16px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:transparent;color:var(--text);font:600 13px/20px var(--font-ui);cursor:pointer" style-hover="border-color:var(--accent);color:var(--accent)">Redigera</button>
+                <button style="padding:7px 16px;border:1px solid var(--accent);border-radius:var(--radius-sm);background:var(--accent);color:var(--on-accent);font:600 13px/20px var(--font-ui);cursor:pointer" style-hover="background:var(--accent-strong);border-color:var(--accent-strong)">Markera som utförd</button>
+                <button style="width:34px;height:34px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:transparent;color:var(--text-muted);font:600 15px/1 var(--font-ui);cursor:pointer" style-hover="border-color:var(--accent);color:var(--accent)">⋯</button>
+              </div>
+            </div>
+            <div style="height:1px;background:var(--brass-line);margin-top:18px"></div>
+            <div style="font:400 12px/18px var(--font-ui);color:var(--text-muted);margin-top:10px;font-variant-numeric:tabular-nums">Onsdag 22 juli · 17:00–18:00 · Caspian · Anna Ekström</div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="margin-top:44px" data-screen-label="4.11 Flikar">
+    <div style="display:flex;gap:12px;align-items:baseline"><code style="font:700 12px ui-monospace,monospace;color:var(--accent)">4.11</code><h3 style="margin:0;font:500 20px/28px var(--font-display)">Flikar — lärarens elevarbetsyta</h3></div>
+    <sc-if value="{{ showUsage }}" hint-placeholder-val="{{ true }}"><p style="margin:6px 0 0;max-width:760px;font:400 13px/20px var(--font-ui);color:var(--text-muted)"><strong style="color:var(--success)">Använd:</strong> aktiv flik markeras med 2&nbsp;px accentlinje och vikt 700; raden vilar på en hårlinje. Klicka för att prova. <strong style="color:var(--danger)">Undvik:</strong> fler än sju flikar, flikar för handlingar (de hör hemma i sidhuvudet).</p></sc-if>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:16px;margin-top:16px">
+      <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+        <div class="{{ t.cls }}" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px;color:var(--text)">
+          <div style="font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:14px">{{ t.label }}</div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:16px 20px 20px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><span style="font:500 17px/24px var(--font-display)">Anna Ekström</span><span style="font:700 9px/14px var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);background:var(--surface-2);padding:1px 7px;border-radius:3px">Elev</span></div>
+            <div style="display:flex;gap:2px;border-bottom:1px solid var(--border);overflow-x:auto;overflow-y:hidden">
+              <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="7">
+                <button onClick="{{ tb.go }}" style="padding:9px 13px;border:none;border-bottom:2px solid {{ tb.line }};background:transparent;color:{{ tb.col }};font:{{ tb.wt }} 13px/20px var(--font-ui);cursor:pointer;white-space:nowrap;margin-bottom:-1px" style-hover="color:var(--accent)">{{ tb.label }}</button>
+              </sc-for>
+            </div>
+            <div style="padding-top:14px;font:400 13px/20px var(--font-ui);color:var(--text-muted)">{{ tabStub }}</div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="margin-top:44px" data-screen-label="4.12 Bekräfta och ångra">
+    <div style="display:flex;gap:12px;align-items:baseline"><code style="font:700 12px ui-monospace,monospace;color:var(--accent)">4.12</code><h3 style="margin:0;font:500 20px/28px var(--font-display)">Bekräfta &amp; ångra</h3></div>
+    <sc-if value="{{ showUsage }}" hint-placeholder-val="{{ true }}"><p style="margin:6px 0 0;max-width:760px;font:400 13px/20px var(--font-ui);color:var(--text-muted)"><strong style="color:var(--success)">Använd:</strong> dialog före <em>terminala</em> statusbyten (Utförd/Inställd går inte att ändra tillbaka); ångra-toast efter <em>återställbara</em> raderingar. Toasten är alltid charcoal — här bor det mörka varumärket i ljust tema. <strong style="color:var(--danger)">Undvik:</strong> dialog för sådant som kan ångras, ”Är du säker?” utan konsekvensbeskrivning.</p></sc-if>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:16px;margin-top:16px">
+      <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+        <div class="{{ t.cls }}" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px;color:var(--text)">
+          <div style="font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:14px">{{ t.label }}</div>
+          <div style="display:flex;flex-direction:column;gap:16px;align-items:center">
+            <div style="max-width:400px;width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px 22px;box-shadow:var(--shadow-3)">
+              <div style="font:500 19px/26px var(--font-display)">Markera lektionen som utförd?</div>
+              <div style="margin-top:8px;font:400 13px/20px var(--font-ui);color:var(--text-muted)">Statusen är slutgiltig och går inte att ändra i efterhand. Anteckningar kan fortfarande läggas till.</div>
+              <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px">
+                <button style="padding:7px 16px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:transparent;color:var(--text);font:600 13px/20px var(--font-ui);cursor:pointer" style-hover="border-color:var(--accent);color:var(--accent)">Avbryt</button>
+                <button style="padding:7px 16px;border:1px solid var(--accent);border-radius:var(--radius-sm);background:var(--accent);color:var(--on-accent);font:600 13px/20px var(--font-ui);cursor:pointer" style-hover="background:var(--accent-strong);border-color:var(--accent-strong)">Markera utförd</button>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;max-width:400px;width:100%;box-sizing:border-box;background:#1C1F21;border:1px solid #3B372F;border-radius:var(--radius-sm);padding:11px 16px;box-shadow:var(--shadow-2)">
+              <span style="flex:1;font:400 13px/20px var(--font-ui);color:#F1ECE3">Träningspasset togs bort.</span>
+              <a style="font:700 13px/20px var(--font-ui);color:#CFAA81;text-decoration:none;cursor:pointer" style-hover="color:#E2C29C">Ångra</a>
+              <span style="font:400 12px/18px var(--font-ui);color:#AFA698;font-variant-numeric:tabular-nums">8 s</span>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="margin-top:44px" data-screen-label="4.13 Inkorg">
+    <div style="display:flex;gap:12px;align-items:baseline"><code style="font:700 12px ui-monospace,monospace;color:var(--accent)">4.13</code><h3 style="margin:0;font:500 20px/28px var(--font-display)">Inkorg — aktivitetsrader</h3></div>
+    <sc-if value="{{ showUsage }}" hint-placeholder-val="{{ true }}"><p style="margin:6px 0 0;max-width:760px;font:400 13px/20px var(--font-ui);color:var(--text-muted)"><strong style="color:var(--success)">Använd:</strong> aktör i vikt 700 med personmarkering, objektet som egen dämpad rad, oläst = accentprick + yta i --surface. Lästa rader tonas. <strong style="color:var(--danger)">Undvik:</strong> röda notisbollar för vanlig aktivitet, att blanda systemmeddelanden i samma lista.</p></sc-if>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:16px;margin-top:16px">
+      <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+        <div class="{{ t.cls }}" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px;color:var(--text)">
+          <div style="font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:14px">{{ t.label }}</div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden">
+            <div style="display:flex;gap:12px;align-items:flex-start;padding:13px 16px;cursor:pointer" style-hover="background:var(--surface-2)">
+              <span style="width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none;margin-top:7px"></span>
+              <span style="flex:1;min-width:0"><span style="display:block;font:400 13px/20px var(--font-ui)"><strong style="font-weight:700">Anna</strong> kommenterade ditt pass</span><span style="display:block;font:400 12px/18px var(--font-ui);color:var(--text-muted);font-variant-numeric:tabular-nums">Träningspass 14 juli · Luna</span></span>
+              <span style="font:400 11px/18px var(--font-ui);color:var(--text-muted);flex:none">för 2 tim sedan</span>
+            </div>
+            <div style="display:flex;gap:12px;align-items:flex-start;padding:13px 16px;border-top:1px solid var(--border);cursor:pointer" style-hover="background:var(--surface-2)">
+              <span style="width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none;margin-top:7px"></span>
+              <span style="flex:1;min-width:0"><span style="display:block;font:400 13px/20px var(--font-ui)"><strong style="font-weight:700">Anna</strong> markerade målet ”Fungerande galoppombyten” som uppnått</span><span style="display:block;font:400 12px/18px var(--font-ui);color:var(--text-muted)">Mål · delas med dig</span></span>
+              <span style="font:400 11px/18px var(--font-ui);color:var(--text-muted);flex:none">i går</span>
+            </div>
+            <div style="display:flex;gap:12px;align-items:flex-start;padding:13px 16px;border-top:1px solid var(--border);opacity:.6;cursor:pointer">
+              <span style="width:7px;height:7px;flex:none;margin-top:7px"></span>
+              <span style="flex:1;min-width:0"><span style="display:block;font:400 13px/20px var(--font-ui)"><strong style="font-weight:700">Alva</strong> delade programmet ”Grundhoppning A” med dig</span><span style="display:block;font:400 12px/18px var(--font-ui);color:var(--text-muted)">Bibliotek</span></span>
+              <span style="font:400 11px/18px var(--font-ui);color:var(--text-muted);flex:none">i måndags</span>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="margin-top:44px" data-screen-label="4.14 Tomlägen">
+    <div style="display:flex;gap:12px;align-items:baseline"><code style="font:700 12px ui-monospace,monospace;color:var(--accent)">4.14</code><h3 style="margin:0;font:500 20px/28px var(--font-display)">Tomlägen</h3></div>
+    <sc-if value="{{ showUsage }}" hint-placeholder-val="{{ true }}"><p style="margin:6px 0 0;max-width:760px;font:400 13px/20px var(--font-ui);color:var(--text-muted)"><strong style="color:var(--success)">Använd:</strong> varm, varumärkesnära röst; mässingsornamentet är den enda dekorationen; exakt en handling. <strong style="color:var(--danger)">Undvik:</strong> illustrationer, skämt, mer än två meningar.</p></sc-if>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:16px;margin-top:16px">
+      <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+        <div class="{{ t.cls }}" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px;color:var(--text)">
+          <div style="font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:14px">{{ t.label }}</div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:48px 24px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px">
+            <div style="width:40px;height:1px;background:var(--brass-line)"></div>
+            <div style="font:500 20px/28px var(--font-display)">Inga träningspass ännu</div>
+            <div style="max-width:360px;font:400 13px/21px var(--font-ui);color:var(--text-muted);text-wrap:pretty">När du loggar ditt första pass samlas allt här — övningar, anteckningar och feedback från din lärare.</div>
+            <button style="margin-top:6px;padding:8px 20px;border:1px solid var(--accent);border-radius:var(--radius-sm);background:var(--accent);color:var(--on-accent);font:600 13px/20px var(--font-ui);cursor:pointer" style-hover="background:var(--accent-strong);border-color:var(--accent-strong)">Logga ett pass</button>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="margin-top:44px;padding-bottom:8px" data-screen-label="4.15 Tabell">
+    <div style="display:flex;gap:12px;align-items:baseline"><code style="font:700 12px ui-monospace,monospace;color:var(--accent)">4.15</code><h3 style="margin:0;font:500 20px/28px var(--font-display)">Tabell — övningshistorik</h3></div>
+    <sc-if value="{{ showUsage }}" hint-placeholder-val="{{ true }}"><p style="margin:6px 0 0;max-width:760px;font:400 13px/20px var(--font-ui);color:var(--text-muted)"><strong style="color:var(--success)">Använd:</strong> för lärarens genomgång per ryttare. Datum med tabellsiffror, tillfälletyp som neutral chip, saknad anteckning skrivs som ”—”. <strong style="color:var(--danger)">Undvik:</strong> zebraränder, centrerad text, Lora i celler.</p></sc-if>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:16px;margin-top:16px">
+      <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+        <div class="{{ t.cls }}" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px;color:var(--text)">
+          <div style="font:700 10px/14px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);margin-bottom:14px">{{ t.label }}</div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden">
+            <table style="width:100%;border-collapse:collapse;font:400 13px/19px var(--font-ui)">
+              <thead><tr>
+                <th style="text-align:left;padding:10px 14px;font:700 10px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);background:var(--surface-2)">Datum</th>
+                <th style="text-align:left;padding:10px 14px;font:700 10px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);background:var(--surface-2)">Tillfälle</th>
+                <th style="text-align:left;padding:10px 14px;font:700 10px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);background:var(--surface-2)">Övning</th>
+                <th style="text-align:left;padding:10px 14px;font:700 10px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);background:var(--surface-2)">Anteckning</th>
+              </tr></thead>
+              <tbody>
+                <tr style-hover="background:var(--surface-2)"><td style="padding:10px 14px;border-top:1px solid var(--border);font-variant-numeric:tabular-nums;white-space:nowrap">2026-07-14</td><td style="padding:10px 14px;border-top:1px solid var(--border)"><span style="padding:1px 8px;border-radius:var(--radius-pill);background:var(--surface-2);color:var(--text-muted);font:600 11px/17px var(--font-ui)">Lektion</span></td><td style="padding:10px 14px;border-top:1px solid var(--border);font-weight:600">Övergångar galopp–trav</td><td style="padding:10px 14px;border-top:1px solid var(--border);color:var(--text-muted)">Fem reps per varv, tydlig förbättring.</td></tr>
+                <tr style-hover="background:var(--surface-2)"><td style="padding:10px 14px;border-top:1px solid var(--border);font-variant-numeric:tabular-nums;white-space:nowrap">2026-07-10</td><td style="padding:10px 14px;border-top:1px solid var(--border)"><span style="padding:1px 8px;border-radius:var(--radius-pill);background:var(--surface-2);color:var(--text-muted);font:600 11px/17px var(--font-ui)">Pass</span></td><td style="padding:10px 14px;border-top:1px solid var(--border);font-weight:600">Serpentiner 3 bågar</td><td style="padding:10px 14px;border-top:1px solid var(--border);color:var(--text-muted)">Stel i vänster varv.</td></tr>
+                <tr style-hover="background:var(--surface-2)"><td style="padding:10px 14px;border-top:1px solid var(--border);font-variant-numeric:tabular-nums;white-space:nowrap">2026-07-08</td><td style="padding:10px 14px;border-top:1px solid var(--border)"><span style="padding:1px 8px;border-radius:var(--radius-pill);background:var(--surface-2);color:var(--text-muted);font:600 11px/17px var(--font-ui)">Pass</span></td><td style="padding:10px 14px;border-top:1px solid var(--border);font-weight:600">Cavaletti på volt</td><td style="padding:10px 14px;border-top:1px solid var(--border);color:var(--text-muted)">—</td></tr>
+                <tr style-hover="background:var(--surface-2)"><td style="padding:10px 14px;border-top:1px solid var(--border);font-variant-numeric:tabular-nums;white-space:nowrap">2026-07-03</td><td style="padding:10px 14px;border-top:1px solid var(--border)"><span style="padding:1px 8px;border-radius:var(--radius-pill);background:var(--surface-2);color:var(--text-muted);font:600 11px/17px var(--font-ui)">Lektion</span></td><td style="padding:10px 14px;border-top:1px solid var(--border);font-weight:600">Framåtbjudning i trav</td><td style="padding:10px 14px;border-top:1px solid var(--border);color:var(--text-muted)">Bra energi efter pausen.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</section>
+
+<section id="donts" data-screen-label="05 Så bryts varumärket" style="max-width:1120px;margin:0 auto;padding:48px 32px 24px">
+  <div style="height:1px;background:var(--border);margin-bottom:40px"></div>
+  <div style="font:700 11px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--accent)">05 · Så bryts varumärket</div>
+  <h2 style="margin:8px 0 0;font:500 26px/34px var(--font-display)">De fem troligaste misstagen</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(480px,1fr));gap:16px;margin-top:24px">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px 22px">
+      <div style="display:flex;gap:10px;align-items:baseline"><code style="font:700 12px ui-monospace,monospace;color:var(--danger)">1</code><div style="font:500 17px/24px var(--font-display)">Ljus mässing som text på ljus grund</div></div>
+      <div style="margin-top:6px;font:400 13px/20px var(--font-ui);color:var(--text-muted)"><code style="font:600 12px ui-monospace,monospace">--brass-line</code> når 2,2:1 på vitt och är oläslig. Text, länkar och knappar använder alltid <code style="font:600 12px ui-monospace,monospace">--accent</code>.</div>
+      <div style="display:flex;gap:12px;margin-top:12px">
+        <div style="flex:1;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px"><div style="font:700 9px/14px var(--font-ui);letter-spacing:.1em;color:var(--danger)">FEL</div><a style="font:600 13px/20px var(--font-ui);color:#CFAA81;text-decoration:none">Visa lektion →</a></div>
+        <div style="flex:1;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px"><div style="font:700 9px/14px var(--font-ui);letter-spacing:.1em;color:var(--success)">RÄTT</div><a style="font:600 13px/20px var(--font-ui);color:var(--accent);text-decoration:none">Visa lektion →</a></div>
+      </div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px 22px">
+      <div style="display:flex;gap:10px;align-items:baseline"><code style="font:700 12px ui-monospace,monospace;color:var(--danger)">2</code><div style="font:500 17px/24px var(--font-display)">Drama-mörkt överallt</div></div>
+      <div style="margin-top:6px;font:400 13px/20px var(--font-ui);color:var(--text-muted)">Sajtens charcoal är scenografi, inte arbetsyta. I ljust tema förekommer mörka ytor bara i ångra-toasten. Vardagsvyer är ljusa och högkontrast.</div>
+      <div style="display:flex;gap:12px;margin-top:12px">
+        <div style="flex:1;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;background:#1C1F21"><div style="font:700 9px/14px var(--font-ui);letter-spacing:.1em;color:#E39396">FEL</div><div style="font:600 12px/18px var(--font-ui);color:#F1ECE3">Hela schemavyn i charcoal</div></div>
+        <div style="flex:1;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;background:var(--bg)"><div style="font:700 9px/14px var(--font-ui);letter-spacing:.1em;color:var(--success)">RÄTT</div><div style="font:600 12px/18px var(--font-ui)">Ljus yta, mässing i detaljerna</div></div>
+      </div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px 22px">
+      <div style="display:flex;gap:10px;align-items:baseline"><code style="font:700 12px ui-monospace,monospace;color:var(--danger)">3</code><div style="font:500 17px/24px var(--font-display)">Semantiken lånar accenten</div></div>
+      <div style="margin-top:6px;font:400 13px/20px var(--font-ui);color:var(--text-muted)">Mässing betyder ”varumärke och handling” — aldrig utfall. Status hämtar alltid färg ur semantikskalan, och semantikfärger används aldrig för dekor.</div>
+      <div style="display:flex;gap:12px;margin-top:12px">
+        <div style="flex:1;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px"><div style="font:700 9px/14px var(--font-ui);letter-spacing:.1em;color:var(--danger)">FEL</div><span style="display:inline-flex;align-items:center;gap:6px;padding:1px 10px;border-radius:var(--radius-pill);background:var(--accent-soft);color:var(--accent);font:600 12px/19px var(--font-ui)"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></span>Utförd</span></div>
+        <div style="flex:1;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px"><div style="font:700 9px/14px var(--font-ui);letter-spacing:.1em;color:var(--success)">RÄTT</div><span style="display:inline-flex;align-items:center;gap:6px;padding:1px 10px;border-radius:var(--radius-pill);background:var(--success-soft);color:var(--success);font:600 12px/19px var(--font-ui)"><span style="width:6px;height:6px;border-radius:50%;background:var(--success)"></span>Utförd</span></div>
+      </div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px 22px">
+      <div style="display:flex;gap:10px;align-items:baseline"><code style="font:700 12px ui-monospace,monospace;color:var(--danger)">4</code><div style="font:500 17px/24px var(--font-display)">Serif i gränssnittskontroller</div></div>
+      <div style="margin-top:6px;font:400 13px/20px var(--font-ui);color:var(--text-muted)">Lora talar i rubriker. I knappar, fält, pills och tabeller gör den appen långsam och pompös — där arbetar Open Sans.</div>
+      <div style="display:flex;gap:12px;margin-top:12px;align-items:flex-start">
+        <div style="flex:1;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px"><div style="font:700 9px/14px var(--font-ui);letter-spacing:.1em;color:var(--danger)">FEL</div><button style="padding:7px 16px;border:1px solid var(--accent);border-radius:var(--radius-sm);background:var(--accent);color:var(--on-accent);font:500 14px/20px var(--font-display);cursor:default">Skapa lektion</button></div>
+        <div style="flex:1;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px"><div style="font:700 9px/14px var(--font-ui);letter-spacing:.1em;color:var(--success)">RÄTT</div><button style="padding:7px 16px;border:1px solid var(--accent);border-radius:var(--radius-sm);background:var(--accent);color:var(--on-accent);font:600 13px/20px var(--font-ui);cursor:default">Skapa lektion</button></div>
+      </div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px 22px">
+      <div style="display:flex;gap:10px;align-items:baseline"><code style="font:700 12px ui-monospace,monospace;color:var(--danger)">5</code><div style="font:500 17px/24px var(--font-display)">Kalla standardgrå</div></div>
+      <div style="margin-top:6px;font:400 13px/20px var(--font-ui);color:var(--text-muted)">Neutralerna är biaserade mot mässingens kulör. <code style="font:600 12px ui-monospace,monospace">#888</code>, <code style="font:600 12px ui-monospace,monospace">#ccc</code> och blågrå ramar bryter värmen direkt — använd alltid <code style="font:600 12px ui-monospace,monospace">--text-muted</code>, <code style="font:600 12px ui-monospace,monospace">--border</code>, <code style="font:600 12px ui-monospace,monospace">--border-strong</code>.</div>
+      <div style="display:flex;gap:12px;margin-top:12px">
+        <div style="flex:1;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px"><div style="font:700 9px/14px var(--font-ui);letter-spacing:.1em;color:var(--danger)">FEL</div><div style="display:flex;gap:6px;margin-top:4px"><span style="width:28px;height:20px;background:#CCCCCC;border-radius:3px"></span><span style="width:28px;height:20px;background:#888888;border-radius:3px"></span><span style="width:28px;height:20px;background:#E5E5E5;border-radius:3px"></span></div></div>
+        <div style="flex:1;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px"><div style="font:700 9px/14px var(--font-ui);letter-spacing:.1em;color:var(--success)">RÄTT</div><div style="display:flex;gap:6px;margin-top:4px"><span style="width:28px;height:20px;background:var(--border);border-radius:3px"></span><span style="width:28px;height:20px;background:var(--border-strong);border-radius:3px"></span><span style="width:28px;height:20px;background:var(--surface-2);border-radius:3px;border:1px solid var(--border)"></span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer style="max-width:1120px;margin:0 auto;padding:24px 32px 64px;text-align:center">
+  <div style="width:56px;height:1px;background:var(--brass-line);margin:0 auto 16px"></div>
+  <div style="font:700 11px/16px var(--font-ui);letter-spacing:.16em;text-transform:uppercase;color:var(--text-muted)">Teacher–Student · Lindgren Equestrian · Designsystem v1.0</div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;pageTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Specifikationssidan&quot;},&quot;showContrast&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Specifikationssidan&quot;},&quot;showUsage&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Specifikationssidan&quot;}}">
+class Component extends DCLogic {
+  state = { tab: 0 };
+  lum(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    const c = [n >> 16 & 255, n >> 8 & 255, n & 255].map(v => {
+      v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4);
+    });
+    return .2126 * c[0] + .7152 * c[1] + .0722 * c[2];
+  }
+  ratio(a, b) {
+    const x = this.lum(a), y = this.lum(b);
+    return (Math.max(x, y) + .05) / (Math.min(x, y) + .05);
+  }
+  tok(list) {
+    return list.map(t => {
+      const r = this.ratio(t.cA || t.hex, t.cB);
+      let mark, mc;
+      if (t.req === 'text') { mark = r >= 4.5 ? 'AA' : 'underkänd'; mc = r >= 4.5 ? 'var(--success)' : 'var(--danger)'; }
+      else if (t.req === 'ui') { mark = r >= 3 ? 'AA (UI)' : 'underkänd'; mc = r >= 3 ? 'var(--success)' : 'var(--danger)'; }
+      else if (t.req === 'never') { mark = 'aldrig som text'; mc = 'var(--danger)'; }
+      else { mark = 'dekor'; mc = 'var(--text-muted)'; }
+      return { ...t, ratio: (Math.round(r * 10) / 10).toFixed(1) + ':1', mark, mc, sample: t.sample || '', sc: t.cA || 'transparent' };
+    });
+  }
+  renderVals() {
+    const L = [
+      { n: '--bg', hex: '#F6F4F1', u: 'Sidbakgrund. Varmt papper, aldrig rent grått.', cA: '#1C1F21', cB: '#F6F4F1', gl: '--text på ytan', req: 'text' },
+      { n: '--surface', hex: '#FFFFFF', u: 'Kort, paneler, fält.', cA: '#1C1F21', cB: '#FFFFFF', gl: '--text på ytan', req: 'text' },
+      { n: '--surface-2', hex: '#EFEBE4', u: 'Sekundär fyllnad: grupphuvuden, inaktiva fält.', cA: '#696159', cB: '#EFEBE4', gl: '--text-muted på ytan', req: 'text' },
+      { n: '--text', hex: '#1C1F21', u: 'Rubriker och brödtext. Varumärkets kolsvärta.', cB: '#FFFFFF', gl: 'mot --surface', req: 'text' },
+      { n: '--text-muted', hex: '#696159', u: 'Metadata och tidsstämplar. Varm, inte grå.', cB: '#FFFFFF', gl: 'mot --surface', req: 'text' },
+      { n: '--border', hex: '#DED7CF', u: 'Hårlinjer och avdelare. Enbart dekorativ.', cB: '#FFFFFF', gl: 'mot --surface', req: 'deco' },
+      { n: '--border-strong', hex: '#9A8E7B', u: 'Fältkonturer och kontroller — kravet är 3:1.', cB: '#FFFFFF', gl: 'mot --surface', req: 'ui' },
+      { n: '--accent', hex: '#845C24', u: 'Funktionell mässing: länkar, primärknappar, fokusring.', cB: '#FFFFFF', gl: 'mot --surface', req: 'text' },
+      { n: '--accent-strong', hex: '#6B4A1D', u: 'Hover- och aktivläge för accenten.', cB: '#FFFFFF', gl: 'mot --surface', req: 'text' },
+      { n: '--accent-soft', hex: '#F3EADD', u: 'Accenttonad fyllnad: aktiv navigering, valda chips.', cA: '#845C24', cB: '#F3EADD', gl: '--accent på fyllnad', req: 'text' },
+      { n: '--brass-line', hex: '#CFAA81', u: 'Ljus mässing. ENDAST linjer och ornament på ljus grund.', cB: '#FFFFFF', gl: 'mot --surface', req: 'never' },
+      { n: '--on-accent', hex: '#FFFFFF', u: 'Text på accentfyllda knappar.', cB: '#845C24', gl: 'mot --accent', req: 'text' }
+    ];
+    const D = [
+      { n: '--bg', hex: '#131A20', u: 'Sidbakgrund — sajtens djupa navy-kol.', cA: '#F1ECE3', cB: '#131A20', gl: '--text på ytan', req: 'text' },
+      { n: '--surface', hex: '#1C1F21', u: 'Kort och paneler. Varumärkets charcoal.', cA: '#F1ECE3', cB: '#1C1F21', gl: '--text på ytan', req: 'text' },
+      { n: '--surface-2', hex: '#262A2B', u: 'Sekundär fyllnad — sajtens overlay-ton.', cA: '#AFA698', cB: '#262A2B', gl: '--text-muted på ytan', req: 'text' },
+      { n: '--text', hex: '#F1ECE3', u: 'Varmt elfenben — aldrig rent vitt på mörk grund.', cB: '#1C1F21', gl: 'mot --surface', req: 'text' },
+      { n: '--text-muted', hex: '#AFA698', u: 'Metadata och sekundär text.', cB: '#1C1F21', gl: 'mot --surface', req: 'text' },
+      { n: '--border', hex: '#3B372F', u: 'Hårlinjer och avdelare. Enbart dekorativ.', cB: '#1C1F21', gl: 'mot --surface', req: 'deco' },
+      { n: '--border-strong', hex: '#7A7059', u: 'Fältkonturer och kontroller — kravet är 3:1.', cB: '#1C1F21', gl: 'mot --surface', req: 'ui' },
+      { n: '--accent', hex: '#CFAA81', u: 'Här blir ljusa mässingen funktionell: länkar, knappar, fokus.', cB: '#1C1F21', gl: 'mot --surface', req: 'text' },
+      { n: '--accent-strong', hex: '#E2C29C', u: 'Hover- och aktivläge för accenten.', cB: '#1C1F21', gl: 'mot --surface', req: 'text' },
+      { n: '--accent-soft', hex: '#2C271F', u: 'Accenttonad fyllnad: aktiv navigering, valda chips.', cA: '#CFAA81', cB: '#2C271F', gl: '--accent på fyllnad', req: 'text' },
+      { n: '--brass-line', hex: '#8A6B45', u: 'Dekorlinjer, dämpad så att accenten behåller sin roll.', cB: '#1C1F21', gl: 'mot --surface', req: 'deco' },
+      { n: '--on-accent', hex: '#1C1F21', u: 'Text på accentfyllda knappar.', cB: '#CFAA81', gl: 'mot --accent', req: 'text' }
+    ];
+    const SL = [
+      { n: '--success / -soft', hex: '#E4EFE8', sample: 'Utförd', u: 'Genomfört: Utförd, Uppnådd.', cA: '#2E6047', cB: '#E4EFE8', gl: 'text på fyllnad', req: 'text' },
+      { n: '--info / -soft', hex: '#E3EAF1', sample: 'Planerad', u: 'Neutralt pågående: Planerad, Aktiv.', cA: '#3E5974', cB: '#E3EAF1', gl: 'text på fyllnad', req: 'text' },
+      { n: '--warning / -soft', hex: '#F7E9DE', sample: 'Väntar', u: 'Kräver uppmärksamhet: väntar på feedback.', cA: '#9A4A1E', cB: '#F7E9DE', gl: 'text på fyllnad', req: 'text' },
+      { n: '--danger / -soft', hex: '#F8E6E6', sample: 'Avbruten', u: 'Destruktivt och avbrutet: Avbruten, Ta bort, valideringsfel.', cA: '#A3292F', cB: '#F8E6E6', gl: 'text på fyllnad', req: 'text' }
+    ];
+    const SD = [
+      { n: '--success / -soft', hex: '#1E2B23', sample: 'Utförd', u: 'Genomfört: Utförd, Uppnådd.', cA: '#8CC5A4', cB: '#1E2B23', gl: 'text på fyllnad', req: 'text' },
+      { n: '--info / -soft', hex: '#1E2733', sample: 'Planerad', u: 'Neutralt pågående: Planerad, Aktiv.', cA: '#93B3CE', cB: '#1E2733', gl: 'text på fyllnad', req: 'text' },
+      { n: '--warning / -soft', hex: '#2E231A', sample: 'Väntar', u: 'Kräver uppmärksamhet: väntar på feedback.', cA: '#E1955F', cB: '#2E231A', gl: 'text på fyllnad', req: 'text' },
+      { n: '--danger / -soft', hex: '#332122', sample: 'Avbruten', u: 'Destruktivt och avbrutet.', cA: '#E39396', cB: '#332122', gl: 'text på fyllnad', req: 'text' }
+    ];
+    const tabNames = ['Översikt', 'Lektioner', 'Pass', 'Planer', 'Mål', 'Hästar', 'Historik'];
+    const tabStubs = [
+      'Sammanfattning av Annas aktivitet den senaste månaden.',
+      'Alla lektioner med Anna — kommande och genomförda.',
+      'Träningspass som Anna delat med dig.',
+      'Aktiva planer: Hoppsäsong vår 2026.',
+      'Mål och delmål som Anna delar.',
+      'Caspian, Luna.',
+      'Hela historiken i kronologisk ordning.'
+    ];
+    const tabs = tabNames.map((label, i) => ({
+      label,
+      go: () => this.setState({ tab: i }),
+      col: i === this.state.tab ? 'var(--accent)' : 'var(--text-muted)',
+      line: i === this.state.tab ? 'var(--accent)' : 'transparent',
+      wt: i === this.state.tab ? 700 : 600
+    }));
+    return {
+      pageTheme: this.props.pageTheme ?? 'light',
+      showContrast: this.props.showContrast ?? true,
+      showUsage: this.props.showUsage ?? true,
+      themes: [{ cls: 't-light', label: 'Ljust tema' }, { cls: 't-dark', label: 'Mörkt tema' }],
+      lightTokens: this.tok(L), darkTokens: this.tok(D),
+      semLight: this.tok(SL), semDark: this.tok(SD),
+      tabs, tabStub: tabStubs[this.state.tab]
+    };
+  }
+}
+</script>
+</body>
+</html>
