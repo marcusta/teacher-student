@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<!-- sv, not en: web/i18n.ts deliberately does NOT auto-detect, so every visitor
+     starts in Swedish regardless of Accept-Language, and every authored string
+     is Swedish first. lang drives screen-reader pronunciation and hyphenation,
+     so lang="en" made a synthesiser read Swedish copy with English phonemes.
+     A user who switches to en should have this updated to match — that belongs
+     in the i18n layer, which owns the locale signal. -->
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lindgren Equestrian</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        html, body { margin: 0; padding: 0; height: 100%; }
+
+        body {
+            font-family: var(--font-ui, 'Open Sans', 'Segoe UI', system-ui, sans-serif);
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        #app { height: 100%; }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+    </style>
+  <script type="module" crossorigin src="/teacher-student/assets/index-BzUTNYVT.js"></script>
+  <link rel="stylesheet" crossorigin href="/teacher-student/assets/index-Bqxl6ZYI.css">
+</head>
+<body>
+    <div id="app"></div>
+
+</body>
+</html>
