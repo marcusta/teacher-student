@@ -1,0 +1,4 @@
+{
+    "install": "bun install",
+    "healthCheck": "curl -f http://localhost:4810/api/health"
+}

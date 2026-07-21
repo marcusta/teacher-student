@@ -5,7 +5,8 @@
         "moduleResolution": "bundler",
         "strict": true,
         "skipLibCheck": true,
+        "resolveJsonModule": true,
         "types": ["bun"]
     },
-    "include": ["tests"]
+    "include": ["tests", "scripts"]
 }

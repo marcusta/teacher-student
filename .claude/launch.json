@@ -1,0 +1,17 @@
+{
+    "version": "0.0.1",
+    "configurations": [
+        {
+            "name": "web",
+            "runtimeExecutable": "bun",
+            "runtimeArgs": ["run", "dev"],
+            "port": 4811
+        },
+        {
+            "name": "api",
+            "runtimeExecutable": "bun",
+            "runtimeArgs": ["run", "dev:server"],
+            "port": 4810
+        }
+    ]
+}
