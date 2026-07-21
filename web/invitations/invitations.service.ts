@@ -5,18 +5,29 @@ import { api, type Invitation } from '../api';
 /**
  * Owns the teacher's invitation list as observable state.
  *
- * Deep module: callers see `items`, `loading`, `error` signals and three
- * methods (`load`, `create`, `revoke`). Hides the API calls, request
+ * Deep module: callers see `items`, `loading`, `error`, `resolved` signals and
+ * three methods (`load`, `create`, `revoke`). Hides the API calls, request
  * lifecycle, and optimistic list mutation.
  */
 export class InvitationsService {
     readonly items = new Signal<Invitation[]>([]);
     readonly loading = new Signal(false);
     readonly error = new Signal<RequestError | null>(null);
+    /**
+     * True once a load has completed, successfully or not.
+     *
+     * Separate from `loading` because "asked, and the answer was none" and "not
+     * asked yet" are different states, and Mina elever may only claim the
+     * teacher has no invitations in the first. Without it the roster page
+     * flashes its branded empty state in the gap before this request goes out —
+     * and, worse, could show it permanently if the request failed.
+     */
+    readonly resolved = new Signal(false);
 
     async load(): Promise<void> {
         const result = await request(this.loading, this.error, () => api.invitations.list());
         if (result) this.items.set(result);
+        this.resolved.set(true);
     }
 
     async create(inviteeEmail: string): Promise<boolean> {

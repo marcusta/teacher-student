@@ -1,416 +1,468 @@
-import { Component, Computed, Signal, template } from '@basics/core/client/core';
-import { t } from '../theme';
-import { s, btn, input } from '../css';
+import { Component, Computed, Router, Signal, effect, template, untrack } from '@basics/core/client/core';
+import { EmptyStateComponent } from '@basics/core/client/ui/empty-state';
+import { StatusPillComponent } from '@basics/core/client/ui/status-pill';
+import { formatIsoDate, plural, t } from '../i18n';
+import { token } from '../theme';
+import { s, btn } from '../css';
+import { ShareChipComponent } from '../ui/share-chip.component';
 import { GoalsService } from './goals.service';
+import { PlansService } from '../plans/plans.service';
 import { TeachersService } from '../training-sessions/teachers.service';
-import type { Goal, Teacher } from '../api';
-
-const STATUS_LABEL: Record<Goal['status'], string> = {
-    active: 'Aktiv',
-    achieved: 'Uppnått',
-    abandoned: 'Arkiverad',
-};
+import {
+    descriptionExcerpt,
+    goalRowKey,
+    goalStatusPill,
+    groupGoals,
+    isOverdue,
+    ownerRecipients,
+    planMembership,
+    targetDateLabel,
+} from './goal-copy';
+import type { Goal } from '../api';
 
 const tpl = template(`
-    <div class="goals" bind="root">
-        <h2>Mål</h2>
+    <div class="goals">
+        <header class="goals__head">
+            <h1 bind="heading" class="goals__title"></h1>
+            <button bind="create" type="button" class="goals__create"></button>
+        </header>
 
-        <form bind="form" class="goals__form">
-            <input bind="titleInput" type="text" placeholder="Målets titel" maxlength="200" required>
-            <textarea bind="descInput" placeholder="Beskrivning (valfritt)" maxlength="5000" rows="3"></textarea>
-            <input bind="dateInput" type="date" class="goals__date">
-            <div bind="shareForm" class="goals__share-form"></div>
-            <div class="goals__form-row">
-                <button bind="submit" type="submit"></button>
-                <button bind="cancel" type="button" class="goals__cancel"></button>
-                <div class="error" bind="error"></div>
-            </div>
-        </form>
+        <p bind="loading" class="goals__loading"></p>
 
-        <div bind="empty" class="goals__empty">Inga mål än.</div>
-        <ul bind="list" class="goals__list"></ul>
+        <div bind="errorBox" class="goals__error" role="alert">
+            <p bind="errorText" class="goals__error-text"></p>
+            <button bind="retry" type="button" class="goals__retry"></button>
+        </div>
+
+        <div bind="emptyHost"></div>
+
+        <section bind="activeSection" class="goals__group">
+            <h2 bind="activeLabel" class="goals__group-label"></h2>
+            <ul bind="activeList" class="goals__list"></ul>
+        </section>
+
+        <section bind="achievedSection" class="goals__group">
+            <h2 bind="achievedLabel" class="goals__group-label"></h2>
+            <ul bind="achievedList" class="goals__list"></ul>
+        </section>
+
+        <section bind="abandonedSection" class="goals__group">
+            <button bind="abandonedToggle" type="button" class="goals__disclosure" aria-expanded="false"></button>
+            <ul bind="abandonedList" class="goals__list"></ul>
+        </section>
     </div>
 `);
 
+/**
+ * Mål — IA §3.13. The Goals this account owns, grouped **Aktiva → Uppnådda →
+ * Avbrutna**.
+ *
+ * **Never gated on having a teacher.** §3.13 and UI_DECISIONS §1 both say so:
+ * a Goal belongs to an account outright, and sharing changes only who *else*
+ * can read it. So an account with no Relations sees the full view, the create
+ * action, and rows whose sharing chip simply reads `Privat`.
+ *
+ * **Every row links to `/mal/:id`.** §3.13 calls this out as a defect in the
+ * previous list — "the current list does not consistently expose that path" —
+ * and the fix is structural: the row IS an anchor, so there is no branch in
+ * which a Goal renders without its detail route.
+ *
+ * **Overdue is metadata, not a status.** §3.13 is explicit. A past target date
+ * adds a supporting line next to the *Aktiv* pill; it never becomes a fourth
+ * pill, never re-sorts the list, and disappears the moment the Goal is achieved
+ * or abandoned — see `isOverdue`.
+ *
+ * **Rows wait for names.** The sharing chip must NAME its recipients (§4.5) and
+ * the plan-membership summary must name its Plans, but a Goal carries only ids;
+ * the names live behind two independent requests. Painting as soon as the Goals
+ * land would render every shared row as `Delad: okänd mottagare` for however
+ * long those take. That degraded label exists for a Relation that has genuinely
+ * gone, not for the happy path, so the list holds until both answers are in —
+ * including when they FAIL, which is the point at which "no names" becomes the
+ * honest outcome rather than a temporary one.
+ */
 export class GoalsComponent extends Component {
     static styles = `
         .goals {
-            max-width: 720px;
-
-            & h2 { margin: 0 0 ${s('lg')}; }
-
-            & .goals__form {
+            & .goals__head {
                 display: flex;
-                flex-direction: column;
-                gap: ${s('sm')};
+                align-items: baseline;
+                justify-content: space-between;
+                gap: ${s('lg')};
+                flex-wrap: wrap;
                 margin-bottom: ${s('xl')};
-                padding: ${s('md')};
-                background: ${t('surface')};
-                border-radius: ${t('radius')};
-
-                & input, & textarea {
-                    ${input()}
-                    width: 100%;
-                    box-sizing: border-box;
-                    font-family: inherit;
-                }
-                & .goals__date { color-scheme: dark light; }
             }
 
-            & .goals__form-row {
+            /* Lora 500, and only 500 — UI_DECISIONS §3. */
+            & .goals__title {
+                margin: 0;
+                font-family: ${token('font-display')};
+                font-weight: 500;
+                font-size: 1.75rem;
+                line-height: 36px;
+                color: ${token('text')};
+            }
+
+            /* Buttons are Open Sans territory; the serif is forbidden here. */
+            & .goals__create { ${btn(token('radius-sm'), 'primary')} }
+
+            & .goals__loading {
+                margin: 0;
+                color: ${token('text-muted')};
+                font-size: 0.875rem;
+            }
+            & .goals__loading.hidden { display: none; }
+
+            & .goals__error {
                 display: flex;
                 align-items: center;
                 gap: ${s('md')};
                 flex-wrap: wrap;
+                padding: ${s('md')};
+                margin-bottom: ${s('lg')};
+                border: 1px solid ${token('danger')};
+                border-radius: ${token('radius-md')};
+                background: ${token('danger-soft')};
 
-                & button { ${btn()} }
+                & .goals__error-text { margin: 0; font-size: 0.875rem; color: ${token('text')}; }
+                & .goals__retry { ${btn()} }
+            }
+            & .goals__error.hidden { display: none; }
+
+            & .goals__group { margin-bottom: ${s('xl')}; }
+            & .goals__group.hidden { display: none; }
+
+            /* Uppercase group label — letterspaced, never the serif (§4.3). */
+            & .goals__group-label {
+                margin: 0 0 ${s('md')};
+                font-family: ${token('font-ui')};
+                font-size: 0.6875rem;
+                line-height: 16px;
+                font-weight: 700;
+                letter-spacing: 0.14em;
+                text-transform: uppercase;
+                color: ${token('text-muted')};
             }
 
-            & .goals__cancel.hidden { display: none; }
-
-            & .goals__share-form {
-                display: flex;
-                flex-direction: column;
-                gap: ${s('xs')};
-                font-size: 0.875rem;
-            }
-            & .goals__share-form.hidden { display: none; }
-            & .goals__share-form label {
-                display: flex;
+            /* Avbrutna is collapsed (§3.13 "preferably behind a filter or
+               collapsed section"), so its label is the disclosure itself. */
+            & .goals__disclosure {
+                display: inline-flex;
                 align-items: center;
                 gap: ${s('sm')};
+                margin: 0 0 ${s('md')};
+                padding: ${s('xs')} 0;
+                background: transparent;
+                border: none;
                 cursor: pointer;
+                font-family: ${token('font-ui')};
+                font-size: 0.6875rem;
+                line-height: 16px;
+                font-weight: 700;
+                letter-spacing: 0.14em;
+                text-transform: uppercase;
+                color: ${token('text-muted')};
+                &:hover { color: ${token('accent-strong')}; }
+                &:focus-visible { outline: 2px solid ${token('accent')}; outline-offset: 2px; }
             }
-
-            & .goals__item-wrap {
-                display: flex;
-                flex-direction: column;
-                gap: ${s('xs')};
-            }
-
-            & .goals__share-panel {
-                padding: ${s('sm')} ${s('md')} ${s('md')};
-                margin: 0 ${s('md')} ${s('sm')};
-                background: ${t('bg')};
-                border-radius: ${t('radius')};
-                font-size: 0.875rem;
-            }
-            & .goals__share-panel.hidden { display: none; }
-            & .goals__share-panel label {
-                display: flex;
-                align-items: center;
-                gap: ${s('sm')};
-                margin-top: ${s('xs')};
-                cursor: pointer;
-            }
-            & .goals__share-panel-title {
-                font-weight: 500;
-                margin-bottom: ${s('xs')};
-            }
-
-            & .error {
-                color: ${t('error')};
-                font-size: 0.875rem;
-                min-height: 1em;
-            }
-
-            & .goals__empty {
-                padding: ${s('lg')};
-                color: ${t('text')};
-                opacity: 0.6;
-                font-size: 0.875rem;
-            }
-            & .goals__empty.hidden { display: none; }
 
             & .goals__list {
                 list-style: none;
                 margin: 0;
                 padding: 0;
+                /* No zebra striping (§4.3): rows are separated by a hairline. */
+                border-top: 1px solid ${token('border')};
+            }
+            & .goals__list:empty { border-top: none; }
+            & .goals__list.hidden { display: none; }
+            & .goals__list > li { border-bottom: 1px solid ${token('border')}; }
+
+            & .goal-row {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                align-items: start;
+                gap: ${s('lg')};
+                padding: ${s('md')} ${s('sm')};
+                text-decoration: none;
+                color: inherit;
+                font-family: ${token('font-ui')};
+
+                &:hover { background: ${token('surface-2')}; }
+                &:focus-visible { outline: 2px solid ${token('accent')}; outline-offset: -2px; }
+            }
+            /* Abandoned rows are dimmed, as §4.3 dims a cancelled row. */
+            & .goal-row--abandoned { opacity: 0.72; }
+
+            & .goal-row__body {
                 display: flex;
                 flex-direction: column;
                 gap: ${s('xs')};
+                min-width: 0;
             }
-
-            & .goals__item {
+            & .goal-row__title {
+                font-size: 0.9375rem;
+                font-weight: 600;
+                color: ${token('text')};
+                overflow-wrap: anywhere;
+            }
+            /* One meta line, not four — §4.3 allows at most two rows of text. */
+            & .goal-row__meta {
                 display: flex;
-                align-items: flex-start;
-                justify-content: space-between;
-                gap: ${s('md')};
-                padding: ${s('sm')} ${s('md')};
-                background: ${t('surface')};
-                border-radius: ${t('radius')};
-            }
-            & .goals__item.abandoned { opacity: 0.65; }
-
-            & .goals__item-body { flex: 1; min-width: 0; }
-            & .goals__item-title { font-weight: 500; }
-            & .goals__item-meta {
+                align-items: baseline;
+                flex-wrap: wrap;
+                gap: ${s('xs')} ${s('sm')};
                 font-size: 0.8125rem;
-                opacity: 0.7;
-                margin-top: ${s('xs')};
+                color: ${token('text-muted')};
             }
-            & .goals__badge {
-                display: inline-block;
-                margin-left: ${s('xs')};
-                padding: 0 ${s('xs')};
-                border-radius: ${t('radius-pill')};
-                background: ${t('hover-bg')};
-                font-size: 0.75rem;
-                font-weight: 500;
+            /* Overdue is supporting metadata (§3.13), so it borrows the warning
+               tone for emphasis but never the pill's shape grammar — it is not
+               a status and must not read as one. */
+            & .goal-row__overdue { color: ${token('warning')}; font-weight: 600; }
+            & .goal-row__excerpt {
+                font-size: 0.8125rem;
+                line-height: 1.5;
+                color: ${token('text-muted')};
+                overflow-wrap: anywhere;
             }
 
-            & .goals__item-actions {
+            & .goal-row__chips {
                 display: flex;
+                flex-wrap: wrap;
                 gap: ${s('xs')};
-                flex-shrink: 0;
+                justify-content: flex-end;
+                align-items: flex-start;
+                max-width: 18rem;
+            }
 
-                & button {
-                    ${btn()}
-                    font-size: 0.8125rem;
-                    padding: ${s('xs')} ${s('sm')};
+            /* UI_DECISIONS §6: single column below 640px. */
+            @media (max-width: 639px) {
+                & .goal-row {
+                    grid-template-columns: minmax(0, 1fr);
+                    gap: ${s('sm')};
                 }
+                & .goal-row__chips { justify-content: flex-start; max-width: none; }
+                & .goals__title { font-size: 1.375rem; line-height: 30px; }
             }
         }
     `;
 
-    private svc = this.inject(GoalsService);
+    private router = this.inject(Router);
+    private goals = this.inject(GoalsService);
+    private plans = this.inject(PlansService);
     private teachers = this.inject(TeachersService);
-    private editingId = new Signal<string | null>(null);
-    private titleVal = new Signal('');
-    private descVal = new Signal('');
-    private dateVal = new Signal('');
 
-    private submitLabel = new Computed(() =>
-        this.editingId.get() ? 'Spara ändringar' : 'Skapa mål',
+    /** See the class docs: rows are held until both name sources answer. */
+    private namesResolved = new Signal(false);
+    private showAbandoned = new Signal(false);
+
+    /**
+     * Frozen at mount. Re-reading the clock inside the overdue derivation would
+     * flip a row's overdue line mid-render, on a signal nothing subscribed to.
+     */
+    private today = new Signal(formatIsoDate(new Date()));
+
+    private grouped = new Computed(() =>
+        groupGoals(this.namesResolved.get() ? this.goals.items.get() : []));
+    private active = new Computed(() => this.grouped.get().active);
+    private achieved = new Computed(() => this.grouped.get().achieved);
+    private abandoned = new Computed(() => this.grouped.get().abandoned);
+
+    private isEmpty = new Computed(() =>
+        this.namesResolved.get()
+        && this.goals.items.get().length === 0
+        && !this.goals.loading.get()
+        && this.goals.error.get() === null,
     );
 
-    private editingGoal = new Computed(() => {
-        const id = this.editingId.get();
-        if (!id) return null;
-        return this.svc.items.get().find((g) => g.id === id) ?? null;
-    });
-
     onMount(): void {
-        void this.svc.load();
-        void this.teachers.load();
+        void this.goals.load();
+        // Both name sources gate the rows, and a FAILED request resolves the
+        // gate too — at that point the chip has no names and never will, and
+        // saying so is the honest outcome rather than an indefinite spinner.
+        void Promise.allSettled([this.plans.load(), this.teachers.load()])
+            .then(() => this.namesResolved.set(true));
     }
 
     render(): DocumentFragment {
-        void this.svc.items.get();
         const frag = this.wire(tpl, {
-            root: { inert: () => this.svc.loading.get() },
-            titleInput: {
-                value: () => this.titleVal.get(),
-                oninput: (e: Event) => this.titleVal.set((e.target as HTMLInputElement).value),
+            heading: { textContent: () => t('goals.heading') },
+            create: {
+                textContent: () => t('goals.create'),
+                onclick: () => this.router.navigate('/mal/nytt'),
             },
-            descInput: {
-                value: () => this.descVal.get(),
-                oninput: (e: Event) => this.descVal.set((e.target as HTMLTextAreaElement).value),
+            loading: {
+                textContent: () => t('goals.loading'),
+                // Covers the window where the Goals have landed but the plan and
+                // teacher names have not, so holding the rows back reads as
+                // "still loading" rather than as a blank list.
+                className: () => (!this.namesResolved.get() || this.goals.loading.get())
+                    && this.goals.items.get().length === 0
+                    && this.goals.error.get() === null
+                    ? 'goals__loading' : 'goals__loading hidden',
             },
-            dateInput: {
-                value: () => this.dateVal.get(),
-                oninput: (e: Event) => this.dateVal.set((e.target as HTMLInputElement).value),
+            errorBox: {
+                className: () => this.goals.error.get() ? 'goals__error' : 'goals__error hidden',
             },
-            form: {
-                onsubmit: async (e: Event) => {
-                    e.preventDefault();
-                    const title = this.titleVal.get().trim();
-                    if (!title) return;
-                    const description = this.descVal.get().trim();
-                    const targetDate = this.dateVal.get().trim();
-                    const payload = {
-                        title,
-                        ...(description ? { description } : {}),
-                        ...(targetDate ? { targetDate } : {}),
-                    };
-                    const editing = this.editingId.get();
-                    if (editing) {
-                        const updated = await this.svc.update(editing, {
-                            title,
-                            description: description || null,
-                            targetDate: targetDate || null,
-                        });
-                        if (updated) this.resetForm();
-                    } else {
-                        const ok = await this.svc.create(payload);
-                        if (ok) this.resetForm();
-                    }
-                },
+            errorText: { textContent: () => t('goals.error') },
+            retry: {
+                textContent: () => t('goals.retry'),
+                onclick: () => void this.goals.load(),
             },
-            submit: { textContent: () => this.submitLabel.get() },
-            cancel: {
-                className: () => this.editingId.get() ? 'goals__cancel' : 'goals__cancel hidden',
-                textContent: () => 'Avbryt',
-                onclick: () => this.resetForm(),
+
+            activeSection: {
+                className: () => this.active.get().length === 0
+                    ? 'goals__group hidden' : 'goals__group',
             },
-            error: { textContent: () => this.svc.error.get()?.message ?? '' },
-            empty: {
-                className: () => this.svc.items.get().length === 0 ? 'goals__empty' : 'goals__empty hidden',
+            activeLabel: { textContent: () => t('goals.group.active') },
+            achievedSection: {
+                className: () => this.achieved.get().length === 0
+                    ? 'goals__group hidden' : 'goals__group',
             },
-            shareForm: {
-                className: () => {
-                    const show = this.editingId.get() !== null
-                        && this.teachers.items.get().length > 0;
-                    return show ? 'goals__share-form' : 'goals__share-form hidden';
-                },
+            achievedLabel: { textContent: () => t('goals.group.achieved') },
+            abandonedSection: {
+                className: () => this.abandoned.get().length === 0
+                    ? 'goals__group hidden' : 'goals__group',
+            },
+            abandonedToggle: {
+                textContent: () => this.showAbandoned.get()
+                    ? t('goals.abandoned.hide')
+                    : plural('goals.abandoned.show', this.abandoned.get().length),
+                'aria-expanded': () => String(this.showAbandoned.get()),
+                onclick: () => this.showAbandoned.set(!this.showAbandoned.peek()),
+            },
+            abandonedList: {
+                className: () => this.showAbandoned.get() ? 'goals__list' : 'goals__list hidden',
             },
         });
 
-        this.renderShareCheckboxes(this.ref(frag, 'shareForm'), this.editingGoal.get());
-
-        const listHost = this.ref(frag, 'list');
-        this.$each(
-            listHost,
-            this.svc.items,
-            (item) => this.renderItem(item),
-            (item) => `${item.id}:${item.status}:${item.title}:${item.targetDate ?? ''}:${item.sharedTeacherIds.join(',')}`,
-        );
+        this.buildEmpty(this.ref(frag, 'emptyHost'));
+        this.$each(this.ref(frag, 'activeList'), this.active,
+            (goal, _i, track) => this.renderRow(goal, track), goalRowKey);
+        this.$each(this.ref(frag, 'achievedList'), this.achieved,
+            (goal, _i, track) => this.renderRow(goal, track), goalRowKey);
+        this.$each(this.ref(frag, 'abandonedList'), this.abandoned,
+            (goal, _i, track) => this.renderRow(goal, track), goalRowKey);
 
         return frag;
     }
 
-    private resetForm(): void {
-        this.editingId.set(null);
-        this.titleVal.set('');
-        this.descVal.set('');
-        this.dateVal.set('');
-    }
+    /**
+     * The empty state — §4.14: exactly one action, at most two sentences.
+     *
+     * One variant only, and deliberately: a Goal needs no Teacher, no Plan and
+     * no horse, so "Bjud in lärare" would be advice this view has no business
+     * giving. §3.13 says the same from the other side — "No Teachers: sharing is
+     * simply absent; Goal ownership is unaffected."
+     */
+    private buildEmpty(host: HTMLElement): void {
+        let current: EmptyStateComponent | null = null;
 
-    private startEdit(item: Goal): void {
-        this.editingId.set(item.id);
-        this.titleVal.set(item.title);
-        this.descVal.set(item.description ?? '');
-        this.dateVal.set(item.targetDate ?? '');
-    }
+        this.track(effect(() => {
+            const show = this.isEmpty.get();
+            current?.destroy();
+            current = null;
+            host.replaceChildren();
+            if (!show) return;
 
-    private async toggleShare(goalId: string, teacherId: string, shared: boolean): Promise<void> {
-        if (shared) await this.svc.share(goalId, teacherId);
-        else await this.svc.unshare(goalId, teacherId);
-    }
-
-    private renderShareCheckboxes(host: HTMLElement, goal: Goal | null): void {
-        host.replaceChildren();
-        if (!goal) return;
-        const heading = document.createElement('div');
-        heading.textContent = 'Delning med lärare';
-        host.appendChild(heading);
-        for (const teacher of this.teachers.items.get()) {
-            host.appendChild(this.shareCheckbox(goal, teacher));
-        }
-    }
-
-    private shareCheckbox(goal: Goal, teacher: Teacher): HTMLLabelElement {
-        const label = document.createElement('label');
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.checked = goal.sharedTeacherIds.includes(teacher.id);
-        cb.addEventListener('change', () => {
-            void this.toggleShare(goal.id, teacher.id, cb.checked);
-        });
-        const span = document.createElement('span');
-        span.textContent = teacher.displayName;
-        label.appendChild(cb);
-        label.appendChild(span);
-        return label;
-    }
-
-    private renderItem(item: Goal): HTMLElement {
-        const li = document.createElement('li');
-        li.className = 'goals__item-wrap';
-
-        const row = document.createElement('div');
-        row.className = item.status === 'abandoned' ? 'goals__item abandoned' : 'goals__item';
-
-        const body = document.createElement('div');
-        body.className = 'goals__item-body';
-
-        const titleRow = document.createElement('div');
-        titleRow.className = 'goals__item-title';
-        titleRow.textContent = item.title;
-
-        const badge = document.createElement('span');
-        badge.className = 'goals__badge';
-        badge.textContent = STATUS_LABEL[item.status];
-        titleRow.appendChild(badge);
-        body.appendChild(titleRow);
-
-        const metaBits: string[] = [];
-        if (item.targetDate) metaBits.push(`Måldatum: ${item.targetDate}`);
-        if (item.description) metaBits.push(item.description);
-        if (metaBits.length > 0) {
-            const meta = document.createElement('div');
-            meta.className = 'goals__item-meta';
-            meta.textContent = metaBits.join(' · ');
-            body.appendChild(meta);
-        }
-
-        const actions = document.createElement('div');
-        actions.className = 'goals__item-actions';
-
-        let panel: HTMLDivElement | null = null;
-        if (this.teachers.items.get().length > 0) {
-            panel = document.createElement('div');
-            panel.className = 'goals__share-panel hidden';
-            const panelTitle = document.createElement('div');
-            panelTitle.className = 'goals__share-panel-title';
-            panelTitle.textContent = 'Delning med lärare';
-            panel.appendChild(panelTitle);
-            for (const teacher of this.teachers.items.get()) {
-                panel.appendChild(this.shareCheckbox(item, teacher));
-            }
-        }
-
-        const shareBtn = document.createElement('button');
-        shareBtn.type = 'button';
-        shareBtn.textContent = `Delning (${item.sharedTeacherIds.length})`;
-        if (panel) {
-            shareBtn.addEventListener('click', () => panel!.classList.toggle('hidden'));
-        } else {
-            shareBtn.disabled = true;
-        }
-        actions.appendChild(shareBtn);
-
-        if (item.status !== 'abandoned') {
-            const editBtn = document.createElement('button');
-            editBtn.type = 'button';
-            editBtn.textContent = 'Redigera';
-            editBtn.addEventListener('click', () => this.startEdit(item));
-            actions.appendChild(editBtn);
-
-            if (item.status === 'achieved') {
-                const reopenBtn = document.createElement('button');
-                reopenBtn.type = 'button';
-                reopenBtn.textContent = 'Återöppna';
-                reopenBtn.addEventListener('click', async () => {
-                    await this.svc.reopen(item.id);
+            // Built outside the tracking scope, as spawn() does: mounting runs
+            // the child's render, and those reads (locale among them) would
+            // otherwise subscribe THIS effect and rebuild the empty state on
+            // unrelated changes.
+            current = untrack(() => {
+                const empty = new EmptyStateComponent({
+                    heading: () => t('goals.empty.heading'),
+                    body: () => t('goals.empty.body'),
+                    action: {
+                        label: () => t('goals.empty.action'),
+                        onclick: () => this.router.navigate('/mal/nytt'),
+                    },
+                    headingLevel: 2,
                 });
-                actions.appendChild(reopenBtn);
-            } else {
-                const achieveBtn = document.createElement('button');
-                achieveBtn.type = 'button';
-                achieveBtn.textContent = 'Markera klart';
-                achieveBtn.addEventListener('click', async () => {
-                    await this.svc.achieve(item.id);
-                });
-                actions.appendChild(achieveBtn);
-            }
-
-            const abandonBtn = document.createElement('button');
-            abandonBtn.type = 'button';
-            abandonBtn.textContent = 'Arkivera';
-            abandonBtn.addEventListener('click', async () => {
-                if (!confirm('Arkivera detta mål?')) return;
-                await this.svc.abandon(item.id);
-                if (this.editingId.get() === item.id) this.resetForm();
+                empty.mount(host);
+                return empty;
             });
-            actions.appendChild(abandonBtn);
+        }));
+        this.track(() => current?.destroy());
+    }
+
+    private renderRow(goal: Goal, track: (d: () => void) => void): HTMLElement {
+        const li = document.createElement('li');
+        // §3.13: every row exposes `/mal/:id`. The row IS the anchor, so there
+        // is no branch in which a Goal renders without its detail route.
+        const href = `/mal/${goal.id}`;
+        const row = document.createElement('a');
+        row.className = goal.status === 'abandoned' ? 'goal-row goal-row--abandoned' : 'goal-row';
+        row.href = href;
+        row.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.router.navigate(href);
+        });
+
+        const body = document.createElement('span');
+        body.className = 'goal-row__body';
+
+        const title = document.createElement('span');
+        title.className = 'goal-row__title';
+        title.textContent = goal.title;
+        body.appendChild(title);
+
+        const meta = document.createElement('span');
+        meta.className = 'goal-row__meta';
+        const target = targetDateLabel(goal.targetDate);
+        if (target) meta.appendChild(metaPart(target));
+        if (isOverdue(goal, this.today.get())) {
+            meta.appendChild(metaPart(t('goal.overdue'), 'goal-row__overdue'));
+        }
+        const membership = planMembership(goal.planIds, this.plans.items.get());
+        if (membership) meta.appendChild(metaPart(membership));
+        if (meta.childElementCount > 0) body.appendChild(meta);
+
+        const excerpt = descriptionExcerpt(goal.description);
+        if (excerpt) {
+            const text = document.createElement('span');
+            text.className = 'goal-row__excerpt';
+            text.textContent = excerpt;
+            body.appendChild(text);
         }
 
-        row.appendChild(body);
-        row.appendChild(actions);
-        li.appendChild(row);
-        if (panel) li.appendChild(panel);
+        const chips = document.createElement('span');
+        chips.className = 'goal-row__chips';
 
+        // §4.5: sharing is named on every row. Never a bare "Delad", never a
+        // count — `ownerRecipients` resolves each id against the Teacher list and
+        // `ShareChipComponent` refuses to render an unlabelled shared state.
+        const shareHost = document.createElement('span');
+        chips.appendChild(shareHost);
+        const shareChip = new ShareChipComponent({
+            recipients: () => ownerRecipients(goal.sharedTeacherIds, this.teachers.items.get()),
+            shared: () => goal.sharedTeacherIds.length > 0,
+        });
+        shareChip.mount(shareHost);
+        track(() => shareChip.destroy());
+
+        // §4.4: the pill's SHAPE carries the status, so the row stays readable
+        // with colour removed entirely.
+        const descriptor = goalStatusPill(goal.status);
+        const pillHost = document.createElement('span');
+        chips.appendChild(pillHost);
+        const pill = new StatusPillComponent({
+            label: descriptor.label,
+            variant: descriptor.variant,
+            tone: descriptor.tone,
+            ...(descriptor.glyph === undefined ? {} : { glyph: descriptor.glyph }),
+        });
+        pill.mount(pillHost);
+        track(() => pill.destroy());
+
+        row.append(body, chips);
+        li.appendChild(row);
         return li;
     }
+}
+
+function metaPart(text: string, className?: string): HTMLElement {
+    const el = document.createElement('span');
+    if (className) el.className = className;
+    el.textContent = text;
+    return el;
 }

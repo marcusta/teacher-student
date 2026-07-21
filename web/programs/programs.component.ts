@@ -1,182 +1,286 @@
-import { Component, Router, Signal, template } from '@basics/core/client/core';
-import { t } from '../theme';
-import { s, btn, input } from '../css';
+import { Component, Computed, Router, Signal, effect, template, untrack } from '@basics/core/client/core';
+import { EmptyStateComponent } from '@basics/core/client/ui/empty-state';
+import { t } from '../i18n';
+import { token } from '../theme';
+import { s, btn } from '../css';
 import { ProgramsService } from './programs.service';
+import { descriptionExcerpt, exerciseCountLabel } from '../library/library-copy';
 import type { Program } from '../api';
 
 const tpl = template(`
-    <div class="programs" bind="root">
-        <h2>Program</h2>
-        <p class="programs__hint">
-            Återanvändbara övningssekvenser (ridprogram) i ditt bibliotek.
-            Plocka in dem i lektioner eller träningspass.
-        </p>
+    <section class="pr-list">
+        <div class="pr-list__bar">
+            <button bind="create" type="button" class="pr-list__create"></button>
+        </div>
 
-        <form bind="form" class="programs__form">
-            <input bind="titleInput" type="text" placeholder="Programmets namn" maxlength="200" required>
-            <textarea bind="descInput" placeholder="Beskrivning" maxlength="4000" rows="3"></textarea>
-            <div class="programs__form-row">
-                <button bind="submit" type="submit">Spara program</button>
-                <div class="error" bind="error"></div>
-            </div>
-        </form>
+        <p bind="loading" class="pr-list__loading"></p>
 
-        <div bind="empty" class="programs__empty">Inga program än.</div>
-        <ul bind="list" class="programs__list"></ul>
-    </div>
+        <div bind="errorBox" class="pr-list__error" role="alert">
+            <p bind="errorText" class="pr-list__error-text"></p>
+            <button bind="retry" type="button" class="pr-list__retry"></button>
+        </div>
+
+        <div bind="emptyHost"></div>
+
+        <ul bind="list" class="pr-list__list"></ul>
+    </section>
 `);
 
-export class ProgramsComponent extends Component {
+/**
+ * Bibliotek · Program — IA §3.6 list, the second tab of the Bibliotek
+ * destination rather than a top-level navigation entry.
+ *
+ * Same three changes as the Övningar tab: creation moved to its own route
+ * (`/program/nytt`) so retrieval comes first, the empty state carries exactly
+ * one action (§4.14), and a failed fetch renders as a failure rather than as an
+ * empty library.
+ *
+ * The row's Exercise count is fetched per Program because `GET /programs` does
+ * not carry one. The "historical attachment count" §3.6 also mentions is a
+ * **Backend gap** and is therefore not rendered at all, rather than as zero.
+ */
+export class ProgramListComponent extends Component {
     static styles = `
-        .programs {
-            max-width: 720px;
-
-            & h2 { margin: 0 0 ${s('sm')}; }
-            & .programs__hint {
-                margin: 0 0 ${s('lg')};
-                font-size: 0.875rem;
-                opacity: 0.75;
-            }
-
-            & .programs__form {
+        .pr-list {
+            & .pr-list__bar {
                 display: flex;
-                flex-direction: column;
-                gap: ${s('sm')};
-                margin-bottom: ${s('xl')};
-                padding: ${s('md')};
-                background: ${t('surface')};
-                border-radius: ${t('radius')};
-
-                & input, & textarea {
-                    ${input()}
-                    width: 100%;
-                    box-sizing: border-box;
-                }
-                & textarea { font-family: inherit; resize: vertical; }
+                justify-content: flex-end;
+                margin-bottom: ${s('lg')};
             }
 
-            & .programs__form-row {
+            /*
+             * Buttons are Open Sans territory; the serif is forbidden here.
+             * This tab has exactly one thing to offer besides reading, so it
+             * carries the primary tier.
+             */
+            & .pr-list__create { ${btn(token('radius-sm'), 'primary')} }
+
+            & .pr-list__loading {
+                margin: 0;
+                font-family: ${token('font-ui')};
+                color: ${token('text-muted')};
+                font-size: 0.875rem;
+            }
+            & .pr-list__loading.hidden { display: none; }
+
+            & .pr-list__error {
                 display: flex;
                 align-items: center;
                 gap: ${s('md')};
+                flex-wrap: wrap;
+                padding: ${s('md')};
+                margin-bottom: ${s('lg')};
+                border: 1px solid ${token('danger')};
+                border-radius: ${token('radius-md')};
+                background: ${token('danger-soft')};
 
-                & button { ${btn()} }
+                & .pr-list__error-text {
+                    margin: 0;
+                    font-family: ${token('font-ui')};
+                    font-size: 0.875rem;
+                    color: ${token('text')};
+                }
+                /* Retry is secondary: recovering from a failure is not the
+                   thing this tab is for. */
+                & .pr-list__retry { ${btn()} }
             }
+            & .pr-list__error.hidden { display: none; }
 
-            & .error {
-                color: ${t('error')};
-                font-size: 0.875rem;
-                min-height: 1em;
-            }
-
-            & .programs__empty {
-                padding: ${s('lg')};
-                color: ${t('text')};
-                opacity: 0.6;
-                font-size: 0.875rem;
-            }
-            & .programs__empty.hidden { display: none; }
-
-            & .programs__list {
+            & .pr-list__list {
                 list-style: none;
                 margin: 0;
                 padding: 0;
+                /* No zebra striping (§4.3): rows are separated by a hairline. */
+                border-top: 1px solid ${token('border')};
+            }
+            & .pr-list__list:empty { border-top: none; }
+            & .pr-list__list.hidden { display: none; }
+            & .pr-list__list > li { border-bottom: 1px solid ${token('border')}; }
+
+            & .pr-row {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                align-items: start;
+                gap: ${s('lg')};
+                padding: ${s('md')} ${s('sm')};
+                text-decoration: none;
+                color: inherit;
+                font-family: ${token('font-ui')};
+
+                &:hover { background: ${token('surface-2')}; }
+                &:focus-visible { outline: 2px solid ${token('accent')}; outline-offset: -2px; }
+            }
+            & .pr-row__body {
                 display: flex;
                 flex-direction: column;
                 gap: ${s('xs')};
+                min-width: 0;
+            }
+            & .pr-row__title {
+                font-size: 0.9375rem;
+                font-weight: 600;
+                color: ${token('text')};
+                overflow-wrap: anywhere;
+            }
+            & .pr-row__excerpt {
+                font-size: 0.8125rem;
+                line-height: 1.5;
+                color: ${token('text-muted')};
+                overflow-wrap: anywhere;
+            }
+            & .pr-row__count {
+                font-size: 0.8125rem;
+                color: ${token('text-muted')};
+                white-space: nowrap;
             }
 
-            & .programs__item {
-                display: block;
-                padding: ${s('sm')} ${s('md')};
-                background: ${t('surface')};
-                border-radius: ${t('radius')};
-                color: ${t('text')};
-                text-decoration: none;
-                transition: background 0.15s;
-                &:hover { background: ${t('hover-bg')}; }
-            }
-            & .programs__item-title { font-weight: 500; }
-            & .programs__item-desc {
-                margin-top: ${s('xs')};
-                font-size: 0.875rem;
-                opacity: 0.8;
-                white-space: pre-wrap;
+            @media (max-width: 639px) {
+                & .pr-list__bar { justify-content: stretch; & button { width: 100%; } }
+                & .pr-row { grid-template-columns: minmax(0, 1fr); gap: ${s('xs')}; }
             }
         }
     `;
 
-    private svc = this.inject(ProgramsService);
     private router = this.inject(Router);
-    private titleVal = new Signal('');
-    private descVal = new Signal('');
+    private svc = this.inject(ProgramsService);
+    /** Distinguishes "no programs" from "not asked yet". */
+    private resolved = new Signal(false);
+
+    private failed = new Computed(() => this.svc.error.get() !== null);
+    private isLoading = new Computed(() =>
+        !this.failed.get() && (!this.resolved.get() || this.svc.loading.get()));
+    private isEmpty = new Computed(() =>
+        !this.failed.get() && this.resolved.get()
+        && !this.svc.loading.get() && this.svc.items.get().length === 0);
+    private hasRows = new Computed(() =>
+        !this.failed.get() && this.resolved.get() && this.svc.items.get().length > 0);
+
+    /** Exercise count per Program id. Absent = not known, which is not zero. */
+    private counts = new Signal<Record<string, number>>({});
 
     onMount(): void {
-        void this.svc.load();
+        void this.load();
+    }
+
+    private async load(): Promise<void> {
+        await this.svc.load();
+        this.resolved.set(true);
+        await this.loadCounts();
+    }
+
+    private async loadCounts(): Promise<void> {
+        const programs = this.svc.items.peek();
+        const results = await Promise.allSettled(
+            programs.map(async (p) => [p.id, (await this.svc.exercisesOf(p.id)).length] as const),
+        );
+        const next: Record<string, number> = {};
+        for (const result of results) {
+            // A count that failed is simply absent, so its row renders without
+            // one. Reporting an unknown count as 0 would say the Program is
+            // empty, which is a different and possibly false claim.
+            if (result.status === 'fulfilled') next[result.value[0]] = result.value[1];
+        }
+        this.counts.set(next);
     }
 
     render(): DocumentFragment {
         const frag = this.wire(tpl, {
-            root: { inert: () => this.svc.loading.get() },
-            titleInput: {
-                value: () => this.titleVal.get(),
-                oninput: (e: Event) => this.titleVal.set((e.target as HTMLInputElement).value),
+            create: {
+                textContent: () => t('programs.create'),
+                onclick: () => this.router.navigate('/program/nytt'),
             },
-            descInput: {
-                value: () => this.descVal.get(),
-                oninput: (e: Event) => this.descVal.set((e.target as HTMLTextAreaElement).value),
+            loading: {
+                textContent: () => t('programs.loading'),
+                className: () => this.isLoading.get()
+                    ? 'pr-list__loading' : 'pr-list__loading hidden',
             },
-            form: {
-                onsubmit: async (e: Event) => {
-                    e.preventDefault();
-                    const title = this.titleVal.get().trim();
-                    if (!title) return;
-                    const ok = await this.svc.create({
-                        title,
-                        description: this.descVal.get(),
-                    });
-                    if (ok) { this.titleVal.set(''); this.descVal.set(''); }
-                },
+            errorBox: {
+                className: () => this.failed.get() ? 'pr-list__error' : 'pr-list__error hidden',
             },
-            error: { textContent: () => this.svc.error.get()?.message ?? '' },
-            empty: {
-                className: () => this.svc.items.get().length === 0 ? 'programs__empty' : 'programs__empty hidden',
+            errorText: { textContent: () => t('programs.error') },
+            retry: {
+                textContent: () => t('programs.retry'),
+                onclick: () => void this.load(),
+            },
+            list: {
+                className: () => this.hasRows.get() ? 'pr-list__list' : 'pr-list__list hidden',
             },
         });
 
-        const listHost = this.ref(frag, 'list');
-        // Edit (024) mutates title/description in place; key includes both
-        // so the framework re-renders the row when content changes.
+        this.buildEmpty(this.ref(frag, 'emptyHost'));
         this.$each(
-            listHost,
+            this.ref(frag, 'list'),
             this.svc.items,
-            (item) => this.renderItem(item),
-            (item) => `${item.id}:${item.title}:${item.description}`,
+            (program, _i, track) => this.renderRow(program, track),
+            (program) => `${program.id}:${program.title}:${program.description}`,
         );
 
         return frag;
     }
 
-    private renderItem(item: Program): HTMLElement {
+    /** §4.14: exactly one action, at most two sentences. */
+    private buildEmpty(host: HTMLElement): void {
+        let current: EmptyStateComponent | null = null;
+        this.track(effect(() => {
+            const show = this.isEmpty.get();
+            current?.destroy();
+            current = null;
+            host.replaceChildren();
+            if (!show) return;
+            // Built outside the tracking scope, as `spawn()` does.
+            current = untrack(() => {
+                const empty = new EmptyStateComponent({
+                    heading: () => t('programs.empty.heading'),
+                    body: () => t('programs.empty.body'),
+                    action: {
+                        label: () => t('programs.empty.action'),
+                        onclick: () => this.router.navigate('/program/nytt'),
+                    },
+                    headingLevel: 2,
+                });
+                empty.mount(host);
+                return empty;
+            });
+        }));
+        this.track(() => current?.destroy());
+    }
+
+    private renderRow(program: Program, track: (d: () => void) => void): HTMLElement {
         const li = document.createElement('li');
-        const a = document.createElement('a');
-        a.className = 'programs__item';
-        a.href = `/program/${item.id}`;
-        a.onclick = (e) => { e.preventDefault(); this.router.navigate(`/program/${item.id}`); };
+        const href = `/program/${program.id}`;
+        const row = document.createElement('a');
+        row.className = 'pr-row';
+        row.href = href;
+        row.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.router.navigate(href);
+        });
 
-        const title = document.createElement('div');
-        title.className = 'programs__item-title';
-        title.textContent = item.title;
-        a.appendChild(title);
+        const body = document.createElement('span');
+        body.className = 'pr-row__body';
 
-        if (item.description) {
-            const desc = document.createElement('div');
-            desc.className = 'programs__item-desc';
-            desc.textContent = item.description;
-            a.appendChild(desc);
+        const title = document.createElement('span');
+        title.className = 'pr-row__title';
+        title.textContent = program.title;
+        body.appendChild(title);
+
+        const excerpt = descriptionExcerpt(program.description);
+        if (excerpt) {
+            const text = document.createElement('span');
+            text.className = 'pr-row__excerpt';
+            text.textContent = excerpt;
+            body.appendChild(text);
         }
 
-        li.appendChild(a);
+        const count = document.createElement('span');
+        count.className = 'pr-row__count';
+        track(effect(() => {
+            const value = this.counts.get()[program.id];
+            count.textContent = value === undefined ? '' : exerciseCountLabel(value);
+        }));
+
+        row.append(body, count);
+        li.appendChild(row);
         return li;
     }
 }

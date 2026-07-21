@@ -1,494 +1,417 @@
-import { Component, Computed, Router, Signal, effect, template } from '@basics/core/client/core';
-import { SelectComponent, type SelectOption } from '@basics/core/client/ui/select';
-import { t } from '../theme';
-import { s, btn, input } from '../css';
+import { Component, Computed, Router, Signal, effect, template, untrack } from '@basics/core/client/core';
+import { EmptyStateComponent } from '@basics/core/client/ui/empty-state';
+import { t } from '../i18n';
+import { token } from '../theme';
+import { s, btn } from '../css';
+import { ShareChipComponent } from '../ui/share-chip.component';
 import { TrainingSessionsService } from './training-sessions.service';
 import { TeachersService } from './teachers.service';
-import { StableService } from '../stable/stable.service';
-import { PlansService } from '../plans/plans.service';
-import { api, type Program, type Teacher, type TrainingSession } from '../api';
+import {
+    dateBlock,
+    durationLabel,
+    exerciseSummary,
+    ownerRecipients,
+    planChipLabel,
+    programBadges,
+    programChipLabel,
+    rowKey,
+    sessionTitle,
+    sortSessions,
+    summaryExcerpt,
+} from './training-session-copy';
+import type { TrainingSession } from '../api';
 
 const tpl = template(`
-    <div class="ts" bind="root">
-        <h2>Träningspass</h2>
+    <div class="sessions">
+        <header class="sessions__head">
+            <h1 bind="heading" class="sessions__title"></h1>
+            <button bind="log" type="button" class="sessions__log"></button>
+        </header>
 
-        <form bind="form" class="ts__form">
-            <h3 bind="formTitle">Logga pass</h3>
-            <label>
-                <span>Tidpunkt</span>
-                <input bind="whenInput" type="datetime-local" required>
-            </label>
-            <label>
-                <span>Längd (min, valfri)</span>
-                <input bind="durationInput" type="number" min="0">
-            </label>
-            <label>
-                <span>Sammanfattning (valfri)</span>
-                <textarea bind="summaryInput" rows="3"></textarea>
-            </label>
-            <label bind="horseLabel" class="ts__horse-label">
-                <span>Häst (valfri)</span>
-                <div bind="horseSelectHost" class="ts__select-host"></div>
-            </label>
-            <label bind="planLabel" class="ts__plan-label">
-                <span>Plan (valfri)</span>
-                <div bind="planSelectHost" class="ts__select-host"></div>
-            </label>
-            <label bind="programLabel" class="ts__program-label">
-                <span>Program (valfritt)</span>
-                <div bind="programSelectHost" class="ts__select-host"></div>
-            </label>
+        <p bind="loading" class="sessions__loading"></p>
 
-            <fieldset bind="shareBox" class="ts__share">
-                <legend bind="shareLegend">Dela med lärare</legend>
-                <div bind="shareSingle" class="ts__share-single"></div>
-                <div bind="shareMulti" class="ts__share-multi"></div>
-            </fieldset>
+        <div bind="errorBox" class="sessions__error" role="alert">
+            <p bind="errorText" class="sessions__error-text"></p>
+            <button bind="retry" type="button" class="sessions__retry"></button>
+        </div>
 
-            <div class="ts__form-row">
-                <button bind="submit" type="submit">Spara</button>
-                <button bind="cancelEdit" type="button" class="ts__cancel">Avbryt redigering</button>
-                <div class="error" bind="error"></div>
-            </div>
-        </form>
+        <div bind="emptyHost"></div>
 
-        <div bind="empty" class="ts__empty">Inga träningspass än.</div>
-        <ul bind="list" class="ts__list"></ul>
+        <ul bind="list" class="sessions__list"></ul>
     </div>
 `);
 
-const DATETIME_FORMAT = new Intl.DateTimeFormat('sv-SE', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-});
-
-function fromLocalInput(value: string): string {
-    return new Date(value).toISOString();
-}
-
-function toLocalInput(iso: string): string {
-    const d = new Date(iso);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
+/**
+ * Träningspass — IA §3.9. The Student's own training journal, newest first.
+ *
+ * **Creation is not here.** The test client put an eight-field logging form at
+ * the top of this view, so the first thing the journal said was "fill me in"
+ * rather than "here is your riding". IA §1's shared interface grammar is
+ * explicit — "List views put retrieval first. Creation opens in a dedicated
+ * panel, dialog, or route; it must not dominate the list" — so logging moved to
+ * `/traningspass/ny`, exactly as booking moved to `/lektioner/ny`. A route
+ * rather than a dialog because the form is a seven-step sequence ending in a
+ * sharing decision, which wants a page it can own and a Back button that means
+ * something.
+ *
+ * **A Teacher does not reach shared sessions here.** §3.9 says so directly: this
+ * is the owner list, and a Teacher walks in through Elevvy. So there is no role
+ * branch on this view — every row is the reader's own.
+ */
 export class TrainingSessionsComponent extends Component {
     static styles = `
-        .ts {
-            max-width: 720px;
-
-            & h2 { margin: 0 0 ${s('lg')}; }
-
-            & .ts__form {
+        .sessions {
+            & .sessions__head {
                 display: flex;
-                flex-direction: column;
-                gap: ${s('sm')};
+                align-items: baseline;
+                justify-content: space-between;
+                gap: ${s('lg')};
+                flex-wrap: wrap;
                 margin-bottom: ${s('xl')};
-                padding: ${s('md')};
-                background: ${t('surface')};
-                border-radius: ${t('radius')};
-                border: none;
-
-                & h3 { margin: 0 0 ${s('xs')}; font-size: 0.9375rem; }
-
-                & label {
-                    display: flex;
-                    flex-direction: column;
-                    gap: ${s('xs')};
-                    font-size: 0.8125rem;
-                }
-                & input[type=datetime-local], & input[type=number], & textarea {
-                    ${input()}
-                    width: 100%;
-                    box-sizing: border-box;
-                }
-
-                & .ts__select-host .ui-select { display: block; }
-
-                & .ts__horse-label.hidden { display: none; }
-                & .ts__program-label.hidden { display: none; }
             }
 
-            & .ts__share {
+            /* Lora 500, and only 500 — UI_DECISIONS §3. */
+            & .sessions__title {
                 margin: 0;
-                padding: ${s('sm')};
-                border: 1px solid ${t('border')};
-                border-radius: ${t('radius')};
-                font-size: 0.8125rem;
-
-                &.hidden { display: none; }
-
-                & legend { padding: 0 ${s('xs')}; font-weight: 500; }
-
-                & .ts__share-single { display: flex; align-items: center; gap: ${s('xs')}; }
-                & .ts__share-single.hidden { display: none; }
-
-                & .ts__share-multi {
-                    display: flex;
-                    flex-direction: column;
-                    gap: ${s('xs')};
-                }
-                & .ts__share-multi.hidden { display: none; }
-
-                & label.ts__share-row {
-                    flex-direction: row;
-                    align-items: center;
-                    gap: ${s('xs')};
-                    cursor: pointer;
-                }
+                font-family: ${token('font-display')};
+                font-weight: 500;
+                font-size: 1.75rem;
+                line-height: 36px;
+                color: ${token('text')};
             }
 
-            & .ts__form-row {
+            /* Buttons are Open Sans territory; the serif is forbidden here. */
+            & .sessions__log { ${btn(token('radius-sm'), 'primary')} }
+            & .sessions__log.hidden { display: none; }
+
+            & .sessions__loading {
+                margin: 0;
+                color: ${token('text-muted')};
+                font-size: 0.875rem;
+            }
+            & .sessions__loading.hidden { display: none; }
+
+            & .sessions__error {
                 display: flex;
                 align-items: center;
                 gap: ${s('md')};
-                & button { ${btn()} }
-                & .ts__cancel.hidden { display: none; }
-            }
+                flex-wrap: wrap;
+                padding: ${s('md')};
+                margin-bottom: ${s('lg')};
+                border: 1px solid ${token('danger')};
+                border-radius: ${token('radius-md')};
+                background: ${token('danger-soft')};
 
-            & .error {
-                color: ${t('error')};
-                font-size: 0.875rem;
-                min-height: 1em;
+                & .sessions__error-text { margin: 0; font-size: 0.875rem; color: ${token('text')}; }
+                & .sessions__retry { ${btn()} }
             }
+            & .sessions__error.hidden { display: none; }
 
-            & .ts__empty {
-                padding: ${s('lg')};
-                color: ${t('text')};
-                opacity: 0.6;
-                font-size: 0.875rem;
-            }
-            & .ts__empty.hidden { display: none; }
-
-            & .ts__list {
+            & .sessions__list {
                 list-style: none;
                 margin: 0;
                 padding: 0;
+                /* No zebra striping (§4.3): rows are separated by a hairline. */
+                border-top: 1px solid ${token('border')};
+            }
+            & .sessions__list:empty { border-top: none; }
+            & .sessions__list > li { border-bottom: 1px solid ${token('border')}; }
+
+            & .session-row {
+                display: grid;
+                grid-template-columns: auto minmax(0, 1fr) auto;
+                align-items: start;
+                gap: ${s('lg')};
+                padding: ${s('md')} ${s('sm')};
+                text-decoration: none;
+                color: inherit;
+                font-family: ${token('font-ui')};
+
+                &:hover { background: ${token('surface-2')}; }
+                &:focus-visible { outline: 2px solid ${token('accent')}; outline-offset: -2px; }
+            }
+
+            & .session-row__date {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                width: 3.5rem;
+                /* Tabular numerals so the blocks line up column-wise (§4.3). */
+                font-variant-numeric: tabular-nums;
+            }
+            & .session-row__day {
+                font-size: 1.25rem;
+                font-weight: 700;
+                line-height: 1.2;
+                color: ${token('text')};
+            }
+            & .session-row__month {
+                font-size: 0.6875rem;
+                font-weight: 700;
+                letter-spacing: 0.12em;
+                color: ${token('text-muted')};
+            }
+            & .session-row__time {
+                margin-top: 2px;
+                font-size: 0.8125rem;
+                color: ${token('text-muted')};
+            }
+
+            & .session-row__body {
                 display: flex;
                 flex-direction: column;
                 gap: ${s('xs')};
+                min-width: 0;
+            }
+            & .session-row__title {
+                font-size: 0.9375rem;
+                font-weight: 600;
+                color: ${token('text')};
+                overflow-wrap: anywhere;
+            }
+            /* One meta line, not four — §4.3 allows at most two rows of text. */
+            & .session-row__meta {
+                display: flex;
+                align-items: baseline;
+                flex-wrap: wrap;
+                gap: ${s('xs')} ${s('sm')};
+                font-size: 0.8125rem;
+                color: ${token('text-muted')};
             }
 
-            & .ts__item {
-                display: grid;
-                grid-template-columns: 1fr auto;
-                gap: ${s('sm')};
-                padding: ${s('sm')} ${s('md')};
-                background: ${t('surface')};
-                border-radius: ${t('radius')};
-                font-size: 0.875rem;
-            }
-            & .ts__item-when {
-                font-weight: 500;
-                color: inherit;
-                text-decoration: none;
-                &:hover { text-decoration: underline; }
-            }
-            & .ts__item-meta { opacity: 0.7; font-size: 0.8125rem; }
-            & .ts__item-summary {
-                margin-top: ${s('xs')};
-                white-space: pre-wrap;
-            }
-            & .ts__item-actions {
+            & .session-row__chips {
                 display: flex;
-                align-items: center;
+                flex-wrap: wrap;
                 gap: ${s('xs')};
-                & button {
-                    ${btn()}
-                    padding: ${s('xs')} ${s('sm')};
-                    font-size: 0.8125rem;
-                }
+                justify-content: flex-end;
+                align-items: flex-start;
+                max-width: 18rem;
             }
-            & .ts__item-badge {
-                display: inline-block;
+            /* Row chips are labels, not links: a nested anchor inside the row's
+               own anchor is invalid, and §4.3 wants the row to have exactly one
+               target. The clickable parent chips live in the detail header. */
+            & .session-row__chip {
+                display: inline-flex;
+                align-items: center;
+                padding: 2px ${s('sm')};
+                border: 1px solid ${token('border')};
+                border-radius: ${token('radius-pill')};
                 font-size: 0.75rem;
-                padding: 0 ${s('xs')};
-                border-radius: 999px;
-                background: ${t('active-bg')};
-                color: ${t('active-text')};
+                font-weight: 600;
+                line-height: 1.4;
+                color: ${token('text-muted')};
+                white-space: nowrap;
+                max-width: 14rem;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
-            & .ts__item-badge--muted {
-                background: transparent;
-                color: ${t('text')};
-                opacity: 0.7;
-                border: 1px solid currentColor;
+
+            /* UI_DECISIONS §6: single column below 640px. The date block keeps
+               its own row and turns horizontal so it stops being a tall stack
+               beside nothing. */
+            @media (max-width: 639px) {
+                & .session-row {
+                    grid-template-columns: minmax(0, 1fr);
+                    gap: ${s('sm')};
+                }
+                & .session-row__date {
+                    flex-direction: row;
+                    align-items: baseline;
+                    gap: ${s('xs')};
+                    width: auto;
+                }
+                & .session-row__day { font-size: 1rem; }
+                & .session-row__chips { justify-content: flex-start; max-width: none; }
+                & .sessions__title { font-size: 1.375rem; line-height: 30px; }
             }
         }
     `;
 
+    private router = this.inject(Router);
     private sessions = this.inject(TrainingSessionsService);
     private teachers = this.inject(TeachersService);
-    private stable = this.inject(StableService);
-    private plans = this.inject(PlansService);
-    private router = this.inject(Router);
-    private whenVal = new Signal('');
-    private durationVal = new Signal('');
-    private summaryVal = new Signal('');
-    private horseIdVal = new Signal<string>('');
-    private planIdVal = new Signal<string>('');
-    private programIdVal = new Signal<string>('');
-    private programCatalog = new Signal<Program[]>([]);
-    private editingId = new Signal<string | null>(null);
-    /** Teacher ids checked in the share UI. Empty = keep private. */
-    private shareIds = new Signal<Set<string>>(new Set());
-    private formTitle = new Computed(() =>
-        this.editingId.get() ? 'Redigera pass' : 'Logga pass',
-    );
-    private horseOptions = new Computed<SelectOption[]>(() =>
-        this.stable.items.get().map((h) => ({ value: h.id, label: h.name })),
-    );
-    private planOptions = new Computed<SelectOption[]>(() =>
-        this.plans.items.get()
-            .filter((p) => p.status === 'active')
-            .map((p) => ({ value: p.id, label: p.title })),
-    );
-    private programOptions = new Computed<SelectOption[]>(() =>
-        this.programCatalog.get().map((p) => ({ value: p.id, label: p.title })),
+
+    /**
+     * Whether the Teacher list has answered.
+     *
+     * A row cannot be painted from the session list alone: the sharing chip must
+     * NAME its recipients (§4.5), and the session carries teacher ids only — the
+     * names live on the Teacher list, behind a second, independent request.
+     * Painting as soon as the sessions land therefore renders every shared row
+     * as `Delad: okänd mottagare` for however long the other request takes. That
+     * degraded label exists for a Relation that has genuinely gone missing, not
+     * for the happy path, and §4.5 forbids reaching it here. So the list waits
+     * for both answers rather than showing a sharing state it cannot yet state.
+     *
+     * A FAILED Teacher request also resolves this: at that point the chip has no
+     * names and never will, and saying so is the honest outcome.
+     */
+    private teachersResolved = new Signal(false);
+
+    private ordered = new Computed(() =>
+        this.teachersResolved.get() ? sortSessions(this.sessions.items.get()) : []);
+    private isEmpty = new Computed(() =>
+        this.teachersResolved.get()
+        && this.sessions.items.get().length === 0
+        && !this.sessions.loading.get()
+        && this.sessions.error.get() === null,
     );
 
     onMount(): void {
         void this.sessions.load();
-        void this.teachers.load();
-        void this.stable.load();
-        void this.plans.load();
-        void api.programs.listForStudent()
-            .then((list) => this.programCatalog.set(list))
-            .catch(() => this.programCatalog.set([]));
+        void this.teachers.load().finally(() => this.teachersResolved.set(true));
     }
 
     render(): DocumentFragment {
         const frag = this.wire(tpl, {
-            root: { inert: () => this.sessions.loading.get() },
-            formTitle: { textContent: () => this.formTitle.get() },
-            whenInput: {
-                value: () => this.whenVal.get(),
-                oninput: (e: Event) => this.whenVal.set((e.target as HTMLInputElement).value),
+            heading: { textContent: () => t('trainingSessions.heading') },
+            log: {
+                textContent: () => t('trainingSessions.log'),
+                onclick: () => this.router.navigate('/traningspass/ny'),
             },
-            durationInput: {
-                value: () => this.durationVal.get(),
-                oninput: (e: Event) => this.durationVal.set((e.target as HTMLInputElement).value),
+            loading: {
+                textContent: () => t('trainingSessions.loading'),
+                // Covers the window where the sessions have landed but the
+                // Teacher names have not, so holding the rows back reads as
+                // "still loading" rather than as a blank list.
+                className: () => (!this.teachersResolved.get() || this.sessions.loading.get())
+                    && this.ordered.get().length === 0
+                    && this.sessions.error.get() === null
+                    ? 'sessions__loading' : 'sessions__loading hidden',
             },
-            summaryInput: {
-                value: () => this.summaryVal.get(),
-                oninput: (e: Event) => this.summaryVal.set((e.target as HTMLTextAreaElement).value),
+            errorBox: {
+                className: () => this.sessions.error.get() ? 'sessions__error' : 'sessions__error hidden',
             },
-            horseLabel: {
-                className: () =>
-                    this.stable.items.get().length === 0
-                        ? 'ts__horse-label hidden' : 'ts__horse-label',
-            },
-            planLabel: {
-                className: () =>
-                    this.plans.items.get().filter((p) => p.status === 'active').length === 0
-                        ? 'ts__plan-label hidden' : 'ts__plan-label',
-            },
-            programLabel: {
-                className: () =>
-                    this.editingId.get() !== null || this.programCatalog.get().length === 0
-                        ? 'ts__program-label hidden' : 'ts__program-label',
-            },
-            shareBox: {
-                className: () =>
-                    this.teachers.items.get().length === 0 ? 'ts__share hidden' : 'ts__share',
-            },
-            shareSingle: {
-                className: () =>
-                    this.teachers.items.get().length === 1
-                        ? 'ts__share-single' : 'ts__share-single hidden',
-            },
-            shareMulti: {
-                className: () =>
-                    this.teachers.items.get().length > 1
-                        ? 'ts__share-multi' : 'ts__share-multi hidden',
-            },
-            form: {
-                onsubmit: async (e: Event) => {
-                    e.preventDefault();
-                    const when = this.whenVal.get();
-                    if (!when) return;
-                    const durationRaw = this.durationVal.get().trim();
-                    const durationMin = durationRaw === '' ? null : Number(durationRaw);
-                    const summary = this.summaryVal.get().trim() || null;
-                    const horseId = this.horseIdVal.get() || null;
-                    const planRaw = this.planIdVal.get();
-                    const planId = planRaw || undefined;
-                    const planIdPatch = planRaw === '' ? null : planRaw;
-                    const programId = this.programIdVal.get() || undefined;
-                    const shareWithTeacherIds = Array.from(this.shareIds.get());
-
-                    const editing = this.editingId.get();
-                    let ok: boolean;
-                    if (editing) {
-                        const updated = await this.sessions.update(editing, {
-                            performedAt: fromLocalInput(when),
-                            durationMin,
-                            summary,
-                            horseId,
-                            planId: planIdPatch,
-                            shareWithTeacherIds,
-                        });
-                        ok = updated !== null;
-                    } else {
-                        ok = await this.sessions.create({
-                            performedAt: fromLocalInput(when),
-                            durationMin,
-                            summary,
-                            horseId,
-                            planId,
-                            shareWithTeacherIds,
-                            programId,
-                        });
-                    }
-                    if (ok) this.resetForm();
-                },
-            },
-            cancelEdit: {
-                className: () =>
-                    this.editingId.get() ? 'ts__cancel' : 'ts__cancel hidden',
-                onclick: () => this.resetForm(),
-            },
-            error: { textContent: () => this.sessions.error.get()?.message ?? '' },
-            empty: {
-                className: () => this.sessions.items.get().length === 0
-                    ? 'ts__empty' : 'ts__empty hidden',
+            errorText: { textContent: () => t('trainingSessions.error') },
+            retry: {
+                textContent: () => t('trainingSessions.retry'),
+                onclick: () => void this.sessions.load(),
             },
         });
 
-        // Single teacher: one labelled checkbox.
-        const single = this.ref(frag, 'shareSingle');
-        this.$each(single, this.teachers.items, (teacher) => {
-            if (this.teachers.items.get().length !== 1) return document.createElement('span');
-            return this.renderShareRow(teacher);
-        }, (teacher) => teacher.id);
-
-        const multi = this.ref(frag, 'shareMulti');
-        this.$each(multi, this.teachers.items, (teacher) => {
-            if (this.teachers.items.get().length <= 1) return document.createElement('span');
-            return this.renderShareRow(teacher);
-        }, (teacher) => teacher.id);
-
-        this.spawn(SelectComponent, this.ref(frag, 'horseSelectHost'), {
-            value: this.horseIdVal,
-            options: this.horseOptions,
-            placeholder: 'Ingen häst',
-        });
-        this.spawn(SelectComponent, this.ref(frag, 'planSelectHost'), {
-            value: this.planIdVal,
-            options: this.planOptions,
-            placeholder: 'Ingen plan',
-        });
-        this.spawn(SelectComponent, this.ref(frag, 'programSelectHost'), {
-            value: this.programIdVal,
-            options: this.programOptions,
-            placeholder: 'Inget program',
-        });
-
-        const listHost = this.ref(frag, 'list');
-        this.$each(listHost, this.sessions.items, (item) => this.renderItem(item), (item) => `${item.id}:${item.updatedAt}`);
+        this.buildEmpty(this.ref(frag, 'emptyHost'));
+        this.$each(this.ref(frag, 'list'), this.ordered,
+            (session, _i, track) => this.renderRow(session, track), rowKey);
 
         return frag;
     }
 
-    private renderShareRow(teacher: Teacher): HTMLElement {
-        const label = document.createElement('label');
-        label.className = 'ts__share-row';
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
+    /**
+     * The empty state — IA §3.9 names the copy: **Logga ditt första pass**.
+     *
+     * One action, which `EmptyStateComponent`'s single optional `action` prop
+     * makes structural rather than a matter of discipline (§4.14). There is only
+     * one variant here, unlike Lektioner: a training session needs no Teacher,
+     * no horse and no plan, so an account with nothing at all can still log one.
+     * Offering "Bjud in lärare" instead would be advice the view does not need
+     * to give.
+     */
+    private buildEmpty(host: HTMLElement): void {
+        let current: EmptyStateComponent | null = null;
+
         this.track(effect(() => {
-            cb.checked = this.shareIds.get().has(teacher.id);
+            const show = this.isEmpty.get();
+            current?.destroy();
+            current = null;
+            host.replaceChildren();
+            if (!show) return;
+
+            // Built outside the tracking scope, as spawn() does: mounting runs
+            // the child's render, and those reads (locale among them) would
+            // otherwise subscribe THIS effect and rebuild the empty state on
+            // unrelated changes.
+            current = untrack(() => {
+                const empty = new EmptyStateComponent({
+                    heading: () => t('trainingSessions.empty.heading'),
+                    body: () => t('trainingSessions.empty.body'),
+                    action: {
+                        label: () => t('trainingSessions.empty.action'),
+                        onclick: () => this.router.navigate('/traningspass/ny'),
+                    },
+                    headingLevel: 2,
+                });
+                empty.mount(host);
+                return empty;
+            });
         }));
-        cb.addEventListener('change', () => {
-            const next = new Set(this.shareIds.get());
-            if (cb.checked) next.add(teacher.id); else next.delete(teacher.id);
-            this.shareIds.set(next);
-        });
-        const span = document.createElement('span');
-        span.textContent = teacher.displayName;
-        label.appendChild(cb);
-        label.appendChild(span);
-        return label;
+        this.track(() => current?.destroy());
     }
 
-    private resetForm(): void {
-        this.editingId.set(null);
-        this.whenVal.set('');
-        this.durationVal.set('');
-        this.summaryVal.set('');
-        this.horseIdVal.set('');
-        this.planIdVal.set('');
-        this.programIdVal.set('');
-        this.shareIds.set(new Set());
-    }
-
-    private startEdit(item: TrainingSession): void {
-        this.editingId.set(item.id);
-        this.whenVal.set(toLocalInput(item.performedAt));
-        this.durationVal.set(item.durationMin === null ? '' : String(item.durationMin));
-        this.summaryVal.set(item.summary ?? '');
-        this.horseIdVal.set(item.horseId ?? '');
-        this.planIdVal.set(item.planId ?? '');
-        this.shareIds.set(new Set(item.sharedWithTeacherIds));
-    }
-
-    private renderItem(item: TrainingSession): HTMLElement {
+    private renderRow(session: TrainingSession, track: (d: () => void) => void): HTMLElement {
         const li = document.createElement('li');
-        li.className = 'ts__item';
+        const href = `/traningspass/${session.id}`;
+        const row = document.createElement('a');
+        row.className = 'session-row';
+        row.href = href;
+        row.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.router.navigate(href);
+        });
 
-        const left = document.createElement('div');
-        const whenLink = document.createElement('a');
-        whenLink.className = 'ts__item-when';
-        const path = `/traningspass/${item.id}`;
-        whenLink.href = path;
-        whenLink.onclick = (e) => { e.preventDefault(); this.router.navigate(path); };
-        whenLink.textContent = DATETIME_FORMAT.format(new Date(item.performedAt));
-        left.appendChild(whenLink);
-
-        const meta = document.createElement('div');
-        meta.className = 'ts__item-meta';
-        const bits: string[] = [];
-        if (item.durationMin !== null) bits.push(`${item.durationMin} min`);
-        if (item.horseName) bits.push(item.horseName);
-        if (item.planTitle) bits.push(item.planTitle);
-        bits.push(this.shareLabel(item));
-        meta.textContent = bits.join(' · ');
-        left.appendChild(meta);
-
-        if (item.summary) {
-            const sum = document.createElement('div');
-            sum.className = 'ts__item-summary';
-            sum.textContent = item.summary;
-            left.appendChild(sum);
+        const block = dateBlock(session.performedAt);
+        const date = document.createElement('span');
+        date.className = 'session-row__date';
+        for (const [cls, text] of [['day', block.day], ['month', block.month], ['time', block.time]] as const) {
+            const part = document.createElement('span');
+            part.className = `session-row__${cls}`;
+            part.textContent = text;
+            date.appendChild(part);
         }
 
-        const actions = document.createElement('div');
-        actions.className = 'ts__item-actions';
-        const editBtn = document.createElement('button');
-        editBtn.type = 'button';
-        editBtn.textContent = 'Redigera';
-        editBtn.addEventListener('click', () => this.startEdit(item));
-        const delBtn = document.createElement('button');
-        delBtn.type = 'button';
-        delBtn.textContent = 'Ta bort';
-        delBtn.addEventListener('click', async () => {
-            if (!confirm('Ta bort detta träningspass?')) return;
-            await this.sessions.remove(item.id);
-            if (this.editingId.get() === item.id) this.resetForm();
-        });
-        actions.appendChild(editBtn);
-        actions.appendChild(delBtn);
+        const body = document.createElement('span');
+        body.className = 'session-row__body';
 
-        li.appendChild(left);
-        li.appendChild(actions);
+        const title = document.createElement('span');
+        title.className = 'session-row__title';
+        title.textContent = sessionTitle(session);
+        body.appendChild(title);
+
+        const meta = document.createElement('span');
+        meta.className = 'session-row__meta';
+        const duration = durationLabel(session.durationMin);
+        if (duration) meta.appendChild(metaPart(duration));
+        if (session.horseName) meta.appendChild(metaPart(session.horseName));
+        meta.appendChild(metaPart(exerciseSummary(session.exercises)));
+        // The excerpt only earns a second line when the headline is NOT already
+        // the summary — otherwise the row prints the same sentence twice.
+        const excerpt = summaryExcerpt(session.summary);
+        if (excerpt && excerpt !== title.textContent) meta.appendChild(metaPart(excerpt));
+        body.appendChild(meta);
+
+        const chips = document.createElement('span');
+        chips.className = 'session-row__chips';
+
+        // §4.5: sharing is named on every row. Never a bare "Delad", never a
+        // count — `ownerRecipients` resolves each id against the Teacher list and
+        // `ShareChipComponent` refuses to render an unlabelled shared state.
+        const shareHost = document.createElement('span');
+        chips.appendChild(shareHost);
+        const shareChip = new ShareChipComponent({
+            recipients: () => ownerRecipients(session.sharedWithTeacherIds, this.teachers.items.get()),
+            shared: () => session.sharedWithTeacherIds.length > 0,
+        });
+        shareChip.mount(shareHost);
+        track(() => shareChip.destroy());
+
+        if (session.planTitle) chips.appendChild(chip(planChipLabel(session.planTitle)));
+        for (const program of programBadges(session)) chips.appendChild(chip(programChipLabel(program)));
+
+        row.append(date, body, chips);
+        li.appendChild(row);
         return li;
     }
+}
 
-    private shareLabel(item: TrainingSession): string {
-        const ids = item.sharedWithTeacherIds;
-        if (ids.length === 0) return 'Privat';
-        const teachers = this.teachers.items.get();
-        const names = ids
-            .map((id) => teachers.find((teach) => teach.id === id)?.displayName ?? '?')
-            .join(', ');
-        return `Delad: ${names}`;
-    }
+function metaPart(text: string): HTMLElement {
+    const el = document.createElement('span');
+    el.textContent = text;
+    return el;
+}
+
+function chip(label: string): HTMLElement {
+    const el = document.createElement('span');
+    el.className = 'session-row__chip';
+    el.textContent = label;
+    el.title = label;
+    return el;
 }

@@ -18,14 +18,15 @@ export class StableService {
         if (result) this.items.set(result);
     }
 
-    async create(input: { name: string }): Promise<boolean> {
+    /** Returns the created Horse so the caller can name it in a confirmation. */
+    async create(input: { name: string }): Promise<Horse | null> {
         const result = await request(this.loading, this.error, () =>
             api.horses.create(input),
         );
-        if (!result) return false;
+        if (!result) return null;
         // listForStudent is ordered created_at DESC — prepend.
         this.items.set([result, ...this.items.get()]);
-        return true;
+        return result;
     }
 
     async get(id: string): Promise<Horse | null> {
@@ -42,6 +43,15 @@ export class StableService {
         return result;
     }
 
+    /**
+     * Archive, not delete — and already named for what it does.
+     *
+     * The endpoint is `DELETE /horses/:id` and the HTTP verb deliberately lies:
+     * `horses.api.ts` calls `HorseService.archive`, because Lessons and Training
+     * Sessions that reference a Horse have to survive its removal. The Horse
+     * leaves this list and every picker for NEW occasions; it stays attached to
+     * the ones already ridden. Any copy this method backs has to say that.
+     */
     async archive(id: string): Promise<boolean> {
         const result = await request(this.loading, this.error, () => api.horses.delete({ id }));
         if (!result) return false;

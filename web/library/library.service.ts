@@ -18,14 +18,15 @@ export class LibraryService {
         if (result) this.items.set(result);
     }
 
-    async create(input: { name: string; description: string }): Promise<boolean> {
+    /** Returns the created Exercise so the caller can land on its detail route. */
+    async create(input: { name: string; description: string }): Promise<Exercise | null> {
         const result = await request(this.loading, this.error, () =>
             api.exercises.create(input),
         );
-        if (!result) return false;
+        if (!result) return null;
         // listForTeacher is ordered created_at DESC — prepend.
         this.items.set([result, ...this.items.get()]);
-        return true;
+        return result;
     }
 
     async get(id: string): Promise<Exercise | null> {
@@ -42,7 +43,18 @@ export class LibraryService {
         return result;
     }
 
-    async delete(id: string): Promise<boolean> {
+    /**
+     * Archive, not delete — and named for what it does.
+     *
+     * The endpoint is `DELETE /exercises/:id` and the HTTP verb deliberately
+     * lies: the handler calls `ExerciseService.archive`, because
+     * `lesson_exercise` / `training_session_exercise` rows are the historical
+     * record of what was ridden and the Notes hanging off them have no FK to
+     * cascade through. The Exercise leaves this list and every picker; it stays
+     * attached to every occasion that already used it. Any copy this method
+     * backs has to say that.
+     */
+    async archive(id: string): Promise<boolean> {
         const result = await request(this.loading, this.error, () => api.exercises.delete({ id }));
         if (!result) return false;
         this.items.set(this.items.get().filter((e) => e.id !== id));

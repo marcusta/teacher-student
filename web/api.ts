@@ -10,6 +10,7 @@ import { createTeachersClient, type Student as TeacherDto } from './api/teachers
 import { createProgramsClient } from './api/programs.gen';
 import { createPlansClient } from './api/plans.gen';
 import { createGoalsClient } from './api/goals.gen';
+import { createDashboardClient } from './api/dashboard.gen';
 
 export { ApiError } from '@basics/core/client/api-error';
 export type { Invitation, InboxInvitation } from './api/invitations.gen';
@@ -23,20 +24,31 @@ export type { Program, ProgramExerciseRef } from './api/programs.gen';
 export type { Plan, PlanDetail, LinkedLessonRef, LinkedTrainingSessionRef, LinkedGoalRef } from './api/plans.gen';
 export type { Goal, SharedTeacherRef } from './api/goals.gen';
 export type { GoalTeacherView } from './api/students.gen';
+export type {
+    DashboardView, DashboardCapabilities, DashboardNextLesson, DashboardFeedback,
+    DashboardAwaitingItem, DashboardPlanRef, DashboardGoalRef,
+} from './api/dashboard.gen';
 /** Server reuses RelationService.Student for the teachers endpoint; alias for clarity. */
 export type Teacher = TeacherDto;
 
+// Carry the deploy base path (Vite BASE_URL) so API calls resolve under the
+// sub-path in production ('/teacher-student/api') and at the root in dev
+// ('/api'). Caddy strips the prefix before proxying, so the server still sees
+// '/api'.
+const API_BASE = (import.meta.env?.BASE_URL ?? '/').replace(/\/+$/, '') + '/api';
+
 export const api = {
-    register: createRegisterClient('/api'),
-    invitations: createInvitationsClient('/api'),
-    students: createStudentsClient('/api'),
-    exercises: createExercisesClient('/api'),
-    horses: createHorsesClient('/api'),
-    lessons: createLessonsClient('/api'),
-    notes: createNotesClient('/api'),
-    trainingSessions: createTrainingSessionsClient('/api'),
-    teachers: createTeachersClient('/api'),
-    programs: createProgramsClient('/api'),
-    plans: createPlansClient('/api'),
-    goals: createGoalsClient('/api'),
+    register: createRegisterClient(API_BASE),
+    invitations: createInvitationsClient(API_BASE),
+    students: createStudentsClient(API_BASE),
+    exercises: createExercisesClient(API_BASE),
+    horses: createHorsesClient(API_BASE),
+    lessons: createLessonsClient(API_BASE),
+    notes: createNotesClient(API_BASE),
+    trainingSessions: createTrainingSessionsClient(API_BASE),
+    teachers: createTeachersClient(API_BASE),
+    programs: createProgramsClient(API_BASE),
+    plans: createPlansClient(API_BASE),
+    goals: createGoalsClient(API_BASE),
+    dashboard: createDashboardClient(API_BASE),
 };

@@ -1,0 +1,72 @@
+/*
+ * Self-hosted webfonts — no third-party requests, works offline.
+ *
+ * Both families are Google Fonts under OFL-1.1; see assets/fonts/LICENSE.txt.
+ * Only the latin and latin-ext subsets are bundled (Swedish å ä ö all live in
+ * latin, U+0000-00FF; latin-ext is kept for imported names and loanwords).
+ * unicode-range values are copied verbatim from the Google CSS2 API response.
+ *
+ * Imported from main.ts so Vite fingerprints and rewrites the woff2 URLs.
+ * Relative url() paths in an inline <style> in index.html are NOT processed.
+ */
+
+/*
+ * Lora — display/headings only. A single STATIC 500 cut (not a variable font).
+ *
+ * ONLY EVER WRITE LORA AT WEIGHT 500. The spec permits 400-600, but only 500 is
+ * bundled, and the CSS matching algorithm does not fall back to Georgia for the
+ * others — it silently mis-renders: 400 resolves to this 500 face, and 600/700
+ * resolve to it *with synthetic bold applied* (+23% ink, unchanged advance),
+ * which is exactly the faked bold the spec forbids. Every Lora size in the spec
+ * is 500, so this covers all specified usage.
+ *
+ * To use 400 or 600, switch to the Lora variable font (wght 400-700, one file
+ * per subset) — costs +23,860 bytes over these two files. See UI_DECISIONS.md 3.
+ */
+/* latin-ext */
+@font-face {
+    font-family: 'Lora';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url('./assets/fonts/lora-500-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* latin */
+@font-face {
+    font-family: 'Lora';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url('./assets/fonts/lora-500-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/*
+ * Open Sans — everything else. Google serves this as a variable font: the CSS2
+ * API returns the same file URL for weights 400, 600 and 700, so one file per
+ * subset covers all three. Declared as a 400-700 range; the browser instances
+ * the wght axis, so 600/700 are real cuts, not synthetic bolding.
+ */
+/* latin-ext */
+@font-face {
+    font-family: 'Open Sans';
+    font-style: normal;
+    font-weight: 400 700;
+    font-stretch: 100%;
+    font-display: swap;
+    src: url('./assets/fonts/open-sans-var-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* latin */
+@font-face {
+    font-family: 'Open Sans';
+    font-style: normal;
+    font-weight: 400 700;
+    font-stretch: 100%;
+    font-display: swap;
+    src: url('./assets/fonts/open-sans-var-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}

@@ -1,1 +1,1 @@
-export { s, btn, input } from '@basics/core/client/ui/css';
+export { s, btn, card, input, label, errorText } from '@basics/core/client/ui/css';

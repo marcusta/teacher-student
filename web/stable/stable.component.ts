@@ -1,141 +1,227 @@
-import { Component, Router, Signal, template } from '@basics/core/client/core';
-import { t } from '../theme';
-import { s, btn, input } from '../css';
+import { Component, Computed, Router, Signal, effect, template, untrack } from '@basics/core/client/core';
+import { EmptyStateComponent } from '@basics/core/client/ui/empty-state';
+import { t } from '../i18n';
+import { token } from '../theme';
+import { s, btn } from '../css';
 import { StableService } from './stable.service';
+import { activeHorses, horseRowKey, stableState } from './stable-copy';
 import type { Horse } from '../api';
 
 const tpl = template(`
-    <div class="stable" bind="root">
-        <h2>Hästar</h2>
+    <div class="stable">
+        <header class="stable__head">
+            <h1 bind="heading" class="stable__title"></h1>
+            <button bind="create" type="button" class="stable__create"></button>
+        </header>
 
-        <form bind="form" class="stable__form">
-            <input bind="nameInput" type="text" placeholder="Hästens namn" maxlength="200" required>
-            <div class="stable__form-row">
-                <button bind="submit" type="submit">Lägg till häst</button>
-                <div class="error" bind="error"></div>
-            </div>
-        </form>
+        <p bind="loading" class="stable__loading"></p>
 
-        <div bind="empty" class="stable__empty">Inga hästar än.</div>
+        <div bind="errorBox" class="stable__error" role="alert">
+            <p bind="errorText" class="stable__error-text"></p>
+            <button bind="retry" type="button" class="stable__retry"></button>
+        </div>
+
+        <div bind="emptyHost"></div>
+
         <ul bind="list" class="stable__list"></ul>
     </div>
 `);
 
+/**
+ * Hästar — IA §3.15 list.
+ *
+ * Retrieval first: the create form that used to sit above the rows is gone, and
+ * **Lägg till häst** opens `/hastar/nytt` (§1's shared interface grammar —
+ * creation "must not dominate the list").
+ *
+ * A failed fetch is NOT an empty stable. "Du har inga hästar" and "vi kunde inte
+ * ta reda på det" lead to different next moves, so they get different states —
+ * see `stableState`.
+ */
 export class StableComponent extends Component {
     static styles = `
         .stable {
-            max-width: 720px;
-
-            & h2 { margin: 0 0 ${s('lg')}; }
-
-            & .stable__form {
+            & .stable__head {
                 display: flex;
-                flex-direction: column;
-                gap: ${s('sm')};
+                align-items: baseline;
+                justify-content: space-between;
+                gap: ${s('lg')};
+                flex-wrap: wrap;
                 margin-bottom: ${s('xl')};
-                padding: ${s('md')};
-                background: ${t('surface')};
-                border-radius: ${t('radius')};
-
-                & input {
-                    ${input()}
-                    width: 100%;
-                    box-sizing: border-box;
-                }
             }
 
-            & .stable__form-row {
+            /* Lora 500, and only 500 — UI_DECISIONS §3. */
+            & .stable__title {
+                margin: 0;
+                font-family: ${token('font-display')};
+                font-weight: 500;
+                font-size: 1.75rem;
+                line-height: 36px;
+                color: ${token('text')};
+            }
+
+            /* Buttons are Open Sans territory; the serif is forbidden here. */
+            & .stable__create { ${btn(token('radius-sm'), 'primary')} }
+
+            & .stable__loading {
+                margin: 0;
+                font-family: ${token('font-ui')};
+                color: ${token('text-muted')};
+                font-size: 0.875rem;
+            }
+            & .stable__loading.hidden { display: none; }
+
+            & .stable__error {
                 display: flex;
                 align-items: center;
                 gap: ${s('md')};
+                flex-wrap: wrap;
+                padding: ${s('md')};
+                margin-bottom: ${s('lg')};
+                border: 1px solid ${token('danger')};
+                border-radius: ${token('radius-md')};
+                background: ${token('danger-soft')};
 
-                & button { ${btn()} }
+                & .stable__error-text {
+                    margin: 0;
+                    font-family: ${token('font-ui')};
+                    font-size: 0.875rem;
+                    color: ${token('text')};
+                }
+                & .stable__retry { ${btn()} }
             }
-
-            & .error {
-                color: ${t('error')};
-                font-size: 0.875rem;
-                min-height: 1em;
-            }
-
-            & .stable__empty {
-                padding: ${s('lg')};
-                color: ${t('text')};
-                opacity: 0.6;
-                font-size: 0.875rem;
-            }
-            & .stable__empty.hidden { display: none; }
+            & .stable__error.hidden { display: none; }
 
             & .stable__list {
                 list-style: none;
                 margin: 0;
                 padding: 0;
-                display: flex;
-                flex-direction: column;
-                gap: ${s('xs')};
+                /* No zebra striping (§4.3): rows are separated by a hairline. */
+                border-top: 1px solid ${token('border')};
+            }
+            & .stable__list:empty { border-top: none; }
+            & .stable__list.hidden { display: none; }
+            & .stable__list > li { border-bottom: 1px solid ${token('border')}; }
+
+            & .horse-row {
+                display: block;
+                padding: ${s('md')} ${s('sm')};
+                text-decoration: none;
+                color: ${token('text')};
+                font-family: ${token('font-ui')};
+                font-size: 0.9375rem;
+                font-weight: 600;
+                overflow-wrap: anywhere;
+
+                &:hover { background: ${token('surface-2')}; }
+                &:focus-visible { outline: 2px solid ${token('accent')}; outline-offset: -2px; }
             }
 
-            & .stable__item {
-                display: block;
-                padding: ${s('sm')} ${s('md')};
-                background: ${t('surface')};
-                border-radius: ${t('radius')};
-                color: ${t('text')};
-                text-decoration: none;
-                transition: background 0.15s;
-                &:hover { background: ${t('hover-bg')}; }
+            @media (max-width: 639px) {
+                & .stable__title { font-size: 1.375rem; line-height: 30px; }
+                & .stable__head { flex-direction: column; align-items: stretch; }
             }
-            & .stable__item-name { font-weight: 500; }
         }
     `;
 
-    private svc = this.inject(StableService);
     private router = this.inject(Router);
-    private nameVal = new Signal('');
+    private svc = this.inject(StableService);
+    /** Distinguishes "no horses" from "not asked yet". */
+    private resolved = new Signal(false);
+
+    private horses = new Computed(() => activeHorses(this.svc.items.get()));
+    private state = new Computed(() => stableState({
+        loading: !this.resolved.get() || this.svc.loading.get(),
+        failed: this.svc.error.get() !== null,
+        count: this.horses.get().length,
+    }));
 
     onMount(): void {
-        void this.svc.load();
+        void this.load();
+    }
+
+    private async load(): Promise<void> {
+        await this.svc.load();
+        this.resolved.set(true);
     }
 
     render(): DocumentFragment {
         const frag = this.wire(tpl, {
-            root: { inert: () => this.svc.loading.get() },
-            nameInput: {
-                value: () => this.nameVal.get(),
-                oninput: (e: Event) => this.nameVal.set((e.target as HTMLInputElement).value),
+            heading: { textContent: () => t('stable.heading') },
+            create: {
+                textContent: () => t('stable.create'),
+                onclick: () => this.router.navigate('/hastar/nytt'),
             },
-            form: {
-                onsubmit: async (e: Event) => {
-                    e.preventDefault();
-                    const name = this.nameVal.get().trim();
-                    if (!name) return;
-                    const ok = await this.svc.create({ name });
-                    if (ok) this.nameVal.set('');
-                },
+            loading: {
+                textContent: () => t('stable.loading'),
+                className: () => this.state.get() === 'loading'
+                    ? 'stable__loading' : 'stable__loading hidden',
             },
-            error: { textContent: () => this.svc.error.get()?.message ?? '' },
-            empty: {
-                className: () => this.svc.items.get().length === 0 ? 'stable__empty' : 'stable__empty hidden',
+            errorBox: {
+                className: () => this.state.get() === 'error'
+                    ? 'stable__error' : 'stable__error hidden',
+            },
+            errorText: { textContent: () => t('stable.error') },
+            retry: {
+                textContent: () => t('stable.retry'),
+                onclick: () => void this.load(),
+            },
+            list: {
+                className: () => this.state.get() === 'rows'
+                    ? 'stable__list' : 'stable__list hidden',
             },
         });
 
-        const listHost = this.ref(frag, 'list');
-        this.$each(listHost, this.svc.items, (item) => this.renderItem(item), (item) => item.id);
+        this.buildEmpty(this.ref(frag, 'emptyHost'));
+        this.$each(this.ref(frag, 'list'), this.horses,
+            (horse) => this.renderRow(horse), horseRowKey);
 
         return frag;
     }
 
-    private renderItem(item: Horse): HTMLElement {
+    /** §4.14 and §3.15: "Empty state links to adding the first Horse" — one action. */
+    private buildEmpty(host: HTMLElement): void {
+        let current: EmptyStateComponent | null = null;
+        this.track(effect(() => {
+            const show = this.state.get() === 'empty';
+            current?.destroy();
+            current = null;
+            host.replaceChildren();
+            if (!show) return;
+            // Built outside the tracking scope, as `spawn()` does: mounting runs
+            // the child's render, and those reads would otherwise subscribe THIS
+            // effect and rebuild on unrelated changes.
+            current = untrack(() => {
+                const empty = new EmptyStateComponent({
+                    heading: () => t('stable.empty.heading'),
+                    body: () => t('stable.empty.body'),
+                    action: {
+                        label: () => t('stable.empty.action'),
+                        onclick: () => this.router.navigate('/hastar/nytt'),
+                    },
+                    headingLevel: 2,
+                });
+                empty.mount(host);
+                return empty;
+            });
+        }));
+        this.track(() => current?.destroy());
+    }
+
+    private renderRow(horse: Horse): HTMLElement {
         const li = document.createElement('li');
-        const a = document.createElement('a');
-        a.className = 'stable__item';
-        a.href = `/hastar/${item.id}`;
-        a.onclick = (e) => { e.preventDefault(); this.router.navigate(`/hastar/${item.id}`); };
-        const name = document.createElement('div');
-        name.className = 'stable__item-name';
-        name.textContent = item.name;
-        a.appendChild(name);
-        li.appendChild(a);
+        const href = `/hastar/${horse.id}`;
+        // The row IS the anchor, so there is no branch in which a Horse renders
+        // without its detail route.
+        const row = document.createElement('a');
+        row.className = 'horse-row';
+        row.href = href;
+        row.textContent = horse.name;
+        row.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.router.navigate(href);
+        });
+        li.appendChild(row);
         return li;
     }
 }
