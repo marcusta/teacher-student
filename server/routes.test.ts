@@ -16,12 +16,14 @@ import { createTeachersApi } from './api/teachers.api';
 import { createProgramsApi } from './api/programs.api';
 import { createPlansApi } from './api/plans.api';
 import { createGoalsApi } from './api/goals.api';
+import { createDashboardApi } from './api/dashboard.api';
 
 async function setup(seeds: SeedFn[] = []) {
     const {
         userService, invitationService, relationService,
         exerciseService, horseService, lessonService, noteService,
         trainingSessionService, programService, planService, goalService,
+        dashboardService,
     } = await createTestDb(...seeds);
 
     const sessions = new SessionStore(':memory:');
@@ -45,6 +47,7 @@ async function setup(seeds: SeedFn[] = []) {
     mount(app, '/api', createProgramsApi(programService));
     mount(app, '/api', createPlansApi(planService));
     mount(app, '/api', createGoalsApi(goalService));
+    mount(app, '/api', createDashboardApi(dashboardService));
 
     return { app, sessions };
 }
@@ -1736,6 +1739,90 @@ test('PATCH /api/training-sessions/:id updates own session and replaces shares; 
     expect(bad.status).toBe(404);
 });
 
+/**
+ * Seeds one Student sharing one Session with two connected Teachers, and hands
+ * back every cookie/id the audience-scoping tests below need.
+ */
+async function seedTwiceSharedSession(app: Hono) {
+    const studentCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const student = await (await req(app, 'GET', '/api/auth/me', undefined, studentCookie)).json();
+
+    const connect = async (email: string) => {
+        const cookie = await registerAndLogin(app, email);
+        const inv = await (await req(app, 'POST', '/api/invitations',
+            { inviteeEmail: 'anna@example.com' }, cookie)).json();
+        await req(app, 'POST', '/api/invitations/accept', { invitationId: inv.id }, studentCookie);
+        const me = await (await req(app, 'GET', '/api/auth/me', undefined, cookie)).json();
+        return { cookie, id: me.id as string };
+    };
+    const t1 = await connect('t1@example.com');
+    const t2 = await connect('t2@example.com');
+
+    const ts = await (await req(app, 'POST', '/api/training-sessions', {
+        performedAt: '2026-06-01T10:00:00.000Z',
+        shareWithTeacherIds: [t1.id, t2.id],
+    }, studentCookie)).json();
+
+    return { studentCookie, student, t1, t2, ts };
+}
+
+test('GET /api/training-sessions/:id gives the owner the whole audience', async () => {
+    const { app } = await setup([seedUser]);
+    const { studentCookie, t1, t2, ts } = await seedTwiceSharedSession(app);
+
+    const res = await req(app, 'GET', `/api/training-sessions/${ts.id}`, undefined, studentCookie);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // The owner manages sharing, so they see every recipient — this is the one
+    // viewer for whom the full list is theirs to know.
+    expect([...body.sharedWithTeacherIds].sort()).toEqual([t1.id, t2.id].sort());
+});
+
+test('GET /api/training-sessions/:id never ships co-watcher ids to a shared teacher', async () => {
+    const { app } = await setup([seedUser]);
+    const { t1, t2, ts } = await seedTwiceSharedSession(app);
+
+    // Each shared Teacher sees themselves and ONLY themselves. The other
+    // Teacher's user id must not appear anywhere in the response body — not in
+    // this field, not smuggled into another one.
+    const first = await req(app, 'GET', `/api/training-sessions/${ts.id}`, undefined, t1.cookie);
+    expect(first.status).toBe(200);
+    const firstBody = await first.json();
+    expect(firstBody.sharedWithTeacherIds).toEqual([t1.id]);
+    expect(JSON.stringify(firstBody)).not.toContain(t2.id);
+
+    const second = await req(app, 'GET', `/api/training-sessions/${ts.id}`, undefined, t2.cookie);
+    expect(second.status).toBe(200);
+    const secondBody = await second.json();
+    expect(secondBody.sharedWithTeacherIds).toEqual([t2.id]);
+    expect(JSON.stringify(secondBody)).not.toContain(t1.id);
+});
+
+test('GET /api/students/:id/training-sessions scopes the audience per reading teacher', async () => {
+    const { app } = await setup([seedUser]);
+    const { student, t1, t2, ts } = await seedTwiceSharedSession(app);
+
+    // The teacher-side list is the other read path onto the same rows, and it
+    // leaked identically before the projection moved into the service.
+    const listed = await (await req(app, 'GET',
+        `/api/students/${student.id}/training-sessions`, undefined, t1.cookie)).json();
+    const row = listed.find((s: { id: string }) => s.id === ts.id);
+    expect(row.sharedWithTeacherIds).toEqual([t1.id]);
+    expect(JSON.stringify(listed)).not.toContain(t2.id);
+});
+
+test('a shared teacher still reads as shared — the scoped audience is not empty', async () => {
+    const { app } = await setup([seedUser]);
+    const { t1, ts } = await seedTwiceSharedSession(app);
+
+    // Guards the choice of `[viewerId]` over `[]`: ShareChipComponent derives
+    // `shared` from this length, so an empty array would tell the Teacher this
+    // session is private — false, and a worse trust surface than the leak.
+    const body = await (await req(app, 'GET',
+        `/api/training-sessions/${ts.id}`, undefined, t1.cookie)).json();
+    expect(body.sharedWithTeacherIds.length).toBeGreaterThan(0);
+});
+
 test('GET /api/teachers lists the calling student’s connected teachers', async () => {
     const { app } = await setup([seedUser]);
     const studentCookie = await loginAs(app, 'anna@example.com', 'secret123');
@@ -2081,6 +2168,68 @@ test('POST /api/programs/:id/exercises happy path appends', async () => {
     expect(list[0]).toMatchObject({ id: e.id, name: 'E', sortOrder: 0 });
 });
 
+test('PATCH /api/programs/:id/exercises/:exerciseId edits the row note in place', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const p = await (await req(app, 'POST', '/api/programs', { title: 'P' }, cookie)).json();
+    const e = await (await req(app, 'POST', '/api/exercises', { name: 'E' }, cookie)).json();
+    await req(app, 'POST', `/api/programs/${p.id}/exercises`,
+        { exerciseId: e.id, notes: 'first' }, cookie);
+
+    const res = await req(app, 'PATCH', `/api/programs/${p.id}/exercises/${e.id}`,
+        { notes: '3 varv' }, cookie);
+    expect(res.status).toBe(200);
+
+    const list = await (await req(app, 'GET', `/api/programs/${p.id}/exercises`, undefined, cookie)).json();
+    expect(list[0]).toMatchObject({ id: e.id, notes: '3 varv', sortOrder: 0 });
+});
+
+test('PATCH /api/programs/:id/exercises/:exerciseId accepts null to clear the note', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const p = await (await req(app, 'POST', '/api/programs', { title: 'P' }, cookie)).json();
+    const e = await (await req(app, 'POST', '/api/exercises', { name: 'E' }, cookie)).json();
+    await req(app, 'POST', `/api/programs/${p.id}/exercises`,
+        { exerciseId: e.id, notes: 'gone' }, cookie);
+
+    const res = await req(app, 'PATCH', `/api/programs/${p.id}/exercises/${e.id}`,
+        { notes: null }, cookie);
+    expect(res.status).toBe(200);
+
+    const list = await (await req(app, 'GET', `/api/programs/${p.id}/exercises`, undefined, cookie)).json();
+    expect(list[0].notes).toBeNull();
+});
+
+test('PATCH /api/programs/:id/exercises/:exerciseId on other teacher Program returns 404', async () => {
+    const { app } = await setup([seedUser]);
+    const annaCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const p = await (await req(app, 'POST', '/api/programs', { title: 'P' }, annaCookie)).json();
+    const e = await (await req(app, 'POST', '/api/exercises', { name: 'E' }, annaCookie)).json();
+    await req(app, 'POST', `/api/programs/${p.id}/exercises`,
+        { exerciseId: e.id, notes: 'mine' }, annaCookie);
+
+    // Leak-safe: a stranger's PATCH is 404, never 403 — same answer a missing
+    // Program gives.
+    const otherCookie = await registerAndLogin(app, 'other@example.com');
+    const res = await req(app, 'PATCH', `/api/programs/${p.id}/exercises/${e.id}`,
+        { notes: 'hijack' }, otherCookie);
+    expect(res.status).toBe(404);
+
+    const list = await (await req(app, 'GET', `/api/programs/${p.id}/exercises`, undefined, annaCookie)).json();
+    expect(list[0].notes).toBe('mine');
+});
+
+test('PATCH /api/programs/:id/exercises/:exerciseId without session returns 401', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const p = await (await req(app, 'POST', '/api/programs', { title: 'P' }, cookie)).json();
+    const e = await (await req(app, 'POST', '/api/exercises', { name: 'E' }, cookie)).json();
+    await req(app, 'POST', `/api/programs/${p.id}/exercises`, { exerciseId: e.id }, cookie);
+
+    const res = await req(app, 'PATCH', `/api/programs/${p.id}/exercises/${e.id}`, { notes: 'x' });
+    expect(res.status).toBe(401);
+});
+
 test('POST /api/programs/:id/exercises on other teacher Program returns 404', async () => {
     const { app } = await setup([seedUser]);
     const annaCookie = await loginAs(app, 'anna@example.com', 'secret123');
@@ -2159,4 +2308,229 @@ test('DELETE /api/programs/:id/exercises/:exerciseId on other teacher Program re
     const otherCookie = await registerAndLogin(app, 'other@example.com');
     const res = await req(app, 'DELETE', `/api/programs/${p.id}/exercises/${e.id}`, undefined, otherCookie);
     expect(res.status).toBe(404);
+});
+
+// --- GET /api/lessons/:id (Lesson detail) ---
+
+test('GET /api/lessons/:id returns the lesson with role + counterparty for the teacher', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const lesson = await (await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: '2026-06-01T10:00:00.000Z' }, teacherCookie)).json();
+
+    const res = await req(app, 'GET', `/api/lessons/${lesson.id}`, undefined, teacherCookie);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.id).toBe(lesson.id);
+    expect(body.role).toBe('teacher');
+    expect(body.counterpartyDisplayName).toBeString();
+});
+
+test('GET /api/lessons/:id resolves for the student side too', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const studentCookie = await loginAs(app, 'student@example.com', 'secret123');
+    const lesson = await (await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: '2026-06-01T10:00:00.000Z' }, teacherCookie)).json();
+
+    const res = await req(app, 'GET', `/api/lessons/${lesson.id}`, undefined, studentCookie);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.role).toBe('student');
+});
+
+test('GET /api/lessons/:id by an outsider returns 404', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const lesson = await (await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: '2026-06-01T10:00:00.000Z' }, teacherCookie)).json();
+
+    const intruderCookie = await registerAndLogin(app, 'intruder@example.com');
+    const res = await req(app, 'GET', `/api/lessons/${lesson.id}`, undefined, intruderCookie);
+    expect(res.status).toBe(404);
+});
+
+test('GET /api/lessons/:id without session returns 401', async () => {
+    const { app } = await setup();
+    const res = await req(app, 'GET', '/api/lessons/anything');
+    expect(res.status).toBe(401);
+});
+
+// --- terminal-state lock (structural mutations return 409) ---
+
+async function completedLesson(app: Hono, teacherCookie: string) {
+    const studentId = await connectStudent(app, teacherCookie, 'student@example.com');
+    const ex = await (await req(app, 'POST', '/api/exercises',
+        { name: 'Skritt' }, teacherCookie)).json();
+    const program = await (await req(app, 'POST', '/api/programs',
+        { title: 'P' }, teacherCookie)).json();
+    const lesson = await (await req(app, 'POST', '/api/lessons',
+        { studentId, scheduledAt: '2026-06-01T10:00:00.000Z' }, teacherCookie)).json();
+    await req(app, 'POST', `/api/lessons/${lesson.id}/transition`,
+        { target: 'completed' }, teacherCookie);
+    return { studentId, ex, program, lesson };
+}
+
+test('POST /api/lessons/:id/exercises on a completed lesson returns 409', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const { ex, lesson } = await completedLesson(app, teacherCookie);
+    const res = await req(app, 'POST', `/api/lessons/${lesson.id}/exercises`,
+        { exerciseId: ex.id }, teacherCookie);
+    expect(res.status).toBe(409);
+});
+
+test('DELETE /api/lessons/:id/exercises/:exerciseId on a completed lesson returns 409', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const { ex, lesson } = await completedLesson(app, teacherCookie);
+    const res = await req(app, 'DELETE', `/api/lessons/${lesson.id}/exercises/${ex.id}`,
+        undefined, teacherCookie);
+    expect(res.status).toBe(409);
+});
+
+test('POST /api/lessons/:id/programs on a completed lesson returns 409', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const { program, lesson } = await completedLesson(app, teacherCookie);
+    const res = await req(app, 'POST', `/api/lessons/${lesson.id}/programs`,
+        { programId: program.id }, teacherCookie);
+    expect(res.status).toBe(409);
+});
+
+test('DELETE /api/lessons/:id/programs/:programId on a completed lesson returns 409', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const { program, lesson } = await completedLesson(app, teacherCookie);
+    const res = await req(app, 'DELETE', `/api/lessons/${lesson.id}/programs/${program.id}`,
+        undefined, teacherCookie);
+    expect(res.status).toBe(409);
+});
+
+test('PATCH /api/lessons/:id still succeeds on a completed lesson', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const { lesson } = await completedLesson(app, teacherCookie);
+    const res = await req(app, 'PATCH', `/api/lessons/${lesson.id}`,
+        { scheduledAt: '2026-06-02T11:00:00.000Z' }, teacherCookie);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.scheduledAt).toBe('2026-06-02T11:00:00.000Z');
+});
+
+test('POST /api/notes still succeeds on a completed lesson', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const { lesson } = await completedLesson(app, teacherCookie);
+    const res = await req(app, 'POST', '/api/notes', {
+        parentKind: 'lesson', parentId: lesson.id,
+        body: 'Bra ridning!', visibility: 'shared',
+    }, teacherCookie);
+    expect(res.status).toBe(200);
+});
+
+// --- soft-delete: DELETE archives rather than removing ---
+
+test('DELETE /api/exercises/:id archives — gone from the list, still resolvable by id', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/exercises', { name: 'X' }, teacherCookie);
+    const { id } = await created.json();
+
+    const res = await req(app, 'DELETE', `/api/exercises/${id}`, undefined, teacherCookie);
+    expect(res.status).toBe(200);
+
+    const list = await (await req(app, 'GET', '/api/exercises', undefined, teacherCookie)).json();
+    expect(list.map((e: any) => e.id)).not.toContain(id);
+
+    const got = await req(app, 'GET', `/api/exercises/${id}`, undefined, teacherCookie);
+    expect(got.status).toBe(200);
+    expect((await got.json()).archivedAt).toBeString();
+});
+
+test('DELETE /api/exercises/:id is idempotent', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const { id } = await (await req(app, 'POST', '/api/exercises',
+        { name: 'X' }, teacherCookie)).json();
+    await req(app, 'DELETE', `/api/exercises/${id}`, undefined, teacherCookie);
+    const again = await req(app, 'DELETE', `/api/exercises/${id}`, undefined, teacherCookie);
+    expect(again.status).toBe(200);
+});
+
+test('DELETE /api/programs/:id archives — gone from the list, still resolvable by id', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const created = await req(app, 'POST', '/api/programs', { title: 'X' }, teacherCookie);
+    const { id } = await created.json();
+
+    const res = await req(app, 'DELETE', `/api/programs/${id}`, undefined, teacherCookie);
+    expect(res.status).toBe(200);
+
+    const list = await (await req(app, 'GET', '/api/programs', undefined, teacherCookie)).json();
+    expect(list.map((p: any) => p.id)).not.toContain(id);
+
+    const got = await req(app, 'GET', `/api/programs/${id}`, undefined, teacherCookie);
+    expect(got.status).toBe(200);
+    expect((await got.json()).archivedAt).toBeString();
+});
+
+test('DELETE /api/programs/:id on other teacher returns 404', async () => {
+    const { app } = await setup([seedUser]);
+    const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const { id } = await (await req(app, 'POST', '/api/programs',
+        { title: 'X' }, teacherCookie)).json();
+    const otherCookie = await registerAndLogin(app, 'other@example.com');
+    const res = await req(app, 'DELETE', `/api/programs/${id}`, undefined, otherCookie);
+    expect(res.status).toBe(404);
+});
+
+// --- Dashboard ---
+
+test('GET /api/dashboard without session returns 401', async () => {
+    const { app } = await setup([seedUser]);
+    const res = await req(app, 'GET', '/api/dashboard');
+    expect(res.status).toBe(401);
+});
+
+test('GET /api/dashboard returns 200 with the full shape', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+
+    const res = await req(app, 'GET', '/api/dashboard', undefined, cookie);
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    expect(Object.keys(body).sort()).toEqual([
+        'activePlans', 'awaitingFeedback', 'capabilities', 'generatedAt',
+        'goalsNearingTarget', 'latestFeedback', 'nextLesson', 'pendingInvitations',
+    ]);
+    expect(body.capabilities).toEqual({ teaches: false, rides: false });
+    expect(body.nextLesson).toBeNull();
+    expect(body.latestFeedback).toBeNull();
+    expect(body.awaitingFeedback).toEqual([]);
+    expect(body.activePlans).toEqual([]);
+    expect(body.goalsNearingTarget).toEqual([]);
+    expect(body.pendingInvitations).toBe(0);
+    expect(body.generatedAt).toBeString();
+});
+
+test('GET /api/dashboard is first-person — a second account sees its own payload', async () => {
+    const { app } = await setup([seedUser]);
+    const annaCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const otherCookie = await registerAndLogin(app, 'other@example.com');
+
+    // Anna invites the other account: the invitation is addressed by email, so
+    // it must land on the invitee's badge and never on the inviter's.
+    const inv = await req(app, 'POST', '/api/invitations',
+        { inviteeEmail: 'other@example.com' }, annaCookie);
+    expect(inv.status).toBe(200);
+
+    const mine = await (await req(app, 'GET', '/api/dashboard', undefined, annaCookie)).json();
+    const theirs = await (await req(app, 'GET', '/api/dashboard', undefined, otherCookie)).json();
+    expect(mine.pendingInvitations).toBe(0);
+    expect(theirs.pendingInvitations).toBe(1);
 });

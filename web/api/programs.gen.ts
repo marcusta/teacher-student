@@ -6,6 +6,7 @@ export interface Program {
     teacherId: string;
     title: string;
     description: string;
+    archivedAt: null | string;
     createdAt: string;
 }
 
@@ -15,6 +16,7 @@ export interface ProgramExerciseRef {
     description: string;
     sortOrder: number;
     notes: null | string;
+    archivedAt: null | string;
 }
 
 export interface ProgramsApi {
@@ -27,6 +29,7 @@ export interface ProgramsApi {
     listExercises(input: { id: string }): Promise<ProgramExerciseRef[]>;
     addExercise(input: { notes?: string; id: string; exerciseId: string }): Promise<{ ok: boolean }>;
     reorderExercises(input: { id: string; exerciseIds: string[] }): Promise<{ ok: boolean }>;
+    updateExerciseNotes(input: { id: string; exerciseId: string; notes: null | string }): Promise<{ ok: boolean }>;
     removeExercise(input: { id: string; exerciseId: string }): Promise<{ ok: boolean }>;
 }
 
@@ -80,6 +83,13 @@ export function createProgramsClient(baseUrl: string): ProgramsApi {
             for (const [k, v] of Object.entries(input as any))
                 if (!pathParams.has(k)) body[k] = v;
             return apiFetch({ method: 'PUT', url: `${baseUrl}/programs/${input.id}/exercises/order`, body });
+        },
+        async updateExerciseNotes(input) {
+            const pathParams = new Set(['id', 'exerciseId']);
+            const body: Record<string, unknown> = {};
+            for (const [k, v] of Object.entries(input as any))
+                if (!pathParams.has(k)) body[k] = v;
+            return apiFetch({ method: 'PATCH', url: `${baseUrl}/programs/${input.id}/exercises/${input.exerciseId}`, body });
         },
         async removeExercise(input) {
             return apiFetch({ method: 'DELETE', url: `${baseUrl}/programs/${input.id}/exercises/${input.exerciseId}` });

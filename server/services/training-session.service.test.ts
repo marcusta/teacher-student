@@ -560,6 +560,54 @@ test('create with foreign programId throws NotFoundError', async () => {
     })).rejects.toThrow();
 });
 
+test('the static Row note is projected on listExercises, getForViewer and both lists', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const ts = await ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+        shareWithTeacherIds: [ctx.teacher.id],
+    });
+
+    // Copied verbatim from program_exercise.notes — IA §3.10's static Row note.
+    const expected = [
+        { exerciseId: ctx.ex1.id, notes: 'lugnt' },
+        { exerciseId: ctx.ex2.id, notes: null },
+        { exerciseId: ctx.ex3.id, notes: 'sista' },
+    ];
+    const project = (refs: { exerciseId: string; notes: string | null }[]) =>
+        refs.map((r) => ({ exerciseId: r.exerciseId, notes: r.notes }));
+
+    expect(project(await ctx.trainingSessionService.listExercises(ctx.student.id, ts.id)))
+        .toEqual(expected);
+
+    const detail = await ctx.trainingSessionService.getForViewer(ctx.student.id, ts.id);
+    expect(project(detail.exercises)).toEqual(expected);
+
+    // The shared Teacher reads the same instructional text on the same session.
+    const teacherView = await ctx.trainingSessionService.getForViewer(ctx.teacher.id, ts.id);
+    expect(project(teacherView.exercises)).toEqual(expected);
+
+    const owned = (await ctx.trainingSessionService.listForStudent(ctx.student.id))
+        .find((s) => s.id === ts.id)!;
+    expect(project(owned.exercises)).toEqual(expected);
+
+    const shared = (await ctx.trainingSessionService
+        .listForTeacherOfStudent(ctx.teacher.id, ctx.student.id))
+        .find((s) => s.id === ts.id)!;
+    expect(project(shared.exercises)).toEqual(expected);
+});
+
+test('an Exercise added free carries a null Row note', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const ts = await ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+    });
+    await ctx.trainingSessionService.addExercise(ctx.student.id, ts.id, ctx.ex1.id);
+    const refs = await ctx.trainingSessionService.listExercises(ctx.student.id, ts.id);
+    expect(refs).toHaveLength(1);
+    expect(refs[0]!.notes).toBeNull();
+});
+
 test('attachProgram copies exercises with source_program_id and skips duplicates', async () => {
     const ctx = await seedConnectedWithProgram();
     const ts = await ctx.trainingSessionService.create(ctx.student.id, {
@@ -622,4 +670,70 @@ test('teacher with share cannot attachProgram (student-only write)', async () =>
     await expect(ctx.trainingSessionService.attachProgram(
         ctx.teacher.id, ts.id, ctx.program.id,
     )).rejects.toThrow();
+});
+
+// --- soft-deleted Exercises / Programs are not attachable (043/044) ---
+
+test('addExercise rejects an archived Exercise', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const ts = await ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+    });
+    await ctx.exerciseService.archive(ctx.teacher.id, ctx.ex1.id);
+    await expect(ctx.trainingSessionService.addExercise(ctx.student.id, ts.id, ctx.ex1.id))
+        .rejects.toThrow();
+});
+
+test('attachProgram rejects an archived Program', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const ts = await ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+    });
+    await ctx.programService.archive(ctx.teacher.id, ctx.program.id);
+    await expect(ctx.trainingSessionService.attachProgram(ctx.student.id, ts.id, ctx.program.id))
+        .rejects.toThrow();
+});
+
+test('create rejects an archived Program as the snapshot source', async () => {
+    const ctx = await seedConnectedWithProgram();
+    await ctx.programService.archive(ctx.teacher.id, ctx.program.id);
+    await expect(ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    })).rejects.toThrow();
+});
+
+test('archiving an Exercise keeps existing training_session_exercise rows resolving', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const ts = await ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+    });
+    await ctx.trainingSessionService.addExercise(ctx.student.id, ts.id, ctx.ex1.id);
+    await ctx.exerciseService.archive(ctx.teacher.id, ctx.ex1.id);
+
+    const refs = await ctx.trainingSessionService.listExercises(ctx.student.id, ts.id);
+    expect(refs.map((r) => r.exerciseId)).toEqual([ctx.ex1.id]);
+    expect(refs[0]!.name).toBe('Skritt');
+});
+
+// --- archived Exercises must not re-enter via a Program snapshot ---
+
+test('create with programId skips archived Exercises', async () => {
+    const ctx = await seedConnectedWithProgram();
+    await ctx.exerciseService.archive(ctx.teacher.id, ctx.ex2.id);
+    const ts = await ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    });
+    expect(ts.exercises.map((e) => e.name)).toEqual(['Skritt', 'Galopp']);
+});
+
+test('attachProgram skips archived Exercises', async () => {
+    const ctx = await seedConnectedWithProgram();
+    await ctx.exerciseService.archive(ctx.teacher.id, ctx.ex1.id);
+    const ts = await ctx.trainingSessionService.create(ctx.student.id, {
+        performedAt: '2026-06-01T10:00:00.000Z',
+    });
+    const after = await ctx.trainingSessionService.attachProgram(ctx.student.id, ts.id, ctx.program.id);
+    expect(after.exercises.map((e) => e.name)).toEqual(['Trav', 'Galopp']);
 });

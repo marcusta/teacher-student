@@ -201,9 +201,17 @@ export class PlanService {
             .orderBy('lessons.scheduled_at', 'asc')
             .execute();
 
+        // A Goal's title is only visible to the owning Student and to Teachers
+        // it was individually shared with (`goal_share`) — mirroring
+        // GoalService.listForStudentAsTeacher. Plan membership is NOT itself a
+        // grant: without this filter a connected Teacher could read titles here
+        // that GET /goals/:id would refuse them.
         const goals = await this.db
             .selectFrom('goal_plan')
             .innerJoin('goal', 'goal.id', 'goal_plan.goal_id')
+            .leftJoin('goal_share', (join) => join
+                .onRef('goal_share.goal_id', '=', 'goal.id')
+                .on('goal_share.teacher_id', '=', actorId))
             .select([
                 'goal.id as id',
                 'goal.title as title',
@@ -211,6 +219,10 @@ export class PlanService {
                 'goal.target_date as target_date',
             ])
             .where('goal_plan.plan_id', '=', planId)
+            .where((eb) => eb.or([
+                eb('goal.student_id', '=', actorId),
+                eb('goal_share.teacher_id', 'is not', null),
+            ]))
             .orderBy(sql`CASE goal.status WHEN 'active' THEN 0 WHEN 'achieved' THEN 1 WHEN 'abandoned' THEN 2 END`, 'asc')
             .orderBy('goal.created_at', 'desc')
             .execute();

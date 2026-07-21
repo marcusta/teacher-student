@@ -25,6 +25,14 @@ const ReorderExercisesInput = Type.Object({
     exerciseIds: Type.Array(Type.String({ minLength: 1 })),
 });
 
+const UpdateExerciseNotesInput = Type.Object({
+    id: Type.String({ minLength: 1 }),
+    exerciseId: Type.String({ minLength: 1 }),
+    // Nullable so the builder can clear a note explicitly, rather than having
+    // to guess that '' means "remove it".
+    notes: Type.Union([Type.String({ maxLength: 2000 }), Type.Null()]),
+});
+
 const RemoveExerciseInput = Type.Object({
     id: Type.String({ minLength: 1 }),
     exerciseId: Type.String({ minLength: 1 }),
@@ -82,13 +90,18 @@ export function createProgramsApi(svc: ProgramService) {
                 return svc.update(user.id, id, patch);
             },
         },
+        // Semantic delete = archive (soft-delete). The HTTP verb is DELETE but
+        // nothing is removed: past Lessons and Training Sessions reference the
+        // Program through lesson_program / source_program_id to render their
+        // "from program X" provenance label, and a cascade would erase it.
+        // The program just leaves every picker.
         delete: {
             method: 'DELETE' as const,
             path: '/programs/:id',
             middleware: [requireAuth()],
             fn: async (input: { id: string }, c: Context) => {
                 const user = requireUser(c);
-                await svc.delete(user.id, input.id);
+                await svc.archive(user.id, input.id);
                 return { ok: true };
             },
         },
@@ -121,6 +134,20 @@ export function createProgramsApi(svc: ProgramService) {
             fn: async (input: Static<typeof ReorderExercisesInput>, c: Context) => {
                 const user = requireUser(c);
                 await svc.reorderExercises(user.id, input.id, input.exerciseIds);
+                return { ok: true };
+            },
+        },
+        // Owner-gated like every other Program mutation — the service resolves
+        // the Program by teacher and throws NotFoundError otherwise, so a
+        // stranger's PATCH is indistinguishable from a missing Program.
+        updateExerciseNotes: {
+            method: 'PATCH' as const,
+            path: '/programs/:id/exercises/:exerciseId',
+            schema: UpdateExerciseNotesInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof UpdateExerciseNotesInput>, c: Context) => {
+                const user = requireUser(c);
+                await svc.updateExerciseNotes(user.id, input.id, input.exerciseId, input.notes);
                 return { ok: true };
             },
         },

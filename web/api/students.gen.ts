@@ -76,6 +76,7 @@ export interface TrainingSessionExerciseRef {
     name: string;
     sortOrder: number;
     sourceProgramId: null | string;
+    notes: null | string;
 }
 
 export interface AttachedProgramRef {

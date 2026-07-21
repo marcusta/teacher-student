@@ -6,6 +6,7 @@ export interface Exercise {
     teacherId: string;
     name: string;
     description: string;
+    archivedAt: null | string;
     createdAt: string;
     updatedAt: string;
 }

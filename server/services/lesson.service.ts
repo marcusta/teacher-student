@@ -13,6 +13,12 @@ export interface LessonExerciseRef {
     sortOrder: number;
     /** Program this row was snapshot-copied from, or null when added free. */
     sourceProgramId: string | null;
+    /**
+     * Static Row note copied verbatim from `program_exercise.notes` at snapshot
+     * time (IA §3.8). Null when added free or when the source row had none.
+     * This is instructional text, not the Note thread — that hangs off `id`.
+     */
+    notes: string | null;
 }
 
 export interface AttachedProgramRef {
@@ -106,6 +112,25 @@ function toLesson(
     };
 }
 
+/**
+ * Structural mutations — the ones that rewrite *what was ridden* — are
+ * refused once a Lesson reaches a terminal status, so `attachProgram` can't
+ * quietly copy fresh exercise rows into a historical record.
+ *
+ * Deliberately narrow. `update` (reschedule / horse / plan link),
+ * `detachFromPlan` and Notes stay open on a terminal Lesson: corrections and
+ * post-hoc feedback must remain possible without a reopen flow, and Notes on
+ * a completed Lesson are the product's core loop.
+ *
+ * ConflictError (409) rather than a validation error so the UI can say
+ * "this lesson is completed" specifically.
+ */
+function assertNotTerminal(status: LessonStatus): void {
+    if (status === 'completed' || status === 'cancelled') {
+        throw new ConflictError(`Lesson is ${status}`);
+    }
+}
+
 function assertIsoDate(value: string): string {
     const parsed = Date.parse(value);
     if (Number.isNaN(parsed)) throw new Error('Lesson scheduledAt must be a valid ISO 8601 date');
@@ -161,18 +186,27 @@ export class LessonService {
         if (input.programId !== undefined) {
             const p = await this.db
                 .selectFrom('programs')
-                .select(['id', 'teacher_id', 'title'])
+                .select(['id', 'teacher_id', 'title', 'archived_at'])
                 .where('id', '=', input.programId)
                 .executeTakeFirst();
-            if (!p || p.teacher_id !== teacherId) {
+            if (!p || p.teacher_id !== teacherId || p.archived_at !== null) {
                 throw new NotFoundError('Program not found');
             }
             program = { id: p.id, title: p.title };
+            // Archived Exercises are skipped: `addExercise` refuses them
+            // directly, so a Program snapshot must not smuggle them back in.
+            // Past Lessons keep theirs — only new copies are filtered.
             programRows = await this.db
                 .selectFrom('program_exercise')
-                .select(['exercise_id', 'sort_order', 'notes'])
-                .where('program_id', '=', p.id)
-                .orderBy('sort_order', 'asc')
+                .innerJoin('exercises', 'exercises.id', 'program_exercise.exercise_id')
+                .select([
+                    'program_exercise.exercise_id as exercise_id',
+                    'program_exercise.sort_order as sort_order',
+                    'program_exercise.notes as notes',
+                ])
+                .where('program_exercise.program_id', '=', p.id)
+                .where('exercises.archived_at', 'is', null)
+                .orderBy('program_exercise.sort_order', 'asc')
                 .execute();
         }
 
@@ -383,6 +417,43 @@ export class LessonService {
     }
 
     /**
+     * Single-Lesson lookup for the detail route, in the same `LessonForUser`
+     * shape `listForUser` returns — so `/lektioner/:id` can deep-link without
+     * first loading the whole list. Readable from either side of the Lesson
+     * (`teacher_id` or `student_id`); NotFoundError to everyone else so the
+     * existence of the Lesson doesn't leak.
+     */
+    async getForUser(userId: string, lessonId: string): Promise<LessonForUser> {
+        const row = await this.db
+            .selectFrom('lessons')
+            .innerJoin('users as teacher', 'teacher.id', 'lessons.teacher_id')
+            .innerJoin('users as student', 'student.id', 'lessons.student_id')
+            .leftJoin('horses', 'horses.id', 'lessons.horse_id')
+            .leftJoin('plans', 'plans.id', 'lessons.plan_id')
+            .select([
+                ...LESSON_COLUMNS,
+                'horses.name as horse_name',
+                'plans.title as plan_title',
+                'teacher.display_name as teacher_display_name',
+                'student.display_name as student_display_name',
+            ])
+            .where('lessons.id', '=', lessonId)
+            .executeTakeFirst();
+        if (!row || (row.teacher_id !== userId && row.student_id !== userId)) {
+            throw new NotFoundError('Lesson not found');
+        }
+
+        const exMap = await this.exercisesByLesson([lessonId]);
+        const progMap = await this.programsByLesson([lessonId]);
+        const isTeacher = row.teacher_id === userId;
+        return {
+            ...toLesson(row as LessonRow, exMap.get(lessonId) ?? [], progMap.get(lessonId) ?? []),
+            role: isTeacher ? 'teacher' : 'student',
+            counterpartyDisplayName: isTeacher ? row.student_display_name : row.teacher_display_name,
+        };
+    }
+
+    /**
      * Append an Exercise to a Lesson. Both the Lesson and the Exercise must
      * be owned by `teacherId` (NotFoundError otherwise — leak-safe). The
      * write is idempotent: a duplicate (lesson_id, exercise_id) is a no-op.
@@ -390,18 +461,19 @@ export class LessonService {
     async addExercise(teacherId: string, lessonId: string, exerciseId: string): Promise<void> {
         const lesson = await this.db
             .selectFrom('lessons')
-            .select(['id', 'teacher_id'])
+            .select(['id', 'teacher_id', 'status'])
             .where('id', '=', lessonId)
             .executeTakeFirst();
         if (!lesson || lesson.teacher_id !== teacherId) {
             throw new NotFoundError('Lesson not found');
         }
+        assertNotTerminal(lesson.status);
         const exercise = await this.db
             .selectFrom('exercises')
-            .select(['id', 'teacher_id'])
+            .select(['id', 'teacher_id', 'archived_at'])
             .where('id', '=', exerciseId)
             .executeTakeFirst();
-        if (!exercise || exercise.teacher_id !== teacherId) {
+        if (!exercise || exercise.teacher_id !== teacherId || exercise.archived_at !== null) {
             throw new NotFoundError('Exercise not found');
         }
 
@@ -437,12 +509,13 @@ export class LessonService {
     async removeExercise(teacherId: string, lessonId: string, exerciseId: string): Promise<void> {
         const lesson = await this.db
             .selectFrom('lessons')
-            .select(['id', 'teacher_id'])
+            .select(['id', 'teacher_id', 'status'])
             .where('id', '=', lessonId)
             .executeTakeFirst();
         if (!lesson || lesson.teacher_id !== teacherId) {
             throw new NotFoundError('Lesson not found');
         }
+        assertNotTerminal(lesson.status);
         await this.db.deleteFrom('lesson_exercise')
             .where('lesson_id', '=', lessonId)
             .where('exercise_id', '=', exerciseId)
@@ -553,26 +626,34 @@ export class LessonService {
     async attachProgram(teacherId: string, lessonId: string, programId: string): Promise<Lesson> {
         const lesson = await this.db
             .selectFrom('lessons')
-            .select(['id', 'teacher_id'])
+            .select(['id', 'teacher_id', 'status'])
             .where('id', '=', lessonId)
             .executeTakeFirst();
         if (!lesson || lesson.teacher_id !== teacherId) {
             throw new NotFoundError('Lesson not found');
         }
+        assertNotTerminal(lesson.status);
         const program = await this.db
             .selectFrom('programs')
-            .select(['id', 'teacher_id'])
+            .select(['id', 'teacher_id', 'archived_at'])
             .where('id', '=', programId)
             .executeTakeFirst();
-        if (!program || program.teacher_id !== teacherId) {
+        if (!program || program.teacher_id !== teacherId || program.archived_at !== null) {
             throw new NotFoundError('Program not found');
         }
 
+        // Archived Exercises are skipped — see LessonService.create.
         const programRows = await this.db
             .selectFrom('program_exercise')
-            .select(['exercise_id', 'sort_order', 'notes'])
-            .where('program_id', '=', programId)
-            .orderBy('sort_order', 'asc')
+            .innerJoin('exercises', 'exercises.id', 'program_exercise.exercise_id')
+            .select([
+                'program_exercise.exercise_id as exercise_id',
+                'program_exercise.sort_order as sort_order',
+                'program_exercise.notes as notes',
+            ])
+            .where('program_exercise.program_id', '=', programId)
+            .where('exercises.archived_at', 'is', null)
+            .orderBy('program_exercise.sort_order', 'asc')
             .execute();
 
         const existing = await this.db
@@ -626,12 +707,13 @@ export class LessonService {
     async detachProgram(teacherId: string, lessonId: string, programId: string): Promise<Lesson> {
         const lesson = await this.db
             .selectFrom('lessons')
-            .select(['id', 'teacher_id'])
+            .select(['id', 'teacher_id', 'status'])
             .where('id', '=', lessonId)
             .executeTakeFirst();
         if (!lesson || lesson.teacher_id !== teacherId) {
             throw new NotFoundError('Lesson not found');
         }
+        assertNotTerminal(lesson.status);
         await this.db.deleteFrom('lesson_program')
             .where('lesson_id', '=', lessonId)
             .where('program_id', '=', programId)
@@ -681,6 +763,7 @@ export class LessonService {
                 'lesson_exercise.lesson_id as lesson_id',
                 'lesson_exercise.sort_order as sort_order',
                 'lesson_exercise.source_program_id as source_program_id',
+                'lesson_exercise.notes as notes',
                 'exercises.id as exercise_id',
                 'exercises.name as name',
             ])
@@ -696,6 +779,7 @@ export class LessonService {
                 name: r.name,
                 sortOrder: r.sort_order,
                 sourceProgramId: r.source_program_id,
+                notes: r.notes,
             });
             out.set(r.lesson_id, list);
         }

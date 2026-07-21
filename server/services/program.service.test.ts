@@ -110,27 +110,44 @@ test('update rejects empty title when provided', async () => {
         .rejects.toThrow();
 });
 
-test('delete removes own program', async () => {
+test('archive stamps archived_at and hides the program from listForTeacher', async () => {
     const { programService, teacher } = await seedTeacher();
     const p = await programService.create(teacher.id, { title: 'X' });
-    await programService.delete(teacher.id, p.id);
-    expect(await programService.getForTeacher(teacher.id, p.id)).toBeNull();
+    expect(p.archivedAt).toBeNull();
+
+    await programService.archive(teacher.id, p.id);
+
+    expect(await programService.listForTeacher(teacher.id)).toEqual([]);
+    // Still resolvable by id — past Lessons render their provenance label from it.
+    const after = await programService.getForTeacher(teacher.id, p.id);
+    expect(after).not.toBeNull();
+    expect(after!.archivedAt).toBeString();
 });
 
-test('delete on other teacher\'s program throws NotFoundError', async () => {
+test('archive is idempotent and keeps the first timestamp', async () => {
+    const { programService, teacher } = await seedTeacher();
+    const p = await programService.create(teacher.id, { title: 'X' });
+    await programService.archive(teacher.id, p.id);
+    const first = (await programService.getForTeacher(teacher.id, p.id))!.archivedAt;
+    await programService.archive(teacher.id, p.id);
+    const second = (await programService.getForTeacher(teacher.id, p.id))!.archivedAt;
+    expect(second).toBe(first);
+});
+
+test('archive on other teacher\'s program throws NotFoundError', async () => {
     const ctx = await seedTeacher('t1@example.com');
     const p = await ctx.programService.create(ctx.teacher.id, { title: 'X' });
     const t2 = await ctx.userService.register({
         email: 't2@example.com', password: 'secret123', displayName: 'T2',
     });
-    await expect(ctx.programService.delete(t2.id, p.id)).rejects.toThrow();
-    // Still exists for original owner.
-    expect(await ctx.programService.getForTeacher(ctx.teacher.id, p.id)).not.toBeNull();
+    await expect(ctx.programService.archive(t2.id, p.id)).rejects.toThrow();
+    // Still active for original owner.
+    expect(await ctx.programService.listForTeacher(ctx.teacher.id)).toHaveLength(1);
 });
 
-test('delete on missing program throws NotFoundError', async () => {
+test('archive on missing program throws NotFoundError', async () => {
     const { programService, teacher } = await seedTeacher();
-    await expect(programService.delete(teacher.id, 'missing')).rejects.toThrow();
+    await expect(programService.archive(teacher.id, 'missing')).rejects.toThrow();
 });
 
 test('addExercise on empty Program inserts row with sort_order = 0', async () => {
@@ -142,7 +159,7 @@ test('addExercise on empty Program inserts row with sort_order = 0', async () =>
 
     const list = await programService.listExercises(teacher.id, p.id);
     expect(list).toEqual([{
-        id: e.id, name: 'E', description: '', sortOrder: 0, notes: null,
+        id: e.id, name: 'E', description: '', sortOrder: 0, notes: null, archivedAt: null,
     }]);
 });
 
@@ -170,6 +187,97 @@ test('addExercise stores trimmed notes when provided', async () => {
     await programService.addExercise(teacher.id, p.id, e.id, { notes: '  3 varv  ' });
     const list = await programService.listExercises(teacher.id, p.id);
     expect(list[0].notes).toBe('3 varv');
+});
+
+test('updateExerciseNotes rewrites the row note in place', async () => {
+    const { programService, exerciseService, teacher } = await seedTeacher();
+    const p = await programService.create(teacher.id, { title: 'P' });
+    const e = await exerciseService.create(teacher.id, { name: 'E' });
+    await programService.addExercise(teacher.id, p.id, e.id, { notes: 'first' });
+
+    await programService.updateExerciseNotes(teacher.id, p.id, e.id, '  3 varv  ');
+    const list = await programService.listExercises(teacher.id, p.id);
+    expect(list[0]!.notes).toBe('3 varv');
+    // The row keeps its place — an edit is not a remove-and-re-add.
+    expect(list[0]!.sortOrder).toBe(0);
+});
+
+test('updateExerciseNotes adds a note to a row that had none', async () => {
+    const { programService, exerciseService, teacher } = await seedTeacher();
+    const p = await programService.create(teacher.id, { title: 'P' });
+    const e = await exerciseService.create(teacher.id, { name: 'E' });
+    await programService.addExercise(teacher.id, p.id, e.id);
+    expect((await programService.listExercises(teacher.id, p.id))[0]!.notes).toBeNull();
+
+    await programService.updateExerciseNotes(teacher.id, p.id, e.id, 'nytt');
+    expect((await programService.listExercises(teacher.id, p.id))[0]!.notes).toBe('nytt');
+});
+
+test('updateExerciseNotes clears the note on null or blank', async () => {
+    const { programService, exerciseService, teacher } = await seedTeacher();
+    const p = await programService.create(teacher.id, { title: 'P' });
+    const e1 = await exerciseService.create(teacher.id, { name: 'E1' });
+    const e2 = await exerciseService.create(teacher.id, { name: 'E2' });
+    await programService.addExercise(teacher.id, p.id, e1.id, { notes: 'gone' });
+    await programService.addExercise(teacher.id, p.id, e2.id, { notes: 'gone too' });
+
+    await programService.updateExerciseNotes(teacher.id, p.id, e1.id, null);
+    // Whitespace-only is the same answer as null — never stored as ''.
+    await programService.updateExerciseNotes(teacher.id, p.id, e2.id, '   ');
+    const list = await programService.listExercises(teacher.id, p.id);
+    expect(list.map((r) => r.notes)).toEqual([null, null]);
+});
+
+test('updateExerciseNotes touches only the addressed row', async () => {
+    const { programService, exerciseService, teacher } = await seedTeacher();
+    const p = await programService.create(teacher.id, { title: 'P' });
+    const e1 = await exerciseService.create(teacher.id, { name: 'E1' });
+    const e2 = await exerciseService.create(teacher.id, { name: 'E2' });
+    await programService.addExercise(teacher.id, p.id, e1.id, { notes: 'keep me' });
+    await programService.addExercise(teacher.id, p.id, e2.id, { notes: 'change me' });
+
+    await programService.updateExerciseNotes(teacher.id, p.id, e2.id, 'changed');
+    const list = await programService.listExercises(teacher.id, p.id);
+    expect(list.map((r) => r.notes)).toEqual(['keep me', 'changed']);
+});
+
+test('updateExerciseNotes leaves the same Exercise in ANOTHER Program alone', async () => {
+    // The note is what THIS Program says about the exercise. Two Programs may
+    // say different things about the same one.
+    const { programService, exerciseService, teacher } = await seedTeacher();
+    const p1 = await programService.create(teacher.id, { title: 'P1' });
+    const p2 = await programService.create(teacher.id, { title: 'P2' });
+    const e = await exerciseService.create(teacher.id, { name: 'E' });
+    await programService.addExercise(teacher.id, p1.id, e.id, { notes: 'p1 says' });
+    await programService.addExercise(teacher.id, p2.id, e.id, { notes: 'p2 says' });
+
+    await programService.updateExerciseNotes(teacher.id, p1.id, e.id, 'p1 now says');
+    expect((await programService.listExercises(teacher.id, p1.id))[0]!.notes).toBe('p1 now says');
+    expect((await programService.listExercises(teacher.id, p2.id))[0]!.notes).toBe('p2 says');
+});
+
+test('updateExerciseNotes on another teacher\'s Program throws NotFoundError', async () => {
+    const ctx = await seedTeacher('t1@example.com');
+    const p = await ctx.programService.create(ctx.teacher.id, { title: 'P' });
+    const e = await ctx.exerciseService.create(ctx.teacher.id, { name: 'E' });
+    await ctx.programService.addExercise(ctx.teacher.id, p.id, e.id, { notes: 'mine' });
+    const t2 = await ctx.userService.register({
+        email: 't2@example.com', password: 'secret123', displayName: 'T2',
+    });
+
+    await expect(ctx.programService.updateExerciseNotes(t2.id, p.id, e.id, 'yours'))
+        .rejects.toThrow();
+    // And the note is untouched.
+    expect((await ctx.programService.listExercises(ctx.teacher.id, p.id))[0]!.notes).toBe('mine');
+});
+
+test('updateExerciseNotes on a row that is not in the Program throws NotFoundError', async () => {
+    // Not a silent no-op: an edit that lands nowhere has no idempotent reading.
+    const { programService, exerciseService, teacher } = await seedTeacher();
+    const p = await programService.create(teacher.id, { title: 'P' });
+    const loose = await exerciseService.create(teacher.id, { name: 'Loose' });
+    await expect(programService.updateExerciseNotes(teacher.id, p.id, loose.id, 'x'))
+        .rejects.toThrow();
 });
 
 test('addExercise on cross-teacher Program throws NotFoundError', async () => {
@@ -306,14 +414,14 @@ test('removeExercise on cross-teacher Program throws NotFoundError', async () =>
     expect(list).toHaveLength(1);
 });
 
-test('deleting a Program cascades to program_exercise rows', async () => {
+test('archiving a Program preserves its program_exercise rows', async () => {
     const { programService, exerciseService, teacher, db } = await seedTeacher();
     const p = await programService.create(teacher.id, { title: 'P' });
     const e = await exerciseService.create(teacher.id, { name: 'E' });
     await programService.addExercise(teacher.id, p.id, e.id);
-    await programService.delete(teacher.id, p.id);
+    await programService.archive(teacher.id, p.id);
     const rows = await db.selectFrom('program_exercise').selectAll().execute();
-    expect(rows).toEqual([]);
+    expect(rows).toHaveLength(1);
 });
 
 // --- listForStudent (student-visible catalog from connected Teachers) ---
@@ -361,4 +469,51 @@ test('listForStudent returns programs from connected teachers only, sorted creat
 
     const list = await ctx.programService.listForStudent(ctx.student.id);
     expect(list.map((p) => p.id)).toEqual([p2.id, p1.id]);
+});
+
+test('listForStudent hides archived programs from a connected student', async () => {
+    const ctx = await seedStudentForPrograms();
+    const teacher = await connectStudentForPrograms(ctx, 't1@example.com');
+    const keep = await ctx.programService.create(teacher.id, { title: 'Keep' });
+    const gone = await ctx.programService.create(teacher.id, { title: 'Gone' });
+    await ctx.programService.archive(teacher.id, gone.id);
+
+    const list = await ctx.programService.listForStudent(ctx.student.id);
+    expect(list.map((p) => p.id)).toEqual([keep.id]);
+});
+
+test('addExercise rejects an archived Exercise as an attach target', async () => {
+    const { programService, exerciseService, teacher } = await seedTeacher();
+    const p = await programService.create(teacher.id, { title: 'P' });
+    const e = await exerciseService.create(teacher.id, { name: 'E' });
+    await exerciseService.archive(teacher.id, e.id);
+    await expect(programService.addExercise(teacher.id, p.id, e.id)).rejects.toThrow();
+});
+
+test('listExercises still resolves an archived Exercise already in the Program', async () => {
+    const { programService, exerciseService, teacher } = await seedTeacher();
+    const p = await programService.create(teacher.id, { title: 'P' });
+    const e = await exerciseService.create(teacher.id, { name: 'E' });
+    await programService.addExercise(teacher.id, p.id, e.id);
+    await exerciseService.archive(teacher.id, e.id);
+
+    const list = await programService.listExercises(teacher.id, p.id);
+    expect(list.map((x) => x.id)).toEqual([e.id]);
+    expect(list[0]!.name).toBe('E');
+    // And it SAYS so. The builder used to infer this from the row's absence
+    // from GET /exercises; the row now carries the fact itself.
+    expect(list[0]!.archivedAt).toBeString();
+});
+
+test('listExercises reports archivedAt per row, not for the whole Program', async () => {
+    const { programService, exerciseService, teacher } = await seedTeacher();
+    const p = await programService.create(teacher.id, { title: 'P' });
+    const live = await exerciseService.create(teacher.id, { name: 'Live' });
+    const dead = await exerciseService.create(teacher.id, { name: 'Dead' });
+    await programService.addExercise(teacher.id, p.id, live.id);
+    await programService.addExercise(teacher.id, p.id, dead.id);
+    await exerciseService.archive(teacher.id, dead.id);
+
+    const list = await programService.listExercises(teacher.id, p.id);
+    expect(list.map((x) => x.archivedAt === null)).toEqual([true, false]);
 });

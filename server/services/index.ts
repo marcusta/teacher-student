@@ -11,6 +11,7 @@ import { TrainingSessionService } from './training-session.service';
 import { ProgramService } from './program.service';
 import { PlanService } from './plan.service';
 import { GoalService } from './goal.service';
+import { DashboardService } from './dashboard.service';
 
 export function createServices(db: Kysely<Database>) {
     const userService = new UserService(db);
@@ -24,9 +25,11 @@ export function createServices(db: Kysely<Database>) {
     const programService = new ProgramService(db);
     const planService = new PlanService(db);
     const goalService = new GoalService(db);
+    const dashboardService = new DashboardService(db);
     return {
         db, userService, invitationService, relationService,
         exerciseService, horseService, lessonService, noteService,
         trainingSessionService, programService, planService, goalService,
+        dashboardService,
     };
 }

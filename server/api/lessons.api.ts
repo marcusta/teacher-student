@@ -13,6 +13,10 @@ const CreateInput = Type.Object({
     planId: Type.Optional(Type.String({ minLength: 1 })),
 });
 
+const GetInput = Type.Object({
+    id: Type.String({ minLength: 1 }),
+});
+
 const AddExerciseInput = Type.Object({
     id: Type.String({ minLength: 1 }),
     exerciseId: Type.String({ minLength: 1 }),
@@ -68,6 +72,16 @@ export function createLessonsApi(svc: LessonService) {
             fn: async (c: Context) => {
                 const user = requireUser(c);
                 return svc.listForUser(user.id);
+            },
+        },
+        get: {
+            method: 'GET' as const,
+            path: '/lessons/:id',
+            schema: GetInput,
+            middleware: [requireAuth()],
+            fn: async (input: Static<typeof GetInput>, c: Context) => {
+                const user = requireUser(c);
+                return svc.getForUser(user.id, input.id);
             },
         },
         addExercise: {

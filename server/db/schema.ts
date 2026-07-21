@@ -33,6 +33,7 @@ export interface ProgramsTable {
     teacher_id: string;
     title: string;
     description: string;
+    archived_at: string | null;
     created_at: Generated<string>;
 }
 
@@ -171,6 +172,7 @@ export interface ExercisesTable {
     teacher_id: string;
     name: string;
     description: string;
+    archived_at: string | null;
     created_at: Generated<string>;
     updated_at: Generated<string>;
 }

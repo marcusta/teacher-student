@@ -7,6 +7,7 @@ export interface Exercise {
     teacherId: string;
     name: string;
     description: string;
+    archivedAt: string | null;
     createdAt: string;
     updatedAt: string;
 }
@@ -27,6 +28,7 @@ function toExercise(row: Selectable<ExercisesTable>): Exercise {
         teacherId: row.teacher_id,
         name: row.name,
         description: row.description,
+        archivedAt: row.archived_at,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
     };
@@ -52,11 +54,12 @@ export class ExerciseService {
             teacher_id: teacherId,
             name,
             description,
+            archived_at: null,
             created_at: now,
             updated_at: now,
         }).execute();
 
-        return { id, teacherId, name, description, createdAt: now, updatedAt: now };
+        return { id, teacherId, name, description, archivedAt: null, createdAt: now, updatedAt: now };
     }
 
     async getForTeacher(teacherId: string, exerciseId: string): Promise<Exercise | null> {
@@ -95,14 +98,34 @@ export class ExerciseService {
         return updated;
     }
 
-    async delete(teacherId: string, exerciseId: string): Promise<void> {
-        const rows = await this.db
-            .deleteFrom('exercises')
+    /**
+     * Archive an Exercise (soft-delete). Idempotent: archiving an
+     * already-archived exercise is a no-op success. Throws `NotFoundError`
+     * if the exercise does not exist or belongs to a different teacher
+     * (leak-safe).
+     *
+     * Deliberately not a hard delete: `lesson_exercise` /
+     * `training_session_exercise` junction rows carry the teacher's per-row
+     * `notes` and are the historical record of what was actually ridden. A
+     * cascade would destroy them, and would additionally strand rows in
+     * `notes` (which has no FK on `parent_id`) as unreachable orphans.
+     */
+    async archive(teacherId: string, exerciseId: string): Promise<void> {
+        const row = await this.db
+            .selectFrom('exercises')
+            .select(['archived_at'])
             .where('id', '=', exerciseId)
             .where('teacher_id', '=', teacherId)
-            .returning('id')
+            .executeTakeFirst();
+        if (!row) throw new NotFoundError('Exercise not found');
+        if (row.archived_at !== null) return; // idempotent
+
+        await this.db
+            .updateTable('exercises')
+            .set({ archived_at: new Date().toISOString() })
+            .where('id', '=', exerciseId)
+            .where('teacher_id', '=', teacherId)
             .execute();
-        if (rows.length === 0) throw new NotFoundError('Exercise not found');
     }
 
     async listForTeacher(teacherId: string): Promise<Exercise[]> {
@@ -110,6 +133,7 @@ export class ExerciseService {
             .selectFrom('exercises')
             .selectAll()
             .where('teacher_id', '=', teacherId)
+            .where('archived_at', 'is', null)
             .orderBy('created_at', 'desc')
             .execute();
         return rows.map(toExercise);
@@ -133,6 +157,7 @@ export class ExerciseService {
             .innerJoin('relations', 'relations.teacher_id', 'exercises.teacher_id')
             .selectAll('exercises')
             .where('relations.student_id', '=', studentId)
+            .where('exercises.archived_at', 'is', null)
             .orderBy('exercises.name', 'asc')
             .execute();
         return rows.map(toExercise);

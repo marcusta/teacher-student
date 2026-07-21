@@ -100,27 +100,44 @@ test('update rejects empty name when provided', async () => {
         .rejects.toThrow();
 });
 
-test('delete removes own exercise', async () => {
+test('archive stamps archived_at and hides the exercise from listForTeacher', async () => {
     const { exerciseService, teacher } = await seedTeacher();
     const ex = await exerciseService.create(teacher.id, { name: 'X' });
-    await exerciseService.delete(teacher.id, ex.id);
-    expect(await exerciseService.getForTeacher(teacher.id, ex.id)).toBeNull();
+    expect(ex.archivedAt).toBeNull();
+
+    await exerciseService.archive(teacher.id, ex.id);
+
+    expect(await exerciseService.listForTeacher(teacher.id)).toEqual([]);
+    // Still resolvable by id — junction rows and history must keep rendering.
+    const after = await exerciseService.getForTeacher(teacher.id, ex.id);
+    expect(after).not.toBeNull();
+    expect(after!.archivedAt).toBeString();
 });
 
-test('delete on other teacher\'s exercise throws NotFoundError', async () => {
+test('archive is idempotent and keeps the first timestamp', async () => {
+    const { exerciseService, teacher } = await seedTeacher();
+    const ex = await exerciseService.create(teacher.id, { name: 'X' });
+    await exerciseService.archive(teacher.id, ex.id);
+    const first = (await exerciseService.getForTeacher(teacher.id, ex.id))!.archivedAt;
+    await exerciseService.archive(teacher.id, ex.id);
+    const second = (await exerciseService.getForTeacher(teacher.id, ex.id))!.archivedAt;
+    expect(second).toBe(first);
+});
+
+test('archive on other teacher\'s exercise throws NotFoundError', async () => {
     const ctx = await seedTeacher('t1@example.com');
     const ex = await ctx.exerciseService.create(ctx.teacher.id, { name: 'X' });
     const t2 = await ctx.userService.register({
         email: 't2@example.com', password: 'secret123', displayName: 'T2',
     });
-    await expect(ctx.exerciseService.delete(t2.id, ex.id)).rejects.toThrow();
-    // Still exists for original owner.
-    expect(await ctx.exerciseService.getForTeacher(ctx.teacher.id, ex.id)).not.toBeNull();
+    await expect(ctx.exerciseService.archive(t2.id, ex.id)).rejects.toThrow();
+    // Still active for original owner.
+    expect(await ctx.exerciseService.listForTeacher(ctx.teacher.id)).toHaveLength(1);
 });
 
-test('delete on missing exercise throws NotFoundError', async () => {
+test('archive on missing exercise throws NotFoundError', async () => {
     const { exerciseService, teacher } = await seedTeacher();
-    await expect(exerciseService.delete(teacher.id, 'missing')).rejects.toThrow();
+    await expect(exerciseService.archive(teacher.id, 'missing')).rejects.toThrow();
 });
 
 // --- listForStudent (student-visible catalog from connected Teachers) ---
@@ -164,4 +181,15 @@ test('listForStudent returns exercises from connected teachers only, sorted by n
 
     const list = await ctx.exerciseService.listForStudent(ctx.student.id);
     expect(list.map((e) => e.id)).toEqual([exAlpha.id, exBravo.id]);
+});
+
+test('listForStudent hides archived exercises from a connected student', async () => {
+    const ctx = await seedStudent();
+    const teacher = await connectStudent(ctx, 't1@example.com');
+    const keep = await ctx.exerciseService.create(teacher.id, { name: 'Keep' });
+    const gone = await ctx.exerciseService.create(teacher.id, { name: 'Gone' });
+    await ctx.exerciseService.archive(teacher.id, gone.id);
+
+    const list = await ctx.exerciseService.listForStudent(ctx.student.id);
+    expect(list.map((e) => e.id)).toEqual([keep.id]);
 });

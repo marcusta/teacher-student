@@ -320,11 +320,134 @@ test('getDetail hydrates linked goals in status then created_at DESC order', asy
     expect(detail.goals.every((g) => g.id !== unattached.id)).toBe(true);
 });
 
-test('getDetail surfaces goals to connected teacher even when goal not individually shared', async () => {
+// DELIBERATE PRODUCT DECISION REVERSAL — do not "fix" this back.
+// This test previously asserted the opposite ('getDetail surfaces goals to
+// connected teacher even when goal not individually shared'). Plan membership
+// is not a sharing grant: leaking a Goal title here contradicted
+// GET /goals/:id, which refuses an unshared Goal to the same teacher.
+test('getDetail hides goals from a connected teacher unless individually shared', async () => {
     const ctx = await seedTeacherWithStudent();
     const plan = await ctx.planService.create(ctx.student.id, { title: 'Plan' });
     const g = await ctx.goalService.create(ctx.student.id, { title: 'Private goal' });
     await ctx.goalService.attachToPlan(ctx.student.id, g.id, plan.id);
     const detail = await ctx.planService.getDetail(ctx.teacher.id, plan.id);
-    expect(detail.goals.map((x) => x.id)).toEqual([g.id]);
+    expect(detail.goals).toEqual([]);
+});
+
+test('getDetail surfaces an individually shared goal to the connected teacher', async () => {
+    const ctx = await seedTeacherWithStudent();
+    const plan = await ctx.planService.create(ctx.student.id, { title: 'Plan' });
+    const shared = await ctx.goalService.create(ctx.student.id, { title: 'Shared goal' });
+    const private_ = await ctx.goalService.create(ctx.student.id, { title: 'Private goal' });
+    await ctx.goalService.attachToPlan(ctx.student.id, shared.id, plan.id);
+    await ctx.goalService.attachToPlan(ctx.student.id, private_.id, plan.id);
+    await ctx.goalService.share(ctx.student.id, shared.id, ctx.teacher.id);
+
+    const detail = await ctx.planService.getDetail(ctx.teacher.id, plan.id);
+    expect(detail.goals.map((x) => x.id)).toEqual([shared.id]);
+});
+
+test('getDetail still surfaces all own goals to the owning student', async () => {
+    const ctx = await seedTeacherWithStudent();
+    const plan = await ctx.planService.create(ctx.student.id, { title: 'Plan' });
+    const g1 = await ctx.goalService.create(ctx.student.id, { title: 'Unshared A' });
+    const g2 = await ctx.goalService.create(ctx.student.id, { title: 'Unshared B' });
+    await ctx.goalService.attachToPlan(ctx.student.id, g1.id, plan.id);
+    await ctx.goalService.attachToPlan(ctx.student.id, g2.id, plan.id);
+
+    const detail = await ctx.planService.getDetail(ctx.student.id, plan.id);
+    expect(detail.goals.map((x) => x.id).sort()).toEqual([g1.id, g2.id].sort());
+});
+
+// --- goal_share privacy filter: adversarial cases ---
+
+async function seedTwoTeachers() {
+    const ctx = await createTestDb();
+    const t1 = await ctx.userService.register({
+        email: 't1@example.com', password: 'secret123', displayName: 'T1',
+    });
+    const t2 = await ctx.userService.register({
+        email: 't2@example.com', password: 'secret123', displayName: 'T2',
+    });
+    const student = await ctx.userService.register({
+        email: 'advstudent@example.com', password: 'secret123', displayName: 'S',
+    });
+    for (const t of [t1, t2]) {
+        const inv = await ctx.invitationService.createInvitation(t.id, 'advstudent@example.com');
+        await ctx.invitationService.acceptInvitation(inv.id, student.id, 'advstudent@example.com');
+    }
+    return { ...ctx, t1, t2, student };
+}
+
+test('getDetail goal filter — goal shared with TWO teachers appears exactly once for each', async () => {
+    const ctx = await seedTwoTeachers();
+    const plan = await ctx.planService.create(ctx.student.id, { title: 'P' });
+    const g = await ctx.goalService.create(ctx.student.id, { title: 'G' });
+    await ctx.goalService.attachToPlan(ctx.student.id, g.id, plan.id);
+    await ctx.goalService.share(ctx.student.id, g.id, ctx.t1.id);
+    await ctx.goalService.share(ctx.student.id, g.id, ctx.t2.id);
+
+    const d1 = await ctx.planService.getDetail(ctx.t1.id, plan.id);
+    const d2 = await ctx.planService.getDetail(ctx.t2.id, plan.id);
+    expect(d1.goals.map((x) => x.id)).toEqual([g.id]);
+    expect(d2.goals.map((x) => x.id)).toEqual([g.id]);
+});
+
+test('getDetail goal filter — owner sees the goal exactly once even when shared with two teachers', async () => {
+    const ctx = await seedTwoTeachers();
+    const plan = await ctx.planService.create(ctx.student.id, { title: 'P' });
+    const g = await ctx.goalService.create(ctx.student.id, { title: 'G' });
+    await ctx.goalService.attachToPlan(ctx.student.id, g.id, plan.id);
+    await ctx.goalService.share(ctx.student.id, g.id, ctx.t1.id);
+    await ctx.goalService.share(ctx.student.id, g.id, ctx.t2.id);
+
+    const d = await ctx.planService.getDetail(ctx.student.id, plan.id);
+    expect(d.goals.map((x) => x.id)).toEqual([g.id]);
+});
+
+test('getDetail goal filter — teacher with share on A but not B sees only A', async () => {
+    const ctx = await seedTwoTeachers();
+    const plan = await ctx.planService.create(ctx.student.id, { title: 'P' });
+    const a = await ctx.goalService.create(ctx.student.id, { title: 'A' });
+    const b = await ctx.goalService.create(ctx.student.id, { title: 'B' });
+    await ctx.goalService.attachToPlan(ctx.student.id, a.id, plan.id);
+    await ctx.goalService.attachToPlan(ctx.student.id, b.id, plan.id);
+    await ctx.goalService.share(ctx.student.id, a.id, ctx.t1.id);
+
+    const d = await ctx.planService.getDetail(ctx.t1.id, plan.id);
+    expect(d.goals.map((x) => x.id)).toEqual([a.id]);
+});
+
+test('getDetail goal filter — goal shared then UNSHARED disappears again', async () => {
+    const ctx = await seedTwoTeachers();
+    const plan = await ctx.planService.create(ctx.student.id, { title: 'P' });
+    const g = await ctx.goalService.create(ctx.student.id, { title: 'G' });
+    await ctx.goalService.attachToPlan(ctx.student.id, g.id, plan.id);
+    await ctx.goalService.share(ctx.student.id, g.id, ctx.t1.id);
+    expect((await ctx.planService.getDetail(ctx.t1.id, plan.id)).goals).toHaveLength(1);
+
+    await ctx.goalService.unshare(ctx.student.id, g.id, ctx.t1.id);
+    expect((await ctx.planService.getDetail(ctx.t1.id, plan.id)).goals).toEqual([]);
+});
+
+test('getDetail goal filter — share to OTHER teacher does not leak to this teacher', async () => {
+    const ctx = await seedTwoTeachers();
+    const plan = await ctx.planService.create(ctx.student.id, { title: 'P' });
+    const g = await ctx.goalService.create(ctx.student.id, { title: 'G' });
+    await ctx.goalService.attachToPlan(ctx.student.id, g.id, plan.id);
+    await ctx.goalService.share(ctx.student.id, g.id, ctx.t2.id);
+
+    const d = await ctx.planService.getDetail(ctx.t1.id, plan.id);
+    expect(d.goals).toEqual([]);
+});
+
+test('getDetail goal filter — archived (completed) plan still applies the goal filter', async () => {
+    const ctx = await seedTwoTeachers();
+    const plan = await ctx.planService.create(ctx.student.id, { title: 'P' });
+    const g = await ctx.goalService.create(ctx.student.id, { title: 'G' });
+    await ctx.goalService.attachToPlan(ctx.student.id, g.id, plan.id);
+    await ctx.planService.archive(ctx.student.id, plan.id);
+
+    const d = await ctx.planService.getDetail(ctx.t1.id, plan.id);
+    expect(d.goals).toEqual([]);
 });

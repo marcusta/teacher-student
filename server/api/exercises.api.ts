@@ -66,13 +66,18 @@ export function createExercisesApi(svc: ExerciseService) {
                 return svc.update(user.id, id, patch);
             },
         },
+        // Semantic delete = archive (soft-delete). The HTTP verb is DELETE but
+        // nothing is removed: lesson_exercise / training_session_exercise rows
+        // are the historical record of what was actually ridden, and the Notes
+        // hanging off them have no FK to cascade through — a hard delete would
+        // silently orphan them. The exercise just leaves every picker.
         delete: {
             method: 'DELETE' as const,
             path: '/exercises/:id',
             middleware: [requireAuth()],
             fn: async (input: { id: string }, c: Context) => {
                 const user = requireUser(c);
-                await svc.delete(user.id, input.id);
+                await svc.archive(user.id, input.id);
                 return { ok: true };
             },
         },

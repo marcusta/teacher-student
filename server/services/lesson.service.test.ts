@@ -696,6 +696,49 @@ test('create with programId copies notes and sort_order verbatim into lesson_exe
     ]);
 });
 
+test('the static Row note is projected on listExercises, getForUser and listForUser', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    });
+
+    // Copied verbatim from program_exercise.notes — IA §3.8's static Row note.
+    const expected = [
+        { exerciseId: ctx.ex1.id, notes: 'lugnt' },
+        { exerciseId: ctx.ex2.id, notes: null },
+        { exerciseId: ctx.ex3.id, notes: 'sista' },
+    ];
+    const project = (refs: { exerciseId: string; notes: string | null }[]) =>
+        refs.map((r) => ({ exerciseId: r.exerciseId, notes: r.notes }));
+
+    expect(project(await ctx.lessonService.listExercises(ctx.teacher.id, lesson.id)))
+        .toEqual(expected);
+
+    const detail = await ctx.lessonService.getForUser(ctx.teacher.id, lesson.id);
+    expect(project(detail.exercises)).toEqual(expected);
+
+    // The Student sees the same instructional text on their own detail view.
+    const studentDetail = await ctx.lessonService.getForUser(ctx.student.id, lesson.id);
+    expect(project(studentDetail.exercises)).toEqual(expected);
+
+    const listed = (await ctx.lessonService.listForUser(ctx.teacher.id))
+        .find((l) => l.id === lesson.id)!;
+    expect(project(listed.exercises)).toEqual(expected);
+});
+
+test('an Exercise added free carries a null Row note', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    await ctx.lessonService.addExercise(ctx.teacher.id, lesson.id, ctx.ex1.id);
+    const refs = await ctx.lessonService.listExercises(ctx.teacher.id, lesson.id);
+    expect(refs.length).toBe(1);
+    expect(refs[0]!.notes).toBeNull();
+});
+
 test('attachProgram on empty lesson appends all program exercises in order', async () => {
     const ctx = await seedConnectedWithProgram();
     const lesson = await ctx.lessonService.create(ctx.teacher.id, {
@@ -979,4 +1022,288 @@ test('exerciseHistory note visibility matches NoteService.listFor', async () => 
     expect(teacherHistory[0]!.notes.map((n) => n.body)).toEqual([
         'teacher private', 'teacher shared',
     ]);
+});
+
+// --- getForUser (Lesson detail lookup) ---
+
+test('getForUser returns the LessonForUser shape for the teacher side', async () => {
+    const ctx = await seedConnected();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    const got = await ctx.lessonService.getForUser(ctx.teacher.id, lesson.id);
+    expect(got.id).toBe(lesson.id);
+    expect(got.role).toBe('teacher');
+    expect(got.counterpartyDisplayName).toBe('S');
+    expect(got.status).toBe('planned');
+});
+
+test('getForUser returns the student side with the teacher as counterparty', async () => {
+    const ctx = await seedConnected();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    const got = await ctx.lessonService.getForUser(ctx.student.id, lesson.id);
+    expect(got.role).toBe('student');
+    expect(got.counterpartyDisplayName).toBe('T');
+});
+
+test('getForUser hydrates horse, plan, exercises and programs like listForUser', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const plan = await ctx.planService.create(ctx.student.id, { title: 'Sommar' });
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+        planId: plan.id,
+    });
+    const horse = await ctx.horseService.create(ctx.student.id, { name: 'Bella' });
+    await ctx.lessonService.update(ctx.teacher.id, lesson.id, { horseId: horse.id });
+
+    const got = await ctx.lessonService.getForUser(ctx.teacher.id, lesson.id);
+    const fromList = (await ctx.lessonService.listForUser(ctx.teacher.id))
+        .find((l) => l.id === lesson.id)!;
+    expect(got).toEqual(fromList);
+    expect(got.horseName).toBe('Bella');
+    expect(got.planTitle).toBe('Sommar');
+    expect(got.programs.map((p) => p.id)).toEqual([ctx.program.id]);
+    expect(got.exercises.length).toBeGreaterThan(0);
+});
+
+test('getForUser throws NotFoundError for an outsider', async () => {
+    const { NotFoundError } = await import('@basics/core/server/auth');
+    const ctx = await seedConnected();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    const intruder = await ctx.userService.register({
+        email: 'intruder@example.com', password: 'secret123', displayName: 'I',
+    });
+    await expect(ctx.lessonService.getForUser(intruder.id, lesson.id))
+        .rejects.toBeInstanceOf(NotFoundError);
+});
+
+test('getForUser throws NotFoundError for a missing Lesson', async () => {
+    const { NotFoundError } = await import('@basics/core/server/auth');
+    const ctx = await seedConnected();
+    await expect(ctx.lessonService.getForUser(ctx.teacher.id, 'missing'))
+        .rejects.toBeInstanceOf(NotFoundError);
+});
+
+// --- terminal-state lock: structural mutations only ---
+//
+// A Completed/Cancelled Lesson is the historical record of what was actually
+// ridden, so the four mutations that rewrite its exercise/program set are
+// refused with ConflictError (409). `update`, `detachFromPlan` and Notes stay
+// open on purpose — corrections and post-hoc feedback need no reopen flow.
+
+async function seedTerminalLesson(target: 'completed' | 'cancelled') {
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    await ctx.lessonService.transition(ctx.teacher.id, lesson.id, target);
+    return { ...ctx, lesson };
+}
+
+for (const target of ['completed', 'cancelled'] as const) {
+    test(`addExercise on a ${target} Lesson throws ConflictError`, async () => {
+        const { ConflictError } = await import('@basics/core/server/auth');
+        const ctx = await seedTerminalLesson(target);
+        await expect(ctx.lessonService.addExercise(ctx.teacher.id, ctx.lesson.id, ctx.ex1.id))
+            .rejects.toBeInstanceOf(ConflictError);
+    });
+
+    test(`removeExercise on a ${target} Lesson throws ConflictError`, async () => {
+        const { ConflictError } = await import('@basics/core/server/auth');
+        const ctx = await seedTerminalLesson(target);
+        await expect(ctx.lessonService.removeExercise(ctx.teacher.id, ctx.lesson.id, ctx.ex1.id))
+            .rejects.toBeInstanceOf(ConflictError);
+    });
+
+    test(`attachProgram on a ${target} Lesson throws ConflictError`, async () => {
+        const { ConflictError } = await import('@basics/core/server/auth');
+        const ctx = await seedTerminalLesson(target);
+        await expect(ctx.lessonService.attachProgram(ctx.teacher.id, ctx.lesson.id, ctx.program.id))
+            .rejects.toBeInstanceOf(ConflictError);
+    });
+
+    test(`detachProgram on a ${target} Lesson throws ConflictError`, async () => {
+        const { ConflictError } = await import('@basics/core/server/auth');
+        const ctx = await seedTerminalLesson(target);
+        await expect(ctx.lessonService.detachProgram(ctx.teacher.id, ctx.lesson.id, ctx.program.id))
+            .rejects.toBeInstanceOf(ConflictError);
+    });
+}
+
+test('attachProgram on a completed Lesson does not copy exercise rows in', async () => {
+    const ctx = await seedTerminalLesson('completed');
+    const before = await ctx.lessonService.listExercises(ctx.teacher.id, ctx.lesson.id);
+    await expect(ctx.lessonService.attachProgram(ctx.teacher.id, ctx.lesson.id, ctx.program.id))
+        .rejects.toThrow();
+    const after = await ctx.lessonService.listExercises(ctx.teacher.id, ctx.lesson.id);
+    expect(after).toEqual(before);
+});
+
+test('the terminal lock does not apply to a planned Lesson', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    await ctx.lessonService.addExercise(ctx.teacher.id, lesson.id, ctx.ex1.id);
+    await ctx.lessonService.attachProgram(ctx.teacher.id, lesson.id, ctx.program.id);
+    await ctx.lessonService.detachProgram(ctx.teacher.id, lesson.id, ctx.program.id);
+    await ctx.lessonService.removeExercise(ctx.teacher.id, lesson.id, ctx.ex1.id);
+    const refs = await ctx.lessonService.listExercises(ctx.teacher.id, lesson.id);
+    expect(refs.every((r) => r.exerciseId !== ctx.ex1.id)).toBe(true);
+});
+
+test('update still reschedules a completed Lesson (corrections stay open)', async () => {
+    const ctx = await seedTerminalLesson('completed');
+    const moved = await ctx.lessonService.update(ctx.teacher.id, ctx.lesson.id, {
+        scheduledAt: '2026-06-02T11:00:00.000Z',
+    });
+    expect(moved.scheduledAt).toBe('2026-06-02T11:00:00.000Z');
+    expect(moved.status).toBe('completed');
+});
+
+test('update still swaps the horse on a cancelled Lesson', async () => {
+    const ctx = await seedTerminalLesson('cancelled');
+    const horse = await ctx.horseService.create(ctx.student.id, { name: 'Bella' });
+    const updated = await ctx.lessonService.update(ctx.teacher.id, ctx.lesson.id, {
+        horseId: horse.id,
+    });
+    expect(updated.horseId).toBe(horse.id);
+});
+
+test('update still links and detachFromPlan still unlinks a completed Lesson', async () => {
+    const ctx = await seedTerminalLesson('completed');
+    const plan = await ctx.planService.create(ctx.student.id, { title: 'Sommar' });
+    const linked = await ctx.lessonService.update(ctx.teacher.id, ctx.lesson.id, {
+        planId: plan.id,
+    });
+    expect(linked.planId).toBe(plan.id);
+
+    const detached = await ctx.lessonService.detachFromPlan(ctx.teacher.id, ctx.lesson.id);
+    expect(detached.planId).toBeNull();
+});
+
+test('Notes stay open on a completed Lesson (the core feedback loop)', async () => {
+    const ctx = await seedTerminalLesson('completed');
+    const note = await ctx.noteService.create(ctx.teacher.id, {
+        parentKind: 'lesson', parentId: ctx.lesson.id,
+        body: 'Bra ridning!', visibility: 'shared',
+    });
+    expect(note.id).toBeString();
+    const notes = await ctx.noteService.listFor(ctx.student.id, {
+        parentKind: 'lesson', parentId: ctx.lesson.id,
+    });
+    expect(notes.map((n) => n.body)).toEqual(['Bra ridning!']);
+});
+
+// --- archived Exercises / Programs as attach targets (soft-delete) ---
+
+test('addExercise rejects an archived Exercise', async () => {
+    const { NotFoundError } = await import('@basics/core/server/auth');
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    await ctx.exerciseService.archive(ctx.teacher.id, ctx.ex1.id);
+    await expect(ctx.lessonService.addExercise(ctx.teacher.id, lesson.id, ctx.ex1.id))
+        .rejects.toBeInstanceOf(NotFoundError);
+});
+
+test('attachProgram rejects an archived Program', async () => {
+    const { NotFoundError } = await import('@basics/core/server/auth');
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    await ctx.programService.archive(ctx.teacher.id, ctx.program.id);
+    await expect(ctx.lessonService.attachProgram(ctx.teacher.id, lesson.id, ctx.program.id))
+        .rejects.toBeInstanceOf(NotFoundError);
+});
+
+test('create rejects an archived Program as the snapshot source', async () => {
+    const { NotFoundError } = await import('@basics/core/server/auth');
+    const ctx = await seedConnectedWithProgram();
+    await ctx.programService.archive(ctx.teacher.id, ctx.program.id);
+    await expect(ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    })).rejects.toBeInstanceOf(NotFoundError);
+});
+
+test('archiving an Exercise keeps existing lesson_exercise rows resolving', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id, scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    await ctx.lessonService.addExercise(ctx.teacher.id, lesson.id, ctx.ex1.id);
+    await ctx.exerciseService.archive(ctx.teacher.id, ctx.ex1.id);
+
+    // exercisesByLesson inner-joins `exercises` by id, not by archived state.
+    const refs = await ctx.lessonService.listExercises(ctx.teacher.id, lesson.id);
+    expect(refs.map((r) => r.exerciseId)).toEqual([ctx.ex1.id]);
+    expect(refs[0]!.name).toBe('Skritt');
+    expect((await ctx.lessonService.getForUser(ctx.teacher.id, lesson.id)).exercises)
+        .toHaveLength(1);
+});
+
+test('exerciseHistory still resolves sourceProgramTitle for an archived Program', async () => {
+    const ctx = await seedConnectedWithProgram();
+    await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    });
+    await ctx.programService.archive(ctx.teacher.id, ctx.program.id);
+
+    const history = await ctx.lessonService.exerciseHistory(
+        ctx.teacher.id, ctx.student.id, ctx.ex1.id,
+    );
+    expect(history).toHaveLength(1);
+    expect(history[0]!.sourceProgramId).toBe(ctx.program.id);
+    // Preserving this label is the entire point of archiving instead of deleting.
+    expect(history[0]!.sourceProgramTitle).toBe('Uppvärmning');
+});
+
+// --- archived Exercises must not re-enter via a Program snapshot ---
+// `addExercise` refuses an archived Exercise directly; the Program copy paths
+// must agree, or archiving would be trivially bypassable.
+
+test('create with programId skips Exercises archived since the Program was built', async () => {
+    const ctx = await seedConnectedWithProgram();
+    await ctx.exerciseService.archive(ctx.teacher.id, ctx.ex2.id);
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    });
+    expect(lesson.exercises.map((e) => e.name)).toEqual(['Skritt', 'Galopp']);
+});
+
+test('attachProgram skips archived Exercises', async () => {
+    const ctx = await seedConnectedWithProgram();
+    await ctx.exerciseService.archive(ctx.teacher.id, ctx.ex1.id);
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+    });
+    const after = await ctx.lessonService.attachProgram(ctx.teacher.id, lesson.id, ctx.program.id);
+    expect(after.exercises.map((e) => e.name)).toEqual(['Trav', 'Galopp']);
+});
+
+test('archiving an Exercise does not remove it from Lessons that already used it', async () => {
+    const ctx = await seedConnectedWithProgram();
+    const lesson = await ctx.lessonService.create(ctx.teacher.id, {
+        studentId: ctx.student.id,
+        scheduledAt: '2026-06-01T10:00:00.000Z',
+        programId: ctx.program.id,
+    });
+    await ctx.exerciseService.archive(ctx.teacher.id, ctx.ex2.id);
+    const reloaded = await ctx.lessonService.getForUser(ctx.teacher.id, lesson.id);
+    expect(reloaded.exercises.map((e) => e.name)).toEqual(['Skritt', 'Trav', 'Galopp']);
 });

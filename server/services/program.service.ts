@@ -7,6 +7,7 @@ export interface Program {
     teacherId: string;
     title: string;
     description: string;
+    archivedAt: string | null;
     createdAt: string;
 }
 
@@ -26,6 +27,19 @@ export interface ProgramExerciseRef {
     description: string;
     sortOrder: number;
     notes: string | null;
+    /**
+     * Archive stamp of the underlying Exercise, or null while it is live.
+     *
+     * `listExercises` deliberately does NOT filter archived Exercises out — a
+     * Program keeps its sequence when a Teacher retires an Exercise, and the
+     * builder marks the row rather than dropping it. The builder used to infer
+     * that state from the row's ABSENCE from `GET /exercises`, which is exact
+     * only while that endpoint returns the whole library unpaginated. IA §4
+     * warns against assuming lists stay small; the day it grows a page limit,
+     * every Exercise past page one would silently read as archived. Stating the
+     * fact on the row it belongs to costs one column on a join we already make.
+     */
+    archivedAt: string | null;
 }
 
 export interface AddProgramExerciseInput {
@@ -38,6 +52,7 @@ function toProgram(row: Selectable<ProgramsTable>): Program {
         teacherId: row.teacher_id,
         title: row.title,
         description: row.description,
+        archivedAt: row.archived_at,
         createdAt: row.created_at,
     };
 }
@@ -64,10 +79,11 @@ export class ProgramService {
             teacher_id: teacherId,
             title,
             description,
+            archived_at: null,
             created_at: now,
         }).execute();
 
-        return { id, teacherId, title, description, createdAt: now };
+        return { id, teacherId, title, description, archivedAt: null, createdAt: now };
     }
 
     async listForTeacher(teacherId: string): Promise<Program[]> {
@@ -75,6 +91,7 @@ export class ProgramService {
             .selectFrom('programs')
             .selectAll()
             .where('teacher_id', '=', teacherId)
+            .where('archived_at', 'is', null)
             .orderBy('created_at', 'desc')
             .execute();
         return rows.map(toProgram);
@@ -97,6 +114,7 @@ export class ProgramService {
             .innerJoin('relations', 'relations.teacher_id', 'programs.teacher_id')
             .selectAll('programs')
             .where('relations.student_id', '=', studentId)
+            .where('programs.archived_at', 'is', null)
             .orderBy('programs.created_at', 'desc')
             .execute();
         return rows.map(toProgram);
@@ -137,14 +155,34 @@ export class ProgramService {
         return updated;
     }
 
-    async delete(teacherId: string, programId: string): Promise<void> {
-        const rows = await this.db
-            .deleteFrom('programs')
+    /**
+     * Archive a Program (soft-delete). Idempotent: archiving an
+     * already-archived program is a no-op success. Throws `NotFoundError`
+     * if the program does not exist or belongs to a different teacher
+     * (leak-safe).
+     *
+     * Deliberately not a hard delete: a cascade would drop the
+     * `lesson_program` / `training_session_program` junction rows and null
+     * out `lesson_exercise.source_program_id`, so past Lessons would lose
+     * their "from program X" provenance label. Archiving keeps the row
+     * resolvable by id while hiding it from every picker.
+     */
+    async archive(teacherId: string, programId: string): Promise<void> {
+        const row = await this.db
+            .selectFrom('programs')
+            .select(['archived_at'])
             .where('id', '=', programId)
             .where('teacher_id', '=', teacherId)
-            .returning('id')
+            .executeTakeFirst();
+        if (!row) throw new NotFoundError('Program not found');
+        if (row.archived_at !== null) return; // idempotent
+
+        await this.db
+            .updateTable('programs')
+            .set({ archived_at: new Date().toISOString() })
+            .where('id', '=', programId)
+            .where('teacher_id', '=', teacherId)
             .execute();
-        if (rows.length === 0) throw new NotFoundError('Program not found');
     }
 
     /**
@@ -172,10 +210,10 @@ export class ProgramService {
         }
         const exercise = await this.db
             .selectFrom('exercises')
-            .select(['id', 'teacher_id'])
+            .select(['id', 'teacher_id', 'archived_at'])
             .where('id', '=', exerciseId)
             .executeTakeFirst();
-        if (!exercise || exercise.teacher_id !== teacherId) {
+        if (!exercise || exercise.teacher_id !== teacherId || exercise.archived_at !== null) {
             throw new NotFoundError('Exercise not found');
         }
 
@@ -254,6 +292,56 @@ export class ProgramService {
     }
 
     /**
+     * Rewrite one row's instructional note (IA §3.6 detail step 3).
+     *
+     * The note was write-once until now: `addExercise` took it and nothing
+     * edited it, so the builder rendered it read-only and a typo could only be
+     * corrected by removing the row and adding it back — which loses both the
+     * note and the row's position. This closes that.
+     *
+     * The note lives on the junction, not the Exercise: it is what THIS Program
+     * says about the exercise, and two Programs may say different things about
+     * the same one.
+     *
+     * Blank (or whitespace-only) clears it back to null, matching `addExercise`
+     * — there is no distinction between "no note" and "an empty note", and
+     * storing `''` would make the row render an empty note block forever.
+     *
+     * A missing junction row is NotFoundError rather than a silent no-op: unlike
+     * `removeExercise`, an edit that lands nowhere has no idempotent reading —
+     * the caller believes they saved text and nothing holds it.
+     */
+    async updateExerciseNotes(
+        teacherId: string,
+        programId: string,
+        exerciseId: string,
+        notes: string | null,
+    ): Promise<void> {
+        const program = await this.db
+            .selectFrom('programs')
+            .select(['id', 'teacher_id'])
+            .where('id', '=', programId)
+            .executeTakeFirst();
+        if (!program || program.teacher_id !== teacherId) {
+            throw new NotFoundError('Program not found');
+        }
+        const row = await this.db
+            .selectFrom('program_exercise')
+            .select('exercise_id')
+            .where('program_id', '=', programId)
+            .where('exercise_id', '=', exerciseId)
+            .executeTakeFirst();
+        if (!row) throw new NotFoundError('Exercise not found in this Program');
+
+        const trimmed = notes === null ? null : notes.trim();
+        await this.db.updateTable('program_exercise')
+            .set({ notes: trimmed && trimmed.length > 0 ? trimmed : null })
+            .where('program_id', '=', programId)
+            .where('exercise_id', '=', exerciseId)
+            .execute();
+    }
+
+    /**
      * Remove an Exercise from a Program. Idempotent: silently no-ops if the
      * junction row doesn't exist (mirrors LessonService.removeExercise).
      * Cross-teacher Program → NotFoundError.
@@ -299,6 +387,7 @@ export class ProgramService {
                 'exercises.description as description',
                 'program_exercise.sort_order as sort_order',
                 'program_exercise.notes as notes',
+                'exercises.archived_at as archived_at',
             ])
             .where('program_exercise.program_id', '=', programId)
             .orderBy('program_exercise.sort_order', 'asc')
@@ -309,6 +398,7 @@ export class ProgramService {
             description: r.description,
             sortOrder: r.sort_order,
             notes: r.notes,
+            archivedAt: r.archived_at,
         }));
     }
 }

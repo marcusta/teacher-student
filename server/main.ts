@@ -1,6 +1,6 @@
 import * as path from 'node:path';
+import { serveStatic } from 'hono/bun';
 import type { Database } from './db/schema';
-import { config } from '@basics/core/server/config';
 import { createApp } from '@basics/core/server/app';
 import { mount } from '@basics/core/server/mount';
 import { log } from '@basics/core/server/logger';
@@ -17,6 +17,7 @@ import { createTeachersApi } from './api/teachers.api';
 import { createProgramsApi } from './api/programs.api';
 import { createPlansApi } from './api/plans.api';
 import { createGoalsApi } from './api/goals.api';
+import { createDashboardApi } from './api/dashboard.api';
 
 // --- Composition root ---
 
@@ -26,6 +27,7 @@ const {
     userService, invitationService, relationService,
     exerciseService, horseService, lessonService, noteService,
     trainingSessionService, programService, planService, goalService,
+    dashboardService,
 } = createServices(db);
 
 const { sessions } = await bootstrapAuth({
@@ -49,6 +51,15 @@ mount(app, '/api', createTeachersApi(relationService));
 mount(app, '/api', createProgramsApi(programService));
 mount(app, '/api', createPlansApi(planService));
 mount(app, '/api', createGoalsApi(goalService));
+mount(app, '/api', createDashboardApi(dashboardService));
+
+// --- Static client ---
+
+// Serve the Vite-built SPA from ./public (committed to git, no build step on
+// the server). Registered after the /api routes so they take precedence; any
+// other path falls through to index.html for client-side routing.
+app.use('/*', serveStatic({ root: './public' }));
+app.get('/*', serveStatic({ path: './public/index.html' }));
 
 // --- Dev seed ---
 
@@ -67,6 +78,11 @@ if (process.env.NODE_ENV !== 'production') {
 
 // --- Start ---
 
-export default { port: config.port, fetch: app.fetch };
+// Default to 4810 (this service's assigned sig-infra port) when PORT is unset,
+// instead of the framework's shared 3000 default — the systemd unit sets only
+// NODE_ENV. `bun run dev:server` still overrides via PORT.
+const port = Number(process.env.PORT ?? 4810);
 
-log.info({ msg: 'server started', port: config.port });
+export default { port, fetch: app.fetch };
+
+log.info({ msg: 'server started', port });

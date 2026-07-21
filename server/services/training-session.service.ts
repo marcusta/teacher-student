@@ -10,6 +10,12 @@ export interface TrainingSessionExerciseRef {
     name: string;
     sortOrder: number;
     sourceProgramId: string | null;
+    /**
+     * Static Row note copied verbatim from `program_exercise.notes` at snapshot
+     * time (IA §3.10). Null when added free or when the source row had none.
+     * This is instructional text, not the Note thread — that hangs off `id`.
+     */
+    notes: string | null;
 }
 
 export interface AttachedProgramRef {
@@ -27,6 +33,10 @@ export interface TrainingSession {
     horseName: string | null;
     planId: string | null;
     planTitle: string | null;
+    /**
+     * The share set **as this viewer may know it** — see `visibleShareIds`.
+     * The owner gets the whole audience; a shared Teacher gets only themselves.
+     */
     sharedWithTeacherIds: string[];
     exercises: TrainingSessionExerciseRef[];
     programs: AttachedProgramRef[];
@@ -71,6 +81,36 @@ interface TrainingSessionRow {
     plan_title: string | null;
     created_at: string;
     updated_at: string;
+}
+
+/**
+ * The share set scoped to what a given viewer is entitled to know (IA §3.14).
+ *
+ * §3.10 gives a shared Teacher read access to the Session. It does not give them
+ * the audience: who *else* a Student trusts with their practice log is the
+ * Student's business, and §3.14 states the principle outright for Goals — read
+ * the object without seeing the co-watchers. The full list on the wire leaked
+ * exactly that, to every shared Teacher, on every read.
+ *
+ * The owner keeps the full list: they manage sharing, and the detail view seeds
+ * its multi-select straight from this field.
+ *
+ * A shared Teacher gets **themselves, and nothing else** — not an empty array.
+ * The distinction is not cosmetic. `ShareChipComponent` is driven by
+ * `shared: sharedWithTeacherIds.length > 0`, so `[]` would render a session that
+ * demonstrably IS shared as unshared to the very Teacher it was shared with —
+ * trading a privacy leak for a false statement on the trust surface. One id is
+ * also all the client can use: `sharedTeacherRecipients` already names only the
+ * viewer and pushes every other id behind an unnamed `+N`, so scoping here just
+ * makes the `+N` truthfully zero.
+ *
+ * The filter (rather than a bare `[viewerId]`) keeps it honest: a viewer who is
+ * not in the set gets nothing, which is what a non-shared reader would deserve
+ * if one ever reached this far past the read gate.
+ */
+export function visibleShareIds(shareIds: string[], ownerId: string, viewerId: string): string[] {
+    if (viewerId === ownerId) return shareIds;
+    return shareIds.filter((id) => id === viewerId);
 }
 
 function assertIsoDate(value: string): string {
@@ -119,11 +159,19 @@ export class TrainingSessionService {
         if (input.programId !== undefined) {
             await this.assertProgramVisibleToStudent(studentId, input.programId);
             programId = input.programId;
+            // Archived Exercises are skipped: `addExercise` refuses them
+            // directly, so a Program snapshot must not smuggle them back in.
             programRows = await this.db
                 .selectFrom('program_exercise')
-                .select(['exercise_id', 'sort_order', 'notes'])
-                .where('program_id', '=', programId)
-                .orderBy('sort_order', 'asc')
+                .innerJoin('exercises', 'exercises.id', 'program_exercise.exercise_id')
+                .select([
+                    'program_exercise.exercise_id as exercise_id',
+                    'program_exercise.sort_order as sort_order',
+                    'program_exercise.notes as notes',
+                ])
+                .where('program_exercise.program_id', '=', programId)
+                .where('exercises.archived_at', 'is', null)
+                .orderBy('program_exercise.sort_order', 'asc')
                 .execute();
         }
 
@@ -161,10 +209,23 @@ export class TrainingSessionService {
                     await tx.insertInto('training_session_exercise').values(toInsert).execute();
                 }
             }
-        });
-        await this.writeShares(id, shareIds);
 
-        return this.loadOne(id);
+            // The shares belong INSIDE the transaction. Creation is a single call
+            // precisely so the client can report one honest outcome, and a
+            // session that committed without its share rows would be a partial
+            // success reported as a plain one — private when the Student asked
+            // for it to be shared, with nothing to tell them so.
+            if (shareIds.length > 0) {
+                await tx.insertInto('training_session_share').values(
+                    shareIds.map((teacherId) => ({
+                        training_session_id: id,
+                        teacher_id: teacherId,
+                    })),
+                ).execute();
+            }
+        });
+
+        return this.loadOne(id, studentId);
     }
 
     async listForStudent(studentId: string): Promise<TrainingSession[]> {
@@ -196,6 +257,7 @@ export class TrainingSessionService {
             sharesByTs.get(r.id) ?? [],
             exByTs.get(r.id) ?? [],
             progByTs.get(r.id) ?? [],
+            studentId,
         ));
     }
 
@@ -244,6 +306,7 @@ export class TrainingSessionService {
             sharesByTs.get(r.id) ?? [],
             exByTs.get(r.id) ?? [],
             progByTs.get(r.id) ?? [],
+            teacherId,
         ));
     }
 
@@ -259,7 +322,7 @@ export class TrainingSessionService {
             .where('id', '=', sessionId)
             .executeTakeFirst();
         if (!ts) throw new NotFoundError('Training Session not found');
-        if (ts.student_id === userId) return this.loadOne(sessionId);
+        if (ts.student_id === userId) return this.loadOne(sessionId, userId);
 
         const share = await this.db
             .selectFrom('training_session_share')
@@ -268,7 +331,7 @@ export class TrainingSessionService {
             .where('teacher_id', '=', userId)
             .executeTakeFirst();
         if (!share) throw new NotFoundError('Training Session not found');
-        return this.loadOne(sessionId);
+        return this.loadOne(sessionId, userId);
     }
 
     async update(
@@ -318,7 +381,7 @@ export class TrainingSessionService {
             await this.writeShares(sessionId, shareIds);
         }
 
-        return this.loadOne(sessionId);
+        return this.loadOne(sessionId, studentId);
     }
 
     /**
@@ -332,13 +395,13 @@ export class TrainingSessionService {
             .select(['plan_id'])
             .where('id', '=', sessionId)
             .executeTakeFirstOrThrow();
-        if (row.plan_id === null) return this.loadOne(sessionId);
+        if (row.plan_id === null) return this.loadOne(sessionId, actorId);
 
         await this.db.updateTable('training_sessions')
             .set({ plan_id: null, updated_at: new Date().toISOString() })
             .where('id', '=', sessionId)
             .execute();
-        return this.loadOne(sessionId);
+        return this.loadOne(sessionId, actorId);
     }
 
     async delete(studentId: string, sessionId: string): Promise<void> {
@@ -421,11 +484,18 @@ export class TrainingSessionService {
         const ts = await this.assertTrainingSessionOwner(actorId, sessionId);
         await this.assertProgramVisibleToStudent(ts.student_id, programId);
 
+        // Archived Exercises are skipped — see TrainingSessionService.create.
         const programRows = await this.db
             .selectFrom('program_exercise')
-            .select(['exercise_id', 'sort_order', 'notes'])
-            .where('program_id', '=', programId)
-            .orderBy('sort_order', 'asc')
+            .innerJoin('exercises', 'exercises.id', 'program_exercise.exercise_id')
+            .select([
+                'program_exercise.exercise_id as exercise_id',
+                'program_exercise.sort_order as sort_order',
+                'program_exercise.notes as notes',
+            ])
+            .where('program_exercise.program_id', '=', programId)
+            .where('exercises.archived_at', 'is', null)
+            .orderBy('program_exercise.sort_order', 'asc')
             .execute();
 
         const existing = await this.db
@@ -467,7 +537,7 @@ export class TrainingSessionService {
             }
         });
 
-        return this.loadOne(sessionId);
+        return this.loadOne(sessionId, actorId);
     }
 
     /**
@@ -480,10 +550,10 @@ export class TrainingSessionService {
             .where('training_session_id', '=', sessionId)
             .where('program_id', '=', programId)
             .execute();
-        return this.loadOne(sessionId);
+        return this.loadOne(sessionId, actorId);
     }
 
-    private async loadOne(sessionId: string): Promise<TrainingSession> {
+    private async loadOne(sessionId: string, viewerId: string): Promise<TrainingSession> {
         const row = await this.db
             .selectFrom('training_sessions')
             .leftJoin('horses', 'horses.id', 'training_sessions.horse_id')
@@ -511,6 +581,7 @@ export class TrainingSessionService {
             shares.get(sessionId) ?? [],
             exMap.get(sessionId) ?? [],
             progMap.get(sessionId) ?? [],
+            viewerId,
         );
     }
 
@@ -562,6 +633,7 @@ export class TrainingSessionService {
             .select('exercises.id')
             .where('relations.student_id', '=', studentId)
             .where('exercises.id', '=', exerciseId)
+            .where('exercises.archived_at', 'is', null)
             .executeTakeFirst();
         if (!row) throw new NotFoundError('Exercise not found');
     }
@@ -576,6 +648,7 @@ export class TrainingSessionService {
             .select('programs.id')
             .where('relations.student_id', '=', studentId)
             .where('programs.id', '=', programId)
+            .where('programs.archived_at', 'is', null)
             .executeTakeFirst();
         if (!row) throw new NotFoundError('Program not found');
     }
@@ -598,6 +671,8 @@ export class TrainingSessionService {
         shareIds: string[],
         exercises: TrainingSessionExerciseRef[],
         programs: AttachedProgramRef[],
+        /** Who is reading. Scopes the audience — see `visibleShareIds`. */
+        viewerId: string,
     ): TrainingSession {
         return {
             id: row.id,
@@ -609,7 +684,7 @@ export class TrainingSessionService {
             horseName: row.horse_name,
             planId: row.plan_id,
             planTitle: row.plan_title,
-            sharedWithTeacherIds: shareIds,
+            sharedWithTeacherIds: visibleShareIds(shareIds, row.student_id, viewerId),
             exercises,
             programs,
             createdAt: row.created_at,
@@ -699,6 +774,7 @@ export class TrainingSessionService {
                 'training_session_exercise.training_session_id as training_session_id',
                 'training_session_exercise.sort_order as sort_order',
                 'training_session_exercise.source_program_id as source_program_id',
+                'training_session_exercise.notes as notes',
                 'exercises.id as exercise_id',
                 'exercises.name as name',
             ])
@@ -714,6 +790,7 @@ export class TrainingSessionService {
                 name: r.name,
                 sortOrder: r.sort_order,
                 sourceProgramId: r.source_program_id,
+                notes: r.notes,
             });
             out.set(r.training_session_id, list);
         }

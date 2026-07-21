@@ -41,6 +41,7 @@ export interface LessonExerciseRef {
     name: string;
     sortOrder: number;
     sourceProgramId: null | string;
+    notes: null | string;
 }
 
 export interface AttachedProgramRef {
@@ -51,6 +52,7 @@ export interface AttachedProgramRef {
 export interface LessonsApi {
     create(input: { planId?: string; programId?: string; studentId: string; scheduledAt: string }): Promise<Lesson>;
     list(): Promise<LessonForUser[]>;
+    get(input: { id: string }): Promise<LessonForUser>;
     addExercise(input: { id: string; exerciseId: string }): Promise<LessonExerciseRef[]>;
     removeExercise(input: { id: string; exerciseId: string }): Promise<LessonExerciseRef[]>;
     listExercises(input: { id: string }): Promise<LessonExerciseRef[]>;
@@ -67,6 +69,14 @@ export function createLessonsClient(baseUrl: string): LessonsApi {
         },
         async list() {
             return apiFetch({ method: 'GET', url: `${baseUrl}/lessons` });
+        },
+        async get(input) {
+            const pathParams = new Set(['id']);
+            const params = new URLSearchParams();
+            for (const [k, v] of Object.entries(input as any))
+                if (!pathParams.has(k) && v !== undefined) params.set(k, String(v));
+            const qs = params.toString();
+            return apiFetch({ method: 'GET', url: `${baseUrl}/lessons/${input.id}${qs ? '?' + qs : ''}` });
         },
         async addExercise(input) {
             const pathParams = new Set(['id']);
