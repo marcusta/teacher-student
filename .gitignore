@@ -3,3 +3,14 @@ data/
 dist/
 *.log
 .DS_Store
+deploy-tmp/
+
+# Per-machine tool state, not project config. .claude/launch.json IS shared.
+.claude/settings.local.json
+
+# Raw paste dumps from design handoff — the extracted files are what we keep.
+ui-design/**/*.zip
+ui-design/*.zip
+
+# NOTE: ./public is the committed Vite build output (see vite.config.ts) —
+# the deploy runs no build step, so it must stay tracked.
