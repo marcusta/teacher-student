@@ -52,7 +52,7 @@ targets:
         # Signing team for on-device installs. Lives here rather than being
         # picked in Xcode's UI: the .xcodeproj is GENERATED, so a team chosen
         # there is wiped by the next `xcodegen generate`.
-        DEVELOPMENT_TEAM: JU92JDT36J
+        DEVELOPMENT_TEAM: AC979WJ4JA
         SWIFT_EMIT_LOC_STRINGS: NO
 
     # Info.plist contents live here, in the project definition; the plist file
