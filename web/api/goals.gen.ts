@@ -9,6 +9,8 @@ export interface Goal {
     targetDate: null | string;
     achievedAt: null | string;
     status: 'active' | 'achieved' | 'abandoned';
+    horseId: null | string;
+    horseName: null | string;
     sharedTeacherIds: string[];
     planIds: string[];
     createdAt: string;
@@ -23,6 +25,8 @@ export interface GoalTeacherView {
     targetDate: null | string;
     achievedAt: null | string;
     status: 'active' | 'achieved' | 'abandoned';
+    horseId: null | string;
+    horseName: null | string;
     planIds: string[];
     createdAt: string;
     updatedAt: string;
@@ -34,10 +38,10 @@ export interface SharedTeacherRef {
 }
 
 export interface GoalsApi {
-    create(input: { description?: string; targetDate?: string; title: string }): Promise<Goal>;
+    create(input: { description?: string; horseId?: null | string; targetDate?: string; title: string }): Promise<Goal>;
     list(): Promise<Goal[]>;
     get(input: { id: string }): Promise<GoalTeacherView>;
-    update(input: { title?: string; description?: null | string; targetDate?: null | string; id: string }): Promise<Goal>;
+    update(input: { title?: string; description?: null | string; horseId?: null | string; targetDate?: null | string; id: string }): Promise<Goal>;
     abandon(input: { id: string }): Promise<{ ok: true }>;
     achieve(input: { id: string }): Promise<{ ok: true }>;
     reopen(input: { id: string }): Promise<{ ok: true }>;

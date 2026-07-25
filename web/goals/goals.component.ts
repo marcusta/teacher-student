@@ -408,6 +408,9 @@ export class GoalsComponent extends Component {
 
         const meta = document.createElement('span');
         meta.className = 'goal-row__meta';
+        // The horse comes first: "spring med Saga" and the same words about
+        // another horse are different goals, and the row has to say which.
+        if (goal.horseName) meta.appendChild(metaPart(t('goal.meta.horse', { name: goal.horseName })));
         const target = targetDateLabel(goal.targetDate);
         if (target) meta.appendChild(metaPart(target));
         if (isOverdue(goal, this.today.get())) {

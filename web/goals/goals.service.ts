@@ -57,6 +57,7 @@ export class GoalsService {
         title: string;
         description?: string;
         targetDate?: string;
+        horseId?: string;
     }): Promise<Goal | null> {
         const result = await request(this.loading, this.error, () => api.goals.create(input));
         if (!result) return null;
@@ -68,6 +69,7 @@ export class GoalsService {
         title?: string;
         description?: string | null;
         targetDate?: string | null;
+        horseId?: string | null;
     }): Promise<Goal | null> {
         const result = await request(this.loading, this.error, () => api.goals.update({ id, ...patch }));
         if (!result) return null;

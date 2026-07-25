@@ -87,3 +87,9 @@ Handoff for implementers: [HANDOFF-035-038.md](HANDOFF-035-038.md)
 
 Read contract is frozen before implementation, per IA §6: the Dashboard slice ships "only after its
 read contract is fixed".
+
+### Group F — Goal ↔ Horse
+
+| # | Titel | Type | Blocked by |
+|---|-------|------|------------|
+| [049](049-goal-horse-link.md) | Goal links to a specific Horse | AFK | 040, 008 |

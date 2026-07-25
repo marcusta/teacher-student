@@ -481,3 +481,121 @@ test('listForStudent hydrates planIds', async () => {
     const list = await goalService.listForStudent(student.id);
     expect(list.find((x) => x.id === g.id)?.planIds).toEqual([p.id]);
 });
+
+// --- 049: Goal ↔ Horse ------------------------------------------------------
+
+test('create links an own horse and returns its name', async () => {
+    const { goalService, horseService, student } = await seedStudent();
+    const horse = await horseService.create(student.id, { name: 'Saga' });
+    const goal = await goalService.create(student.id, { title: 'Galopp', horseId: horse.id });
+
+    expect(goal.horseId).toBe(horse.id);
+    expect(goal.horseName).toBe('Saga');
+});
+
+test('create without horseId leaves the goal horseless', async () => {
+    const { goalService, student } = await seedStudent();
+    const goal = await goalService.create(student.id, { title: 'Bli tryggare' });
+    expect(goal.horseId).toBeNull();
+    expect(goal.horseName).toBeNull();
+});
+
+test('create rejects another student horse', async () => {
+    const ctx = await seedStudent('s1@example.com');
+    const other = await ctx.userService.register({
+        email: 's2@example.com', password: 'secret123', displayName: 'S2',
+    });
+    const theirs = await ctx.horseService.create(other.id, { name: 'Nemo' });
+
+    await expect(ctx.goalService.create(ctx.student.id, {
+        title: 'G', horseId: theirs.id,
+    })).rejects.toThrow();
+});
+
+test('create rejects an archived horse', async () => {
+    const { goalService, horseService, student } = await seedStudent();
+    const horse = await horseService.create(student.id, { name: 'Saga' });
+    await horseService.archive(student.id, horse.id);
+
+    await expect(goalService.create(student.id, {
+        title: 'G', horseId: horse.id,
+    })).rejects.toThrow();
+});
+
+test('update sets, keeps and clears the horse', async () => {
+    const { goalService, horseService, student } = await seedStudent();
+    const horse = await horseService.create(student.id, { name: 'Saga' });
+    const g = await goalService.create(student.id, { title: 'G' });
+
+    const set = await goalService.update(student.id, g.id, { horseId: horse.id });
+    expect(set.horseId).toBe(horse.id);
+    expect(set.horseName).toBe('Saga');
+
+    // Omitting horseId is not the same as clearing it.
+    const kept = await goalService.update(student.id, g.id, { title: 'G2' });
+    expect(kept.horseId).toBe(horse.id);
+
+    const cleared = await goalService.update(student.id, g.id, { horseId: null });
+    expect(cleared.horseId).toBeNull();
+    expect(cleared.horseName).toBeNull();
+});
+
+test('update rejects another student horse', async () => {
+    const ctx = await seedStudent('s1@example.com');
+    const other = await ctx.userService.register({
+        email: 's2@example.com', password: 'secret123', displayName: 'S2',
+    });
+    const theirs = await ctx.horseService.create(other.id, { name: 'Nemo' });
+    const g = await ctx.goalService.create(ctx.student.id, { title: 'G' });
+
+    await expect(ctx.goalService.update(ctx.student.id, g.id, {
+        horseId: theirs.id,
+    })).rejects.toThrow();
+});
+
+test('update rejects an archived horse', async () => {
+    const { goalService, horseService, student } = await seedStudent();
+    const horse = await horseService.create(student.id, { name: 'Saga' });
+    await horseService.archive(student.id, horse.id);
+    const g = await goalService.create(student.id, { title: 'G' });
+
+    await expect(goalService.update(student.id, g.id, {
+        horseId: horse.id,
+    })).rejects.toThrow();
+});
+
+test('archiving a horse keeps the goal pointing at it', async () => {
+    const { goalService, horseService, student } = await seedStudent();
+    const horse = await horseService.create(student.id, { name: 'Saga' });
+    const g = await goalService.create(student.id, { title: 'G', horseId: horse.id });
+
+    await horseService.archive(student.id, horse.id);
+
+    const got = await goalService.getForStudent(student.id, g.id);
+    expect(got.horseId).toBe(horse.id);
+    expect(got.horseName).toBe('Saga');
+});
+
+test('listForStudent and getForStudent hydrate horseName', async () => {
+    const { goalService, horseService, student } = await seedStudent();
+    const horse = await horseService.create(student.id, { name: 'Saga' });
+    const g = await goalService.create(student.id, { title: 'G', horseId: horse.id });
+
+    const list = await goalService.listForStudent(student.id);
+    expect(list.find((x) => x.id === g.id)?.horseName).toBe('Saga');
+    expect((await goalService.getForStudent(student.id, g.id)).horseName).toBe('Saga');
+});
+
+test('teacher read views carry the horse of a shared goal', async () => {
+    const { goalService, horseService, teacher, student } = await seedTeacherWithStudent();
+    const horse = await horseService.create(student.id, { name: 'Saga' });
+    const g = await goalService.create(student.id, { title: 'G', horseId: horse.id });
+    await goalService.share(student.id, g.id, teacher.id);
+
+    const one = await goalService.getForTeacher(teacher.id, g.id);
+    expect(one.horseId).toBe(horse.id);
+    expect(one.horseName).toBe('Saga');
+
+    const list = await goalService.listForStudentAsTeacher(teacher.id, student.id);
+    expect(list.find((x) => x.id === g.id)?.horseName).toBe('Saga');
+});

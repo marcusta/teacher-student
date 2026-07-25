@@ -10,10 +10,12 @@ import {
     goalStatusPill,
     goalTransitions,
     groupGoals,
+    horseChoices,
     isConflict,
     isOverdue,
     ownerRecipients,
     planMembership,
+    selectableHorses,
     shouldCommitPlanLink,
     shouldCommitShare,
     targetDateLabel,
@@ -339,6 +341,35 @@ test('only active, unlinked plans are offered', () => {
     expect(attachablePlans(plans, []).map((p) => p.id)).toEqual(['p1', 'p2']);
     expect(attachablePlans(plans, ['p1']).map((p) => p.id)).toEqual(['p2']);
     expect(attachablePlans(plans, ['p1', 'p2'])).toEqual([]);
+});
+
+// ─── Horse ──────────────────────────────────────────────────────
+
+const SAGA = { id: 'h1', name: 'Saga', archivedAt: null };
+const NEMO = { id: 'h2', name: 'Nemo', archivedAt: '2026-01-01T00:00:00.000Z' };
+
+test('only unarchived horses are offered', () => {
+    // `assertOwnUnarchivedHorse` refuses an archived horse, so offering one
+    // could only produce a failure the picker could have prevented.
+    expect(selectableHorses([SAGA, NEMO]).map((h) => h.id)).toEqual(['h1']);
+});
+
+test('the goal keeps showing its own horse after that horse is archived', () => {
+    const choices = horseChoices([SAGA, NEMO], { horseId: 'h2', horseName: 'Nemo' });
+    expect(choices).toEqual([
+        { id: 'h1', name: 'Saga' },
+        { id: 'h2', name: 'Nemo' },
+    ]);
+});
+
+test('a horse already in the stable is not offered twice', () => {
+    const choices = horseChoices([SAGA], { horseId: 'h1', horseName: 'Saga' });
+    expect(choices).toEqual([{ id: 'h1', name: 'Saga' }]);
+});
+
+test('a horseless goal is offered the stable and nothing more', () => {
+    expect(horseChoices([SAGA], { horseId: null, horseName: null }))
+        .toEqual([{ id: 'h1', name: 'Saga' }]);
 });
 
 // ─── Locale ─────────────────────────────────────────────────────

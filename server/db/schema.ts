@@ -138,6 +138,7 @@ export interface GoalTable {
     target_date: string | null;
     achieved_at: string | null;
     status: Generated<GoalStatus>;
+    horse_id: string | null;
     created_at: Generated<string>;
     updated_at: Generated<string>;
 }

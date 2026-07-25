@@ -423,6 +423,42 @@ export function attachablePlans(plans: PlanOption[], linkedPlanIds: string[]): P
     return plans.filter((plan) => plan.status === 'active' && !linked.has(plan.id));
 }
 
+export interface HorseChoice {
+    id: string;
+    name: string;
+}
+
+/**
+ * The Horses a Goal may be pointed at: the rider's own, minus the archived
+ * ones. `GoalService.assertOwnUnarchivedHorse` rejects an archived horse, so
+ * offering one would produce an option the server refuses — the §4.9 rule
+ * again.
+ */
+export function selectableHorses<T extends { archivedAt: null | string }>(horses: T[]): T[] {
+    return horses.filter((h) => h.archivedAt === null);
+}
+
+/**
+ * Options for the Goal's horse picker on the detail view.
+ *
+ * Archiving a Horse does **not** clear goals that name it — the same promise
+ * `horse.confirm.archive.message` makes about lessons and passes. So a goal
+ * whose horse has since been archived must still be able to *show* that horse,
+ * even though the horse is gone from the stable list. It is appended as its own
+ * option, from the name the server hydrated, so switching away is a real choice
+ * rather than a silent reset to "Ingen häst".
+ */
+export function horseChoices(
+    horses: Array<{ id: string; name: string; archivedAt: null | string }>,
+    current: { horseId: null | string; horseName: null | string },
+): HorseChoice[] {
+    const choices = selectableHorses(horses).map((h) => ({ id: h.id, name: h.name }));
+    if (current.horseId && !choices.some((c) => c.id === current.horseId)) {
+        choices.push({ id: current.horseId, name: current.horseName ?? current.horseId });
+    }
+    return choices;
+}
+
 /**
  * Whether a plan-attachment change should write. Same two guards, same reason
  * as `shouldCommitShare`: the goal's `planIds` arrive with the goal, but the

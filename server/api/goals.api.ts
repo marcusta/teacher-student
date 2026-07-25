@@ -7,6 +7,7 @@ const CreateInput = Type.Object({
     title: Type.String({ minLength: 1, maxLength: 200, pattern: '\\S' }),
     description: Type.Optional(Type.String({ maxLength: 5000 })),
     targetDate: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$' })),
+    horseId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
 });
 
 const UpdateInput = Type.Object({
@@ -17,6 +18,7 @@ const UpdateInput = Type.Object({
         Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$' }),
         Type.Null(),
     ])),
+    horseId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
 });
 
 const AbandonInput = Type.Object({

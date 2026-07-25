@@ -1,10 +1,12 @@
 import { Component, Computed, Router, Signal, template } from '@basics/core/client/core';
 import { ToastService } from '@basics/core/client/ui/toast';
+import { SelectComponent, type SelectOption } from '@basics/core/client/ui/select';
 import { t } from '../i18n';
 import { token } from '../theme';
 import { s, btn, card, input } from '../css';
+import { StableService } from '../stable/stable.service';
 import { GoalsService } from './goals.service';
-import { calendarDate, targetDateLabel } from './goal-copy';
+import { calendarDate, targetDateLabel, selectableHorses } from './goal-copy';
 
 const tpl = template(`
     <form class="new-goal" bind="form">
@@ -30,6 +32,12 @@ const tpl = template(`
                 <input bind="targetInput" type="date" class="new-goal__input">
                 <span bind="targetHint" class="new-goal__hint"></span>
                 <span bind="targetError" class="new-goal__field-error" role="alert"></span>
+            </label>
+
+            <label bind="horseField" class="new-goal__field">
+                <span bind="horseLabel" class="new-goal__label"></span>
+                <div bind="horseHost" class="new-goal__control"></div>
+                <span bind="horseHint" class="new-goal__hint"></span>
             </label>
 
             <p bind="error" class="new-goal__error" role="alert"></p>
@@ -110,6 +118,8 @@ export class GoalCreateComponent extends Component {
                 flex-direction: column;
                 gap: ${s('xs')};
             }
+            /* §3.9 States: a picker with nothing to offer is hidden, not empty. */
+            & .new-goal__field.hidden { display: none; }
 
             & .new-goal__label {
                 font-size: 0.8125rem;
@@ -170,11 +180,19 @@ export class GoalCreateComponent extends Component {
 
     private router = this.inject(Router);
     private goals = this.inject(GoalsService);
+    private stable = this.inject(StableService);
     private toasts = this.inject(ToastService);
 
     private titleVal = new Signal('');
     private descVal = new Signal('');
     private targetVal = new Signal('');
+    private horseVal = new Signal('');
+
+    private horses = new Computed(() => selectableHorses(this.stable.items.get()));
+    private horseOptions = new Computed<SelectOption[]>(() => [
+        { value: '', label: t('goal.horse.none') },
+        ...this.horses.get().map((h) => ({ value: h.id, label: h.name })),
+    ]);
     /** Set only after a submit attempt, so the form does not scold while typing. */
     private titleTouched = new Signal(false);
 
@@ -230,6 +248,15 @@ export class GoalCreateComponent extends Component {
                 textContent: () => this.targetInvalid.get() ? t('goal.error.target') : '',
             },
 
+            // An empty stable gets no picker: a rider with no horse is asked
+            // nothing about horses (§3.9 States).
+            horseField: {
+                className: () => this.horses.get().length === 0
+                    ? 'new-goal__field hidden' : 'new-goal__field',
+            },
+            horseLabel: { textContent: () => t('goalCreate.field.horse') },
+            horseHint: { textContent: () => t('goalCreate.field.horse.hint') },
+
             error: {
                 textContent: () => this.goals.error.get() ? t('goal.saveError') : '',
             },
@@ -244,7 +271,16 @@ export class GoalCreateComponent extends Component {
             form: { onsubmit: (e: Event) => void this.submit(e) },
         });
 
+        this.spawn(SelectComponent, this.ref(frag, 'horseHost'), {
+            value: this.horseVal,
+            options: this.horseOptions,
+        });
+
         return frag;
+    }
+
+    onMount(): void {
+        void this.stable.load();
     }
 
     private async submit(e: Event): Promise<void> {
@@ -256,6 +292,7 @@ export class GoalCreateComponent extends Component {
 
         const description = this.descVal.get().trim();
         const targetDate = this.targetVal.get();
+        const horseId = this.horseVal.get();
 
         // One call, one outcome: `POST /goals` takes everything this form
         // collects, so there is no follow-up write that could fail behind a
@@ -264,6 +301,7 @@ export class GoalCreateComponent extends Component {
             title,
             ...(description ? { description } : {}),
             ...(targetDate ? { targetDate } : {}),
+            ...(horseId ? { horseId } : {}),
         });
         if (!created) return;
 

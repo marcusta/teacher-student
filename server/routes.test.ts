@@ -881,6 +881,41 @@ test('POST /api/goals/:id/abandon on other student returns 404', async () => {
     expect(res.status).toBe(404);
 });
 
+test('POST /api/goals with horseId returns the linked horse', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const horse = await (await req(app, 'POST', '/api/horses', { name: 'Saga' }, cookie)).json();
+    const res = await req(app, 'POST', '/api/goals', { title: 'X', horseId: horse.id }, cookie);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.horseId).toBe(horse.id);
+    expect(body.horseName).toBe('Saga');
+});
+
+test('POST /api/goals with another student horse returns 404', async () => {
+    const { app } = await setup([seedUser]);
+    const annaCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const otherCookie = await registerAndLogin(app, 'other@example.com');
+    const horse = await (await req(app, 'POST', '/api/horses', { name: 'Nemo' }, otherCookie)).json();
+    const res = await req(app, 'POST', '/api/goals', { title: 'X', horseId: horse.id }, annaCookie);
+    expect(res.status).toBe(404);
+});
+
+test('PATCH /api/goals/:id sets and clears horseId', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const horse = await (await req(app, 'POST', '/api/horses', { name: 'Saga' }, cookie)).json();
+    const { id } = await (await req(app, 'POST', '/api/goals', { title: 'X' }, cookie)).json();
+
+    const set = await req(app, 'PATCH', `/api/goals/${id}`, { horseId: horse.id }, cookie);
+    expect(set.status).toBe(200);
+    expect((await set.json()).horseName).toBe('Saga');
+
+    const cleared = await req(app, 'PATCH', `/api/goals/${id}`, { horseId: null }, cookie);
+    expect(cleared.status).toBe(200);
+    expect((await cleared.json()).horseId).toBeNull();
+});
+
 test('POST /api/goals/:id/shares shares with connected teacher', async () => {
     const { app } = await setup([seedUser]);
     const teacherCookie = await loginAs(app, 'anna@example.com', 'secret123');

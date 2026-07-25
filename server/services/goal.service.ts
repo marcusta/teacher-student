@@ -11,6 +11,8 @@ export interface Goal {
     targetDate: string | null;
     achievedAt: string | null;
     status: 'active' | 'achieved' | 'abandoned';
+    horseId: string | null;
+    horseName: string | null;
     sharedTeacherIds: string[];
     planIds: string[];
     createdAt: string;
@@ -26,6 +28,8 @@ export interface GoalTeacherView {
     targetDate: string | null;
     achievedAt: string | null;
     status: 'active' | 'achieved' | 'abandoned';
+    horseId: string | null;
+    horseName: string | null;
     planIds: string[];
     createdAt: string;
     updatedAt: string;
@@ -40,13 +44,18 @@ export interface CreateGoalInput {
     title: string;
     description?: string;
     targetDate?: string;
+    horseId?: string | null;
 }
 
 export interface UpdateGoalInput {
     title?: string;
     description?: string | null;
     targetDate?: string | null;
+    horseId?: string | null;
 }
+
+/** A `goal` row plus the left-joined horse name every read path hydrates. */
+type GoalRow = Selectable<GoalTable> & { horse_name: string | null };
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -59,7 +68,7 @@ function assertCalendarDate(value: string): void {
 }
 
 function toGoal(
-    row: Selectable<GoalTable>,
+    row: GoalRow,
     sharedTeacherIds: string[] = [],
     planIds: string[] = [],
 ): Goal {
@@ -70,7 +79,7 @@ function toGoal(
 }
 
 function toGoalTeacherView(
-    row: Selectable<GoalTable>,
+    row: GoalRow,
     planIds: string[] = [],
 ): GoalTeacherView {
     return {
@@ -81,6 +90,8 @@ function toGoalTeacherView(
         targetDate: row.target_date,
         achievedAt: row.achieved_at,
         status: row.status,
+        horseId: row.horse_id,
+        horseName: row.horse_name,
         planIds,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
@@ -106,6 +117,10 @@ export class GoalService {
         const trimmedDescription = input.description?.trim();
         const description = trimmedDescription ? trimmedDescription : null;
 
+        const horse = input.horseId == null
+            ? null
+            : await this.assertOwnUnarchivedHorse(studentId, input.horseId);
+
         const id = crypto.randomUUID();
         const now = new Date().toISOString();
 
@@ -117,6 +132,7 @@ export class GoalService {
             target_date: input.targetDate ?? null,
             achieved_at: null,
             status: 'active',
+            horse_id: horse?.id ?? null,
             created_at: now,
             updated_at: now,
         }).execute();
@@ -129,6 +145,8 @@ export class GoalService {
             targetDate: input.targetDate ?? null,
             achievedAt: null,
             status: 'active',
+            horseId: horse?.id ?? null,
+            horseName: horse?.name ?? null,
             sharedTeacherIds: [],
             planIds: [],
             createdAt: now,
@@ -143,10 +161,12 @@ export class GoalService {
     async listForStudent(studentId: string): Promise<Goal[]> {
         const rows = await this.db
             .selectFrom('goal')
-            .selectAll()
-            .where('student_id', '=', studentId)
+            .leftJoin('horses', 'horses.id', 'goal.horse_id')
+            .selectAll('goal')
+            .select('horses.name as horse_name')
+            .where('goal.student_id', '=', studentId)
             .orderBy(GOAL_STATUS_ORDER, 'asc')
-            .orderBy('created_at', 'desc')
+            .orderBy('goal.created_at', 'desc')
             .execute();
         const ids = rows.map((r) => r.id);
         const shares = await this.sharesByGoal(ids);
@@ -157,9 +177,11 @@ export class GoalService {
     async getForStudent(studentId: string, goalId: string): Promise<Goal> {
         const row = await this.db
             .selectFrom('goal')
-            .selectAll()
-            .where('id', '=', goalId)
-            .where('student_id', '=', studentId)
+            .leftJoin('horses', 'horses.id', 'goal.horse_id')
+            .selectAll('goal')
+            .select('horses.name as horse_name')
+            .where('goal.id', '=', goalId)
+            .where('goal.student_id', '=', studentId)
             .executeTakeFirst();
         if (!row) throw new NotFoundError('Goal not found');
         const shares = await this.sharesByGoal([goalId]);
@@ -172,6 +194,7 @@ export class GoalService {
             title: string;
             description: string | null;
             target_date: string | null;
+            horse_id: string | null;
             updated_at: string;
         }> = {};
 
@@ -187,6 +210,11 @@ export class GoalService {
         if (input.targetDate !== undefined) {
             if (input.targetDate !== null) assertCalendarDate(input.targetDate);
             patch.target_date = input.targetDate;
+        }
+        if (input.horseId !== undefined) {
+            patch.horse_id = input.horseId === null
+                ? null
+                : (await this.assertOwnUnarchivedHorse(studentId, input.horseId)).id;
         }
         patch.updated_at = new Date().toISOString();
 
@@ -315,7 +343,9 @@ export class GoalService {
         const rows = await this.db
             .selectFrom('goal')
             .innerJoin('goal_share', 'goal_share.goal_id', 'goal.id')
+            .leftJoin('horses', 'horses.id', 'goal.horse_id')
             .selectAll('goal')
+            .select('horses.name as horse_name')
             .where('goal.student_id', '=', studentId)
             .where('goal_share.teacher_id', '=', teacherId)
             .orderBy(GOAL_STATUS_ORDER, 'asc')
@@ -330,7 +360,9 @@ export class GoalService {
         const row = await this.db
             .selectFrom('goal')
             .innerJoin('goal_share', 'goal_share.goal_id', 'goal.id')
+            .leftJoin('horses', 'horses.id', 'goal.horse_id')
             .selectAll('goal')
+            .select('horses.name as horse_name')
             .where('goal.id', '=', goalId)
             .where('goal_share.teacher_id', '=', teacherId)
             .executeTakeFirst();
@@ -394,6 +426,27 @@ export class GoalService {
             .executeTakeFirst();
         if (!share) throw new NotFoundError('Goal not found');
         return { status: row.status };
+    }
+
+    /**
+     * Resolves a Horse the caller may point a Goal at: own stable, not
+     * archived. Archived horses leave existing links alone — they only drop
+     * out of the picker. Throws `NotFoundError` (leak-safe) otherwise.
+     */
+    private async assertOwnUnarchivedHorse(
+        studentId: string,
+        horseId: string,
+    ): Promise<{ id: string; name: string }> {
+        const horse = await this.db
+            .selectFrom('horses')
+            .select(['id', 'name', 'student_id', 'archived_at'])
+            .where('id', '=', horseId)
+            .executeTakeFirst();
+        if (!horse || horse.student_id !== studentId) {
+            throw new NotFoundError('Horse not found');
+        }
+        if (horse.archived_at) throw new NotFoundError('Horse not found');
+        return { id: horse.id, name: horse.name };
     }
 
     private async assertGoalOwner(studentId: string, goalId: string): Promise<void> {

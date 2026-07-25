@@ -38,6 +38,8 @@ export interface GoalTeacherView {
     targetDate: null | string;
     achievedAt: null | string;
     status: 'active' | 'achieved' | 'abandoned';
+    horseId: null | string;
+    horseName: null | string;
     planIds: string[];
     createdAt: string;
     updatedAt: string;

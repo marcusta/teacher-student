@@ -13,11 +13,13 @@ import type { ShareRecipient } from '../ui/share-chip.component';
 import type { PersonRole } from '../ui/person-marker.component';
 import { GoalsService } from './goals.service';
 import { PlansService } from '../plans/plans.service';
+import { StableService } from '../stable/stable.service';
 import { TeachersService } from '../training-sessions/teachers.service';
 import {
     achievedLabel,
     attachablePlans,
     calendarDate,
+    horseChoices,
     goalControls,
     goalStatusPill,
     goalTransitions,
@@ -68,6 +70,10 @@ const tpl = template(`
                         <span bind="targetLabel" class="goal-detail__label"></span>
                         <input bind="targetInput" type="date" class="goal-detail__input">
                         <span bind="targetError" class="goal-detail__field-error" role="alert"></span>
+                    </label>
+                    <label bind="horseField" class="goal-detail__field">
+                        <span bind="horseLabel" class="goal-detail__label"></span>
+                        <div bind="horseHost" class="goal-detail__control"></div>
                     </label>
                     <div class="goal-detail__row">
                         <button bind="save" type="submit" class="goal-detail__save"></button>
@@ -327,6 +333,7 @@ export class GoalDetailComponent extends Component {
                 max-width: 34rem;
             }
             & .goal-detail__field { display: flex; flex-direction: column; gap: ${s('xs')}; }
+            & .goal-detail__field.hidden { display: none; }
             & .goal-detail__label { font-size: 0.8125rem; font-weight: 600; color: ${token('text')}; }
             & .goal-detail__field-error {
                 font-size: 0.8125rem;
@@ -371,6 +378,7 @@ export class GoalDetailComponent extends Component {
     private router = this.inject(Router);
     private goals = this.inject(GoalsService);
     private plans = this.inject(PlansService);
+    private stable = this.inject(StableService);
     private teachers = this.inject(TeachersService);
     private toasts = this.inject(ToastService);
 
@@ -405,6 +413,7 @@ export class GoalDetailComponent extends Component {
     private targetVal = new Signal('');
     private titleTouched = new Signal(false);
     private planVal = new Signal('');
+    private horseVal = new Signal('');
 
     private today = new Signal(formatIsoDate(new Date()));
 
@@ -496,6 +505,24 @@ export class GoalDetailComponent extends Component {
     private planOptions = new Computed<SelectOption[]>(() =>
         this.attachable.get().map((plan) => ({ value: plan.id, label: plan.title })));
 
+    /**
+     * The stable, plus this Goal's own horse even when it has since been
+     * archived — see `horseChoices`. Owner-only: `stable.load()` is never
+     * called for a shared Teacher, so this is empty for them and the field
+     * they never get is hidden anyway.
+     */
+    private horseOptions = new Computed<SelectOption[]>(() => {
+        const goal = this.goal.get();
+        const choices = horseChoices(this.stable.items.get(), {
+            horseId: goal?.horseId ?? null,
+            horseName: goal?.horseName ?? null,
+        });
+        return [
+            { value: '', label: t('goal.horse.none') },
+            ...choices.map((h) => ({ value: h.id, label: h.name })),
+        ];
+    });
+
     onMount(): void {
         void this.load();
     }
@@ -525,6 +552,7 @@ export class GoalDetailComponent extends Component {
             // `belongsToNoPlan` is what decides whether that means "none".
             void this.plans.load().finally(() => this.ownerPlansResolved.set(true));
             void this.teachers.load();
+            void this.stable.load();
             await this.loadShares(detail.id);
         } else {
             await Promise.all([
@@ -538,6 +566,7 @@ export class GoalDetailComponent extends Component {
         this.titleVal.set(goal.title);
         this.descVal.set(goal.description ?? '');
         this.targetVal.set(goal.targetDate ?? '');
+        this.horseVal.set(goal.horseId ?? '');
         this.titleTouched.set(false);
     }
 
@@ -659,6 +688,13 @@ export class GoalDetailComponent extends Component {
             targetError: {
                 textContent: () => this.targetInvalid.get() ? t('goal.error.target') : '',
             },
+            // Only "Ingen häst" to offer means an empty stable, and an empty
+            // stable is not a question worth asking (§3.9 States).
+            horseField: {
+                className: () => this.horseOptions.get().length <= 1
+                    ? 'goal-detail__field hidden' : 'goal-detail__field',
+            },
+            horseLabel: { textContent: () => t('goal.field.horse') },
             save: {
                 textContent: () => t('goal.save'),
                 disabled: () => this.goals.loading.get() || this.targetInvalid.get(),
@@ -741,6 +777,10 @@ export class GoalDetailComponent extends Component {
         this.buildPlanLinks(this.ref(frag, 'plansList'));
         this.buildSharing(this.ref(frag, 'sharingList'));
 
+        this.spawn(SelectComponent, this.ref(frag, 'horseHost'), {
+            value: this.horseVal,
+            options: this.horseOptions,
+        });
         this.spawn(SelectComponent, this.ref(frag, 'planHost'), {
             value: this.planVal,
             options: this.planOptions,
@@ -833,6 +873,7 @@ export class GoalDetailComponent extends Component {
                 const goal = this.goal.get();
                 if (!goal) return '';
                 return [
+                    goal.horseName ? t('goal.meta.horse', { name: goal.horseName }) : null,
                     targetDateLabel(goal.targetDate),
                     isOverdue(goal, this.today.get()) ? t('goal.overdue') : null,
                     achievedLabel(goal.achievedAt),
@@ -1011,6 +1052,7 @@ export class GoalDetailComponent extends Component {
             title,
             description: this.descVal.get().trim() || null,
             targetDate: this.targetVal.get() || null,
+            horseId: this.horseVal.get() || null,
         });
         if (!updated) return;
         this.toasts.show({ message: t('goal.saved'), variant: 'success' });
