@@ -81,9 +81,9 @@ export class InboxComponent extends Component {
 
             & .inbox__accept,
             & .inbox__decline {
+                ${btn()}
                 font-size: 0.75rem;
                 padding: ${s('xs')} ${s('sm')};
-                ${btn()}
             }
         }
     `;

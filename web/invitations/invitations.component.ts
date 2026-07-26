@@ -55,16 +55,16 @@ export class InvitationsComponent extends Component {
                 margin-bottom: ${s('lg')};
 
                 & input {
+                    ${input()}
                     flex: 1;
                     padding: ${s('sm')} ${s('md')};
                     font-size: 0.875rem;
-                    ${input()}
                 }
 
                 & button {
+                    ${btn()}
                     padding: ${s('sm')} ${s('lg')};
                     font-size: 0.875rem;
-                    ${btn()}
                 }
             }
 
@@ -110,9 +110,9 @@ export class InvitationsComponent extends Component {
             }
 
             & .invitations__revoke {
+                ${btn()}
                 font-size: 0.75rem;
                 padding: ${s('xs')} ${s('sm')};
-                ${btn()}
             }
         }
     `;
