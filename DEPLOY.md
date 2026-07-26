@@ -27,11 +27,14 @@ Forgetting `bun run build` ships a stale client — the server serves whatever
   falling through to `index.html` for client-side routing.
 - **Port**: `server/main.ts` defaults to 4810 — the systemd unit sets only
   `NODE_ENV`. `bun run dev:server` overrides via `PORT`.
-- **Framework**: `@basics/core` is vendored into `vendor/basics-core` and
-  committed, because the server has no access to the `mackans-client-fw` repo
-  and runs `bun install` after pulling. After changing the framework:
-  `bun run vendor:basics && bun install && bun test`, then commit the vendor dir
-  and `bun.lock`.
+- **Framework**: `@basics/core` is consumed as a committed, versioned tarball
+  (`vendor/basics-core-X.Y.Z.tgz`), because the server has no access to the
+  `mackans-client-fw` repo and runs `bun install` after pulling. To take a new
+  framework release: `bun run fw:update [X.Y.Z] && bun test`, then commit
+  `vendor/`, `package.json` and `bun.lock` together — app code and framework
+  version then move (and revert) as one.
+  Active framework work uses `bun link @basics/core`; never commit while
+  linked — `bun run test` fails loudly if you try.
 - **Migrations**: run automatically at boot (`createApp` in `@basics/core`), so
   `deploy.json` has no `database` section — no pre-deploy migration test and no
   automatic DB rollback. Add one (see sig-infra `SERVICE-DATABASE-GUIDE.md`) if

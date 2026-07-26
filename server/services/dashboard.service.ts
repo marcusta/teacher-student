@@ -3,7 +3,7 @@ import type { Database } from '../db/schema';
 
 // --- Output types ---
 //
-// These exported interfaces ARE the wire contract: `vendor/basics-core/generate-api.ts`
+// These exported interfaces ARE the wire contract: `@basics/core/generate-api.ts`
 // derives `web/api/dashboard.gen.ts` from the descriptor's `fn` return type. There is
 // deliberately no TypeBox response schema — it would be a second source of truth that
 // nothing validates against and that the generator ignores.

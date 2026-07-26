@@ -14,7 +14,7 @@ import type { DashboardService } from '../services/dashboard.service';
  *
  * No `schema` field: the endpoint takes no input, exactly like `lessons.list`
  * and `students.list`. No TypeBox response schema either — response types are
- * derived from the `fn` return type by `vendor/basics-core/generate-api.ts`.
+ * derived from the `fn` return type by `@basics/core/generate-api.ts`.
  */
 export function createDashboardApi(svc: DashboardService) {
     return {

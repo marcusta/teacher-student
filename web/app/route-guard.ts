@@ -12,7 +12,7 @@
  * resolves to for a signed-out visitor.
  *
  * Note this is about isolation and cost, NOT about the DOM being unavailable —
- * `bunfig.toml` preloads the vendored happy-dom adapter, so the component
+ * `bunfig.toml` preloads the framework's happy-dom adapter, so the component
  * modules do import successfully under `bun test`. Tests that genuinely need to
  * mount the shell can; this module exists so that the admission rules do not
  * have to.

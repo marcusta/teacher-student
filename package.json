@@ -12,16 +12,15 @@
         "check:server": "tsgo -p tsconfig.server.json --noEmit",
         "check:test": "tsgo -p tsconfig.test.json --noEmit",
         "check:i18n": "bun scripts/check-i18n.ts",
-        "generate": "BASICS_API_OUT_DIR=web/api bun vendor/basics-core/generate-api.ts",
-        "test": "bun test --path-ignore-patterns='vendor/**'",
-        "test:server": "bun test --path-ignore-patterns='vendor/**' server/",
+        "generate": "BASICS_API_OUT_DIR=web/api bun node_modules/@basics/core/generate-api.ts",
+        "test": "bun ../mackans-client-fw/tools/assert-not-linked.ts && bun test",
+        "test:server": "bun test server/",
         "test:client": "bun test tests/ web/",
-        "test:framework": "bun test vendor/basics-core/client/",
-        "test:affected": "BASICS_SCAN_DIRS=web,server,tests bun vendor/basics-core/affected-tests.ts",
-        "vendor:basics": "bun ./scripts/vendor-basics.ts"
+        "test:affected": "BASICS_SCAN_DIRS=web,server,tests bun node_modules/@basics/core/affected-tests.ts",
+        "fw:update": "bun ../mackans-client-fw/tools/update.ts"
     },
     "dependencies": {
-        "@basics/core": "file:./vendor/basics-core",
+        "@basics/core": "file:./vendor/basics-core-1.1.0.tgz",
         "@sinclair/typebox": "0.34.48",
         "hono": "4.11.9",
         "kysely": "0.27.6",

@@ -1,6 +1,5 @@
-# The vendored @basics/core ships its own test suite (vendor/basics-core), and
-# those tests need a DOM. Preloading the vendored happy-dom adapter makes a bare
-# `bun test` cover the framework copy too, so a bad re-vendor fails loudly here
-# rather than in the browser.
+# The client tests render real components, so they need a DOM. @basics/core
+# ships the happy-dom adapter as a package export; preloading it here gives
+# every `bun test` run a document without each test file setting one up.
 [test]
-preload = ["./vendor/basics-core/happy-dom.ts"]
+preload = ["@basics/core/happy-dom"]
