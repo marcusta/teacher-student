@@ -51,10 +51,28 @@ final class ApiClient: @unchecked Sendable {
     /// `UserDefaults` key holding the API root, e.g. `http://localhost:4810/api`.
     static let baseURLDefaultsKey = "apiBaseURL"
 
-    /// Debug default. A release build is expected to have `apiBaseURL` written
-    /// into `UserDefaults` at provisioning time — there is no production host to
-    /// hardcode yet, and the ATS exception covers localhost only.
-    static let fallbackBaseURL = "http://localhost:4810/api"
+    /// The deployed server — `BASE_PATH + '/api'`, matching how the web client
+    /// builds it in `vendor/basics-core/client/base.ts`.
+    static let deployedBaseURL = "https://app.swedenindoorgolf.se/teacher-student/api"
+
+    /// The built-in default, chosen at COMPILE time by where the app will run.
+    ///
+    /// `localhost` names the device the app is running ON, so on a phone it is
+    /// the phone — and the server never runs there. It is only ever right in the
+    /// simulator, which shares the Mac's loopback with `bun run dev`. Defaulting
+    /// every build to it meant a device install could not reach anything, and the
+    /// one screen that could correct the address was the screen an unreachable
+    /// server withholds.
+    ///
+    /// So: simulator gets the dev server, everything else gets the deployed one.
+    /// Either is still overridable at runtime via `baseURLDefaultsKey`.
+    static let fallbackBaseURL: String = {
+        #if targetEnvironment(simulator)
+        return "http://localhost:4810/api"
+        #else
+        return deployedBaseURL
+        #endif
+    }()
 
     private let session: URLSession
     private let encoder: JSONEncoder

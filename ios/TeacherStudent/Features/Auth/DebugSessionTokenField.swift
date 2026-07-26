@@ -33,6 +33,11 @@ struct DebugSessionTokenField: View {
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
                     .onSubmit(persistBaseURL)
+                    // Also on every keystroke: the retry that USES this value
+                    // lives on another view, so requiring a return key means a
+                    // finished address that was never submitted is silently
+                    // ignored and the retry re-asks the old host.
+                    .onChange(of: baseURL) { persistBaseURL() }
 
                 TextField("session token", text: $token)
                     .textFieldStyle(.roundedBorder)

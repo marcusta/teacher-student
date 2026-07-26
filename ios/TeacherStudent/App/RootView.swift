@@ -19,11 +19,24 @@ struct RootView: View {
                 // The server was unreachable, so whether a session exists is
                 // UNKNOWN. Showing the gate would assert the reader is signed
                 // out and offer a sign-in that cannot succeed either.
-                ErrorStateView(
-                    message: I18n.t("auth.error.network"),
-                    retryTitle: I18n.t("home.retry")
-                ) {
-                    Task { await session.restore() }
+                VStack(spacing: Spacing.lg) {
+                    ErrorStateView(
+                        message: I18n.t("auth.error.network"),
+                        retryTitle: I18n.t("home.retry")
+                    ) {
+                        Task { await session.restore() }
+                    }
+                    #if DEBUG
+                    // The base-URL field also lives on the gate — which this
+                    // branch exists to withhold. On a real device the default
+                    // `localhost` can never answer, so without a copy here the
+                    // only screen that can correct the address is the one screen
+                    // an unreachable server makes unreachable, and Retry re-asks
+                    // the same dead host forever.
+                    DebugSessionTokenField()
+                        .padding(.horizontal, Spacing.lg)
+                        .padding(.bottom, Spacing.lg)
+                    #endif
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Palette.bg)
