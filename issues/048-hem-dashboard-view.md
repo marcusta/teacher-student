@@ -150,7 +150,7 @@ selection, ordering, state-choosing and copy lives in a **DOM-free** `home-copy.
       string table. Plurals use `.one` / `.other` pairs and `plural()`.
 - [x] **No greeting with the account's display name.** IA §3.1 item 1 permits it *"only after the
       authenticated-session contract exposes it reliably"* — and it does not: `AuthUser` is
-      `{ id, username }` where `username` is the email (`vendor/basics-core/server/auth.ts`,
+      `{ id, username }` where `username` is the email (`node_modules/@basics/core/server/auth.ts`,
       `UserService.findById`). There is no display name in the session. Greeting the reader by
       email address is worse than not greeting them.
 

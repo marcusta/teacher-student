@@ -113,7 +113,7 @@ Three definitions worth restating here because they are the ones easiest to get 
       single `get` descriptor: `method: 'GET'`, `path: '/dashboard'`, `middleware: [requireAuth()]`.
 - [x] **No `schema` field** — the endpoint takes no input, exactly like `lessons.list` and
       `students.list`. And **no TypeBox response schema**: this repo derives response types from the
-      `fn` return type via `vendor/basics-core/generate-api.ts`; a hand-written response schema
+      `fn` return type via `node_modules/@basics/core/generate-api.ts`; a hand-written response schema
       would be a second source of truth that nothing validates against.
 - [x] `fn` reads `requireUser(c)` and passes `user.id` **and** `user.username` — `AuthUser.username`
       is the email (`UserService` returns `{ id, username: row.email }`), which

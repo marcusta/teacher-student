@@ -17,16 +17,57 @@ SQLite files (gitignored under `data/`):
 ## Framework dependency
 
 `@basics/core` is a **versioned tarball** committed at
-`vendor/basics-core-X.Y.Z.tgz` — not a source mirror. Nothing under
-`node_modules/@basics/core` is editable; every install overwrites it.
+`vendor/basics-core-X.Y.Z.tgz` — not a source mirror. It installs into
+`node_modules/@basics/core` as a real directory with its integrity hash in
+`bun.lock`, and resolves through normal node_modules resolution (there is no
+Vite alias). Upstream source lives in `../mackans-client-fw`, which cuts real
+releases: git tags, a `CHANGELOG.md`, `release.ts`, and consumer tooling in
+`tools/`.
 
-- Take a new framework release: `bun run fw:update [X.Y.Z]`, run the checks,
-  then commit `vendor/`, `package.json` and `bun.lock` **together** so app
-  code and framework version revert as one.
-- Working on the framework itself: `bun link @basics/core` here, edit
-  `../mackans-client-fw`, and Vite serves the linked source. **Never commit
-  while linked** — `bun run test` runs a guard that fails if you are. Finish
-  by cutting a real framework release and running `fw:update`.
+**1. Never edit the installed copy.** Nothing under `node_modules/@basics/core`
+is editable — every install overwrites it — and `vendor/basics-core/` must
+never come back as a directory. Framework fixes go in `../mackans-client-fw`,
+get released there (`bun release.ts <major|minor|patch>`, which requires a
+matching `## <version>` heading in its `CHANGELOG.md`), then land here:
+
+```bash
+bun run fw:update [X.Y.Z]
+```
+
+Run the checks, then commit `vendor/*.tgz`, `package.json` and `bun.lock`
+**together** in one commit so app code and framework version move — and revert
+— as one.
+
+**2. Active framework development** against this app: `bun link @basics/core`
+here, edit `../mackans-client-fw`, and Vite serves and HMRs the linked source
+(`vite.config.ts` excludes it from `optimizeDeps` for exactly this).
+**Never commit while linked** — `bun run test` starts with
+`../mackans-client-fw/tools/assert-not-linked.ts` and fails loudly. Do not
+remove or bypass that guard. Finish by cutting a real release upstream and
+running `fw:update`.
+
+**3. Restart the Vite dev server** after any `fw:update` or link/unlink. Only
+if modules still look stale (`does not provide an export named ...`) do
+`rm -rf node_modules/.vite`. This is no longer a routine ritual: the version in
+the tarball filename invalidates Vite's pre-bundle cache on its own.
+
+**4. Recipe interpolations come first in a CSS block.** `${btn()}`,
+`${input()}`, `${label()}`, `${errorText()}` go at the **top** of the block and
+app overrides after (ADR-005, `../mackans-client-fw/docs/decisions.md`). The
+1.x recipes emit sizing (padding, font-size, line-height), so a recipe placed
+after an override silently wins. `${card()}` emits no sizing today, so its call
+sites are order-insensitive — re-check the framework `CHANGELOG.md` on every
+update in case that changes.
+
+**5. `web/theme.ts` stays on the design-system vocabulary it already uses.**
+This app drove the 1.x control-token vocabulary; its `controlTokens` are
+byte-identical to v1.1.0 and every `--field-*`/`--btn-*` read in `css.ts`
+carries an inline fallback. New framework tokens go into `web/theme.ts` by
+name. Do **not** introduce legacy aliases or call `bridgeLegacyControls` — that
+helper exists for pre-1.0 legacy-vocabulary themes (tapscore) and would be
+actively wrong here.
+
+Consumption status across all consumers: `bun ../mackans-client-fw/tools/status.ts`.
 
 ## Signing in for UI testing (no passwords)
 
