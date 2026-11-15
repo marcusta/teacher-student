@@ -76,6 +76,11 @@ export class ScheduleComponent extends Component {
 
     private async routeChanged(path:string,userId:string): Promise<void> {
         const generation=++this.routeGeneration;
+        // Let the shell finish mounting before a cached stable causes a redirect.
+        // A synchronous redirect re-enters $swap before it owns this component,
+        // leaving a live schedule behind that can redirect later navigation.
+        await Promise.resolve();
+        if(this.disposed||generation!==this.routeGeneration)return;
         this.closePanel(); this.notice=''; this.accountId=userId; this.svc.bindAccount(userId);
         this.logMode=path.startsWith('/hastlogg');
         const parts=path.split('/').filter(Boolean);
