@@ -69,6 +69,27 @@ actively wrong here.
 
 Consumption status across all consumers: `bun ../mackans-client-fw/tools/status.ts`.
 
+## Database deployment
+
+`deploy.json` configures `data/app.sqlite` for the sig-infra database workflow.
+`deploy --db` stops the service, snapshots the database, migrates and validates
+the snapshot, then backs up and replaces the live file. `deploy --auto` detects
+changes under `server/db/migrations`.
+
+The deploy commands reuse the same migrations as app startup:
+
+```bash
+DB_PATH=deploy-tmp/db.sqlite bun run db:migrate
+DB_PATH=deploy-tmp/db.sqlite bun run db:health
+```
+
+Both commands require an explicit `DB_PATH` pointing to an existing SQLite file.
+During deploy, sig-infra supplies the snapshot path. Use a database copy for
+local rehearsal. Validation checks migration history, required runtime columns,
+SQLite integrity and foreign keys.
+
+Regression checks: `bun test scripts/db-deploy.test.ts`.
+
 ## Signing in for UI testing (no passwords)
 
 Agents must **not** automate the login form and must **not** use or invent credentials.

@@ -7,6 +7,8 @@
         "dev:server": "PORT=4810 bun --watch server/main.ts",
         "dev:seed": "bun scripts/dev-seed.ts",
         "dev:session": "bun scripts/dev-session.ts",
+        "db:migrate": "bun scripts/db-migrate.ts",
+        "db:health": "bun scripts/db-health.ts",
         "build": "NODE_ENV=production vite build",
         "check:client": "tsgo --noEmit",
         "check:server": "tsgo -p tsconfig.server.json --noEmit",
