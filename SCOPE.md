@@ -26,6 +26,22 @@ En användare kan vara både lärare och elev samtidigt (rollen är kontextuell 
 - Lägga upp långsiktiga mål
 - Skapa egen **plan** (paraply för lektioner, träningspass, mål över tid) och utse en huvudtränare
 
+## Stallplanering på webben
+
+Veckoschema visar stallrutiner och en separat veckorad per ansluten häst. Vid smal innehållsbredd visas en vald dag med stallrutiner och hästgrupper. Alla filter finns kvar: omfattning, en häst, Mina, status och Utan ansvarig. Filter sparas per användare och stall under webbläsarsessionen.
+
+Stall har tidszon och medlemskap med rollerna `admin` och `member`. Stallansvariga hanterar typer, mallar, medlemskap och tilldelning. Medlemmar rapporterar tilldelat arbete, tar otilldelade aktiviteter och planerar egna hästaktiviteter. Stallinbjudningar kräver acceptans i Inkorg.
+
+Hästägaren godkänner en separat stallkoppling. Hästens ägare ändras inte. Stallmedlemskap ger åtkomst till schemat och stallets hästlogg, utan att dela privata mål, träningssammanfattningar eller lärarbibliotek.
+
+Aktiviteter sparar planerat datum och valfri lokal tid, instruktion, flera ansvariga, status, faktisk händelsetid, utförare och registrerande användare. Direktregistrering, avbockning, återöppning, inställning och versionskonflikter ingår. Hästloggen läser samma genomförda aktiviteter.
+
+Kopiera dagar eller veckor, spara veckomallar och skapa valda stallrutiner för sju dagar. Kopiering behåller planeringen och lämnar genomföranden, resultat och träningspasslänkar utanför. Transaktioner och request-ID:n hindrar delvisa eller dubbla skrivningar.
+
+Träningsaktiviteter kan använda kataloginnehåll som både planeraren och huvudutövaren får läsa. Aktiviteten sparar innehållet vid planeringen. Huvudutövaren registrerar eller länkar sitt privata träningspass. Schemakopplingen tillåter en annan medlems häst, medan fristående pass behåller ägarkontrollen.
+
+Veterinär och hovslagare ingår som aktiviteter med datum, tid och anteckningar. Journaler, behandlingar, påminnelser och native iOS-vyer ingår inte i denna leverans.
+
 ## Avgränsningar (Sverige, MVP)
 
 - Alla användare antas vara 15+ initialt
@@ -206,7 +222,7 @@ Säkerhet i presign: max-storleksgräns, `Content-Type` och checksum låsta i si
 - **Video — fas 2**: uppladdning + uppspelning
 - **Live-video + dubbelriktat ljud — fas 3**: WebRTC, t.ex. LiveKit
 - **AV1 / ffmpeg.wasm fallback** för webbklient om H.265-uppspelning behövs där
-- **Häst-delning mellan elever**
+- **Privat hästinformation och ägarbyte mellan elever**. Stallkoppling för schema och aktivitetslogg finns på webben.
 
 ## Arbetsordning
 

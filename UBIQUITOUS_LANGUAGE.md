@@ -23,6 +23,23 @@ Canonical terms are English (matches code, DB columns, API). The Swedish column 
 |------|---------|------------|------------------|
 | **Horse** (`horse`) | Häst | An animal owned by a **Student** that can be linked to **Lessons**, **Training Sessions** and **Notes**. | Mount, equine |
 
+## Stable scheduling
+
+| Term | Swedish | Definition | Aliases to avoid |
+|------|---------|------------|------------------|
+| **Stable** (`stables`) | Stall | A named scheduling space with a time zone, members and explicitly connected Horses. | Student-owned horse list |
+| **Stable Member** (`stable_members`) | Stallmedlem | A User with active membership in a Stable. Role is `admin` or `member`, independent of Teacher/Student Relations. | Global user role |
+| **Stable Invitation** (`stable_invitations`) | Stallinbjudan | An email-addressed request to join a Stable. Acceptance creates membership. | Teacher Invitation |
+| **Stable Horse** (`stable_horses`) | Stallkoppling | An owner-approved connection between a Horse and a Stable. Grants shared scheduling and that stable's Horse Log, without changing ownership. | Horse transfer |
+| **Activity Type** (`stable_activity_types`) | Aktivitetstyp | A stable-owned definition with category, allowed scope, default time and order. Activity titles retain their saved text after a type rename. | Activity instance |
+| **Stable Activity** (`stable_activities`) | Aktivitet | A dated event for a Stable or exactly one connected Horse. Has instructions, assignees and status `planned`, `completed` or `cancelled`. | Lesson, Training Session |
+| **Assignee** (`stable_activity_assignees`) | Ansvarig | A User assigned planned responsibility for the activity. Mina filters use this relation. | Creator, actual performer |
+| **Performer** (`stable_activity_performers`) | Utförare | A User recorded as having performed the completed activity. The recorder is stored separately. | Assignee, recorder |
+| **Main Performer** (`training_student_id`) | Huvudutövare | The assignee who owns any private Training Session linked from a training activity. | Stable administrator |
+| **Horse Log** | Hästlogg | The completed activities for one Horse in one Stable, ordered by actual event time. Reads activity records without duplicating them. | Private training log |
+| **Weekly Template** (`schedule_templates`) | Veckomall | Reusable planning with weekdays and optional assignments. Applying it creates independent planned activities. | Development Plan, Program |
+| **Outcome note** (`result_note`) | Stallanteckning efteråt | Text about the completed activity, visible to active stable members. Separate from the private training summary and from Note threads. | Private Note |
+
 ## Exercises and content
 
 | Term | Swedish | Definition | Aliases to avoid |
@@ -104,7 +121,7 @@ Canonical terms are English (matches code, DB columns, API). The Swedish column 
 - **"Program" vs "Plan"** — these are deliberately distinct and easy to confuse. **Program** is a *reusable named exercise routine* in a teacher's library ("ridprogram") — no student, no date. **Plan** is *one student's long-term umbrella* ("träningsplan") — contains lessons, training sessions, and goals over weeks or months. Never use "program" to mean an umbrella or "plan" to mean a routine.
 - **"Lesson" vs "Training Session"** — distinct entities by *teacher presence*, not by who creates them. **Lesson** = teacher present at the event (planned or completed). **Training Session** = no teacher present at the event, but the session itself may be either student-logged (after the fact) or teacher-prescribed (planned home work). Both carry their own ordered exercises. Never use "session" as a synonym for "lesson".
 - **"User" vs "Teacher" vs "Student"** — **User** is an authentication identity. **Teacher** and **Student** are *roles* a user holds inside a specific **Relation**, not types of user. The same **User** can be both at the same time in different **Relations**.
-- **"Invitation"** refers only to a teacher's request to an email address to establish a **Relation**. Not to be confused with future notifications or calendar invites for lessons.
+- **"Invitation"** establishes a Teacher/Student **Relation**. **Stable Invitation** establishes **Stable Member** membership. They use separate records and acceptance flows.
 - **"Rider" vs "Student"** — slice 032 title says "per Rider"; canonical domain term is **Student** (`student_id`). Use **Student** in code, API, and glossary; "rider" only in informal UI if ever needed.
 - **"notes" overload** — `lesson_exercise.notes` and `training_session_exercise.notes` are **Row notes** (static junction text). Polymorphic `notes` rows are **Note** entities with **Visibility**. API field `rowNotes` vs `notes[]` keeps them distinct.
-- **"Student-visible catalog" vs teacher Library** — `listForTeacher` scopes to the caller's own **Library**; `listForStudent` scopes to connected teachers' content for **Training Session** pickers only. Do not reuse `listForTeacher` for student attach flows.
+- **"Student-visible catalog" vs teacher Library** — `listForTeacher` scopes to the caller's own **Library**; `listForStudent` scopes to connected teachers' content for **Training Session** pickers. Scheduled training additionally intersects the planner's and the **Main Performer**'s catalog access. Do not reuse `listForTeacher` for student attach flows.

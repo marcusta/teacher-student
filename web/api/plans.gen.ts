@@ -36,7 +36,7 @@ export interface LinkedLessonRef {
     id: string;
     scheduledAt: string;
     teacherDisplayName: string;
-    status: 'completed' | 'cancelled' | 'planned';
+    status: 'planned' | 'completed' | 'cancelled';
     horseName: null | string;
 }
 
@@ -56,10 +56,10 @@ export interface LinkedGoalRef {
 }
 
 export interface PlansApi {
-    create(input: { description?: string; startDate?: string; endDate?: string; primaryTeacherId?: string; title: string }): Promise<Plan>;
+    create(input: { startDate?: string; description?: string; endDate?: string; primaryTeacherId?: string; title: string }): Promise<Plan>;
     list(): Promise<Plan[]>;
     get(input: { id: string }): Promise<PlanDetail>;
-    update(input: { title?: string; description?: null | string; startDate?: null | string; endDate?: null | string; primaryTeacherId?: null | string; id: string }): Promise<Plan>;
+    update(input: { startDate?: null | string; title?: string; description?: null | string; endDate?: null | string; primaryTeacherId?: null | string; id: string }): Promise<Plan>;
     archive(input: { id: string }): Promise<{ ok: true }>;
 }
 

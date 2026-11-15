@@ -22,14 +22,14 @@ test('nav: each group holds exactly the destinations the IA assigns it', () => {
     expect(groups.map(g => g.items.map(i => i.path))).toEqual([
         ['/home', '/inbox'],
         ['/lektioner', '/traningspass'],
-        ['/planer', '/mal', '/hastar'],
+        ['/veckoschema', '/hastlogg', '/planer', '/mal', '/hastar'],
         ['/students', '/library'],
     ]);
 });
 
-test('nav: nine links, none duplicated', () => {
-    expect(paths.length).toBe(9);
-    expect(new Set(paths).size).toBe(9);
+test('nav: eleven links, none duplicated', () => {
+    expect(paths.length).toBe(11);
+    expect(new Set(paths).size).toBe(11);
 });
 
 test('nav: Program and Inbjudningar are no longer nav destinations', () => {

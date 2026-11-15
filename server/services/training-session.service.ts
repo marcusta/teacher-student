@@ -2,6 +2,7 @@ import { sql, type Kysely } from 'kysely';
 import { NotFoundError } from '@basics/core/server/auth';
 import type { Database } from '../db/schema';
 import { PlanService } from './plan.service';
+import { ScheduleError } from './schedule-errors';
 
 export interface TrainingSessionExerciseRef {
     /** Surrogate id of the `training_session_exercise` junction row. */
@@ -355,9 +356,11 @@ export class TrainingSessionService {
         if (input.durationMin !== undefined) patch.duration_min = assertDuration(input.durationMin);
         if (input.summary !== undefined) patch.summary = input.summary;
         if (input.horseId !== undefined) {
+            const scheduled = await this.db.selectFrom('stable_activities').select('horse_id').where('training_session_id', '=', sessionId).executeTakeFirst();
+            if (scheduled && input.horseId !== scheduled.horse_id) throw new ScheduleError('training_already_linked');
             patch.horse_id = input.horseId === null
                 ? null
-                : await this.assertOwnUnarchivedHorse(studentId, input.horseId);
+                : scheduled ? input.horseId : await this.assertOwnUnarchivedHorse(studentId, input.horseId);
         }
         if (input.planId !== undefined) {
             if (input.planId === null) {
@@ -747,7 +750,7 @@ export class TrainingSessionService {
             .select([
                 'training_session_program.training_session_id as training_session_id',
                 'programs.id as id',
-                'programs.title as title',
+                sql<string>`coalesce(training_session_program.snapshot_title, programs.title)`.as('title'),
             ])
             .where('training_session_program.training_session_id', 'in', sessionIds)
             .orderBy('training_session_program.attached_at', 'asc')
@@ -776,7 +779,7 @@ export class TrainingSessionService {
                 'training_session_exercise.source_program_id as source_program_id',
                 'training_session_exercise.notes as notes',
                 'exercises.id as exercise_id',
-                'exercises.name as name',
+                sql<string>`coalesce(training_session_exercise.snapshot_name, exercises.name)`.as('name'),
             ])
             .where('training_session_exercise.training_session_id', 'in', sessionIds)
             .orderBy('training_session_exercise.training_session_id')

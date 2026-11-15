@@ -18,6 +18,9 @@ import { createProgramsApi } from './api/programs.api';
 import { createPlansApi } from './api/plans.api';
 import { createGoalsApi } from './api/goals.api';
 import { createDashboardApi } from './api/dashboard.api';
+import { createStablesApi } from './api/stables.api';
+import { createStableActivitiesApi } from './api/stable-activities.api';
+import { createScheduleTemplatesApi } from './api/schedule-templates.api';
 
 // --- Composition root ---
 
@@ -27,7 +30,7 @@ const {
     userService, invitationService, relationService,
     exerciseService, horseService, lessonService, noteService,
     trainingSessionService, programService, planService, goalService,
-    dashboardService,
+    dashboardService, stableService, scheduleService, scheduleTemplateService, scheduleTrainingService,
 } = createServices(db);
 
 const { sessions } = await bootstrapAuth({
@@ -52,6 +55,9 @@ mount(app, '/api', createProgramsApi(programService));
 mount(app, '/api', createPlansApi(planService));
 mount(app, '/api', createGoalsApi(goalService));
 mount(app, '/api', createDashboardApi(dashboardService));
+mount(app, '/api', createStablesApi(stableService));
+mount(app, '/api', createStableActivitiesApi(scheduleService, scheduleTrainingService));
+mount(app, '/api', createScheduleTemplatesApi(scheduleTemplateService));
 
 // --- Static client ---
 

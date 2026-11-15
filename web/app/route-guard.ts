@@ -52,6 +52,8 @@ export const APP_ROUTES = [
     '/planer',
     '/mal',
     '/hastar',
+    '/veckoschema',
+    '/hastlogg',
     '/students',
     '/library',
     '/program',

@@ -49,6 +49,8 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     {
         labelKey: 'nav.group.planning',
         items: [
+            { path: '/veckoschema', key: 'nav.weeklySchedule' },
+            { path: '/hastlogg', key: 'nav.horseLog' },
             { path: '/planer', key: 'nav.plans' },
             { path: '/mal', key: 'nav.goals' },
             { path: '/hastar', key: 'nav.stable' },

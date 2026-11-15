@@ -24,6 +24,9 @@ import { TeachersService } from '../training-sessions/teachers.service';
 import { ProgramsShellComponent } from '../programs/programs-shell.component';
 import { PlansShellComponent } from '../plans/plans-shell.component';
 import { GoalsShellComponent } from '../goals/goals-shell.component';
+import { ScheduleComponent } from '../schedule/schedule.component';
+import { HorseLogComponent } from '../horse-log/horse-log.component';
+import { clearSchedulePreferences } from '../schedule/schedule-copy';
 import { guardTarget, guardedView, withReturnTo, LOGIN_ROUTE } from './route-guard';
 import { pageTitleKey } from './page-title';
 
@@ -51,6 +54,8 @@ export const ROUTE_COMPONENTS = {
     '/program': ProgramsShellComponent,
     '/planer': PlansShellComponent,
     '/mal': GoalsShellComponent,
+    '/veckoschema': ScheduleComponent,
+    '/hastlogg': HorseLogComponent,
 };
 
 const tpl = template(`
@@ -368,6 +373,9 @@ export class AppComponent extends Component {
     }
 
     onMount(): void {
+        this.track(effect(() => {
+            if (!this.auth.currentUser.get()) clearSchedulePreferences();
+        }));
         // Shell-level prefetches. They live here rather than in NavComponent
         // because that component is instantiated twice (sidebar + drawer) and
         // would otherwise fetch everything twice.

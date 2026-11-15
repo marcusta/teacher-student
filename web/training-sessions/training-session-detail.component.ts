@@ -547,10 +547,16 @@ export class TrainingSessionDetailComponent extends Component {
     private horses = new Computed(() => loggableHorses(this.stable.items.get()));
     private activePlans = new Computed(() => loggablePlans(this.plans.items.get()));
 
-    private horseOptions = new Computed<SelectOption[]>(() => [
-        { value: '', label: t('trainingSession.horse.none') },
-        ...this.horses.get().map((h) => ({ value: h.id, label: h.name })),
-    ]);
+    private horseOptions = new Computed<SelectOption[]>(() => {
+        const horses = this.horses.get();
+        const current = this.session();
+        return [
+            { value: '', label: t('trainingSession.horse.none') },
+            ...horses.map((h) => ({ value: h.id, label: h.name })),
+            ...(current?.horseId && !horses.some(h => h.id === current.horseId)
+                ? [{ value: current.horseId, label: current.horseName ?? '' }] : []),
+        ];
+    });
     private planOptions = new Computed<SelectOption[]>(() => [
         { value: '', label: t('trainingSession.plan.none') },
         ...this.activePlans.get().map((p) => ({ value: p.id, label: p.title })),
@@ -734,7 +740,7 @@ export class TrainingSessionDetailComponent extends Component {
                 oninput: (e: Event) => this.durationVal.set((e.target as HTMLInputElement).value),
             },
             horseField: {
-                className: () => this.horses.get().length === 0
+                className: () => this.horseOptions.get().length === 1
                     ? 'session-detail__field hidden' : 'session-detail__field',
             },
             horseLabel: { textContent: () => t('trainingSession.field.horse') },

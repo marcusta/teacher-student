@@ -6,7 +6,7 @@ export interface Lesson {
     teacherId: string;
     studentId: string;
     scheduledAt: string;
-    status: 'completed' | 'cancelled' | 'planned';
+    status: 'planned' | 'completed' | 'cancelled';
     horseId: null | string;
     horseName: null | string;
     planId: null | string;
@@ -24,7 +24,7 @@ export interface LessonForUser {
     teacherId: string;
     studentId: string;
     scheduledAt: string;
-    status: 'completed' | 'cancelled' | 'planned';
+    status: 'planned' | 'completed' | 'cancelled';
     horseId: null | string;
     horseName: null | string;
     planId: null | string;

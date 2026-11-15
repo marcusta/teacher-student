@@ -11,6 +11,9 @@ import { createProgramsClient } from './api/programs.gen';
 import { createPlansClient } from './api/plans.gen';
 import { createGoalsClient } from './api/goals.gen';
 import { createDashboardClient } from './api/dashboard.gen';
+import { createStablesClient } from './api/stables.gen';
+import { createStableActivitiesClient } from './api/stable-activities.gen';
+import { createScheduleTemplatesClient } from './api/schedule-templates.gen';
 
 export { ApiError } from '@basics/core/client/api-error';
 export type { Invitation, InboxInvitation } from './api/invitations.gen';
@@ -30,6 +33,9 @@ export type {
 } from './api/dashboard.gen';
 /** Server reuses RelationService.Student for the teachers endpoint; alias for clarity. */
 export type Teacher = TeacherDto;
+export type { StableSummary, StableDetail, StableHorse, StableMember, ActivityType, StableInvitation } from './api/stables.gen';
+export type { Activity, ScheduleWeek, HorseLog, ScheduleCatalog } from './api/stable-activities.gen';
+export type { ScheduleTemplate, ScheduleCopyResult } from './api/schedule-templates.gen';
 
 // Carry the deploy base path (Vite BASE_URL) so API calls resolve under the
 // sub-path in production ('/teacher-student/api') and at the root in dev
@@ -51,4 +57,7 @@ export const api = {
     plans: createPlansClient(API_BASE),
     goals: createGoalsClient(API_BASE),
     dashboard: createDashboardClient(API_BASE),
+    stables: createStablesClient(API_BASE),
+    stableActivities: createStableActivitiesClient(API_BASE),
+    scheduleTemplates: createScheduleTemplatesClient(API_BASE),
 };

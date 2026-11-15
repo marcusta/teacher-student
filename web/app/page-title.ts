@@ -66,6 +66,8 @@ const PAGE_TITLES: Readonly<Record<string, string>> = {
     '/planer': 'nav.plans',
     '/mal': 'nav.goals',
     '/hastar': 'nav.stable',
+    '/veckoschema': 'nav.weeklySchedule',
+    '/hastlogg': 'nav.horseLog',
     '/students': 'nav.students',
     '/library': 'nav.library',
     '/program': 'nav.programs',

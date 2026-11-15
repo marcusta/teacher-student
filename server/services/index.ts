@@ -12,6 +12,10 @@ import { ProgramService } from './program.service';
 import { PlanService } from './plan.service';
 import { GoalService } from './goal.service';
 import { DashboardService } from './dashboard.service';
+import { StableService } from './stable.service';
+import { ScheduleService } from './schedule.service';
+import { ScheduleTemplateService } from './schedule-template.service';
+import { ScheduleTrainingService } from './schedule-training.service';
 
 export function createServices(db: Kysely<Database>) {
     const userService = new UserService(db);
@@ -26,10 +30,14 @@ export function createServices(db: Kysely<Database>) {
     const planService = new PlanService(db);
     const goalService = new GoalService(db);
     const dashboardService = new DashboardService(db);
+    const stableService = new StableService(db);
+    const scheduleService = new ScheduleService(db);
+    const scheduleTemplateService = new ScheduleTemplateService(db);
+    const scheduleTrainingService = new ScheduleTrainingService(db);
     return {
         db, userService, invitationService, relationService,
         exerciseService, horseService, lessonService, noteService,
         trainingSessionService, programService, planService, goalService,
-        dashboardService,
+        dashboardService, stableService, scheduleService, scheduleTemplateService, scheduleTrainingService,
     };
 }

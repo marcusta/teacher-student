@@ -3,7 +3,7 @@ import { t } from '../i18n';
 import { token } from '../theme';
 import { s, btn } from '../css';
 import { InboxService } from './inbox.service';
-import type { InboxInvitation } from '../api';
+import type { InboxInvitation, StableInvitation } from '../api';
 
 const tpl = template(`
     <div class="inbox" bind="root">
@@ -11,6 +11,7 @@ const tpl = template(`
         <div class="error" bind="error"></div>
         <div bind="empty" class="inbox__empty"></div>
         <ul bind="list" class="inbox__list"></ul>
+        <ul bind="stableList" class="inbox__list"></ul>
     </div>
 `);
 
@@ -111,13 +112,15 @@ export class InboxComponent extends Component {
             },
             empty: {
                 textContent: () => t('inbox.empty'),
-                className: () => this.svc.items.get().length === 0 ? 'inbox__empty' : 'inbox__empty hidden',
+                className: () => this.svc.pendingCount.get() === 0 ? 'inbox__empty' : 'inbox__empty hidden',
             },
         });
 
         const listHost = this.ref(frag, 'list');
         this.$each(listHost, this.svc.items,
             (item, _i, track) => this.renderItem(item, track), (item) => item.id);
+        this.$each(this.ref(frag, 'stableList'), this.svc.stableItems,
+            (item, _i, track) => this.renderStableItem(item, track), item => item.id);
 
         return frag;
     }
@@ -138,6 +141,14 @@ export class InboxComponent extends Component {
                 textContent: () => t('inbox.decline'),
                 onclick: () => { void this.svc.decline(item.id); },
             },
+        }, track);
+    }
+
+    private renderStableItem(item: StableInvitation, track: (d: () => void) => void): HTMLElement {
+        return this.wireEl(itemTpl, {
+            from: { textContent: () => t('schedule.inbox_invitation', { name: item.stableName }) },
+            accept: { textContent: () => t('schedule.accept'), onclick: () => { void this.svc.respondStable(item.id, true); } },
+            decline: { textContent: () => t('schedule.decline'), onclick: () => { void this.svc.respondStable(item.id, false); } },
         }, track);
     }
 }

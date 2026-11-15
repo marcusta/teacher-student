@@ -40,7 +40,7 @@ Authenticated navigation is grouped by activity:
 |---|---|---|
 | Top | Hem, Inkorg | Always |
 | Träning | Lektioner, Träningspass | Always |
-| Planering & stall | Planer, Mål, Hästar | Always |
+| Planering & stall | Veckoschema, Hästlogg, Planer, Mål, Hästar | Always |
 | Undervisning | Mina elever, Bibliotek | Capability-composed; see decision below |
 
 Recommended first implementation: keep **Undervisning** visible and let useful empty states teach the feature. Capability-gating it is viable later, but an always-available **Bjud in elev** entry is required either way. Never gate Mål, Planer, Hästar, or Träningspass by a presumed role.
@@ -72,7 +72,7 @@ Structural changes from the test client:
 
 ## 2. Sitemap inventory
 
-The sitemap contains 17 view groups. A group may include a list and its existing detail route when the UX proposal treats them as one destination.
+The sitemap contains 19 view groups. A group may include a list and its existing detail route when the UX proposal treats them as one destination.
 
 | # | View group | Routes | Primary capability |
 |---|---|---|---|
@@ -93,6 +93,8 @@ The sitemap contains 17 view groups. A group may include a list and its existing
 | 15 | Hästar | `/hastar`, `/hastar/:id` | Student-owner |
 | 16 | Övningshistorik | `/students/:studentId/exercises/:exerciseId/history` | Teacher + own Student history |
 | 17 | Login / Registrera | `/login`, `/register` | Public entry |
+| 18 | Veckoschema | `/veckoschema`, `/veckoschema/:stableId`, `/veckoschema/:stableId/installningar` | Active stable member |
+| 19 | Hästlogg | `/hastlogg`, `/hastlogg/:stableId/:horseId` | Active stable member |
 
 ## 3. View specifications
 
@@ -131,7 +133,8 @@ The sitemap contains 17 view groups. A group may include a list and its existing
 
 1. Page title and pending count.
 2. **Inbjudningar** group with inviting Teacher name/email, sent date, and Accept/Decline actions.
-3. Empty state explaining that new invitations will appear here.
+3. **Stallinbjudningar** group with stable name and Accept/Decline actions.
+4. Empty state explaining that new invitations will appear here.
 
 **Future activity groups**
 
@@ -145,7 +148,7 @@ Activity rows show actor, action, object/context line, relative time, read state
 
 - Stale Accept/Decline returns a recoverable conflict and refreshes the row.
 - A pre-registration invitation appears after login when the email matches.
-- Badge count is invitations-only until notification read state exists.
+- Badge count includes pending teaching and stable invitations. It does not count general activity.
 
 **Delivery:** invitation inbox is **Ready**. A general activity inbox is a **Backend gap**: there is no notification/event log or `read_at`. Ship invitations first; do not imply reliable unread activity by scanning current rows.
 
@@ -592,6 +595,34 @@ Current behavior exposes titles of Goals linked to a readable Plan even when the
 - Existing authenticated sessions skip public entry.
 
 **Delivery:** **Ready.** Align the login label with the actual email-based identity contract; the test client’s “username” wording is misleading.
+
+### 3.18 Veckoschema
+
+Routes are `/veckoschema/:stableId` and `/veckoschema/:stableId/installningar`. The base route opens the first joined stable or an introduction to creating one. A selector appears for users with several stables.
+
+The desktop view places shared stable routines above a weekly horse table. Both tables use the same Monday to Sunday columns. Each horse has one horizontal row with stacked activities per day. A cell's plus button preselects its horse and date. At content widths of 800 px or less, a day selector replaces the tables. Stable routines and separate horse groups remain visible for that day.
+
+Filters are Allt, Stallet, Hästarna, an individual horse, Mina, Alla statusar, Återstående, Genomförda and Utan ansvarig. Scope filters are alternatives. Mina, status and Utan ansvarig combine through AND. Mina uses assignment, not authorship. Cancelled activities are excluded from Utan ansvarig. Session storage retains selections per account and stable across week changes and reloads. Logout clears them. Week counters describe the entire week before filtering.
+
+The activity drawer separates instructions from the shared outcome note, and assignees from actual performers and the recording user. Local planning dates use the stable's time zone. Actual event times are UTC instants. Ambiguous local times require an explicit UTC offset. Stale writes preserve the draft and offer the latest version or a retry with the draft.
+
+Stable administrators manage invitations, membership, types, templates and assignments. Members can plan their own assigned horse activities, report assigned work and atomically claim unassigned work. The last administrator cannot leave. Removing a member ends stable access immediately.
+
+Only a horse's owner can connect it to the stable. The consent permits shared scheduling and the stable's horse log. It grants no access to private goals, training summaries or teacher libraries. Ending the connection retains history and marks existing activities for action.
+
+Daily routine creation, day/week copying and weekly templates use full source planning regardless of view filters. Copying previews the count and checks the source version. All writes validate active connections, members, types and catalog access in one transaction. Request IDs prevent duplicate writes on retries. Outcomes, actual performers and linked training sessions never copy.
+
+A scheduled training activity has one main performer and optional helpers. Catalog choices require access for both planner and main performer. Planning snapshots retain exercise text, order and row notes. Other stable members see a neutral program marker unless they have catalog access. The main performer can register a private Training Session, including on another member's connected horse, or link an existing own session for the same horse. Standalone horse ownership checks remain in force. A linked session's horse cannot change.
+
+**Delivery:** API and web implemented. Native iOS views are a separate delivery. Stable settings are a drawer under the schedule route.
+
+### 3.19 Hästlogg
+
+The route identifies the stable and horse. A horse selector, date interval and paginated timeline show completed activities ordered by actual event time. Each entry includes the shared outcome, actual performers and recorder. Opening an entry uses the same activity drawer as the schedule.
+
+Direct registration records a completed horse event without prior planning. Completion creates no duplicate log row because the log reads the activity itself. Reopening removes the activity from the completed timeline and retains any linked private Training Session. Stable routines create no per-horse entries.
+
+**Delivery:** API and web implemented. The log is scoped to one stable; it is not an aggregate of private Training Sessions.
 
 ## 4. Cross-view state requirements
 

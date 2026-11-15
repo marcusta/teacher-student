@@ -1,6 +1,7 @@
 import type { Generated } from 'kysely';
+import type { ScheduleDatabase } from './schedule-schema';
 
-export interface Database {
+export interface Database extends ScheduleDatabase {
     users: UsersTable;
     invitations: InvitationsTable;
     relations: RelationsTable;
@@ -70,12 +71,15 @@ export interface TrainingSessionExerciseTable {
     sort_order: number;
     notes: string | null;
     source_program_id: string | null;
+    snapshot_name: Generated<string | null>;
+    snapshot_description: Generated<string | null>;
     created_at: Generated<string>;
 }
 
 export interface TrainingSessionProgramTable {
     training_session_id: string;
     program_id: string;
+    snapshot_title: Generated<string | null>;
     attached_at: Generated<string>;
 }
 

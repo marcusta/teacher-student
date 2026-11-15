@@ -21,6 +21,7 @@ import type { Database } from '../server/db/schema';
 import { createServices } from '../server/services/index';
 import { DuplicateEmailError } from '../server/services/user.service';
 import { assertDevOnly, die } from './dev-guard';
+import { seedDevSchedule } from './dev-schedule-seed';
 
 type Services = ReturnType<typeof createServices>;
 
@@ -42,6 +43,7 @@ const SHARED_NOTE_BODY =
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface DevSeedResult {
+    stableId: string;
     student: { id: string; email: string; displayName: string };
     teacher: { id: string; email: string; displayName: string };
     junior: { id: string; email: string; displayName: string };
@@ -320,7 +322,9 @@ export async function seedDevData(svc: Services): Promise<DevSeedResult> {
     await ensureSharedNote(svc, teacher.id, lessonId, created);
     await ensureAwaitingLesson(svc, student.id, junior.id, created);
 
-    return { student, teacher, junior, lessonId, planId, goalId, created };
+    const stableId = await seedDevSchedule(svc, student, teacher, junior, horseId, exerciseIds, created);
+
+    return { student, teacher, junior, lessonId, planId, goalId, stableId, created };
 }
 
 async function main(): Promise<void> {
@@ -337,6 +341,7 @@ async function main(): Promise<void> {
         console.log(`  Primary user:  ${result.student.email}  (${result.student.displayName})`);
         console.log(`  Teacher:       ${result.teacher.email}  (${result.teacher.displayName})`);
         console.log(`  Junior:        ${result.junior.email}  (${result.junior.displayName})`);
+        console.log(`  Weekly view:   http://localhost:4811/veckoschema/${result.stableId}`);
         if (result.created.length === 0) {
             console.log('  (already seeded — nothing new created)');
         } else {
