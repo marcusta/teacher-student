@@ -58,6 +58,7 @@ export const APP_ROUTES = [
     '/library',
     '/program',
     '/invitations',
+    '/konto',
 ] as const;
 
 /** Where a signed-in visitor lands when they ask for public entry. */

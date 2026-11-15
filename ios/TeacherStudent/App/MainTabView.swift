@@ -28,6 +28,12 @@ struct MainTabView: View {
     @State private var trainingPath = NavigationPath()
     @State private var planningPath = NavigationPath()
     @State private var teachingPath = NavigationPath()
+    /// Owned by the shell because the toolbar that opens it is the shell's, and
+    /// it is shared by all five stacks. A sheet, not a pushed `Route`: `Route`
+    /// is scoped to cross-feature detail deep-links (`Routes.swift`), and a push
+    /// from a shared toolbar would land in whichever tab happened to be
+    /// frontmost and stay in that tab's Back stack.
+    @State private var showAccountSettings = false
 
     enum Tab: Hashable { case home, inbox, training, planning, teaching }
 
@@ -56,6 +62,12 @@ struct MainTabView: View {
         // for Inkorg's own appearance. A failure leaves the last known count
         // alone; the tab bar is not a place to report one.
         .task { await inbox.prefetch() }
+        // Presented from the TabView rather than from a stack, so it covers the
+        // shell whichever tab is open and cannot be pushed onto one tab's Back
+        // stack.
+        .sheet(isPresented: $showAccountSettings) {
+            AccountSettingsView()
+        }
     }
 
     /// Hem's cross-tab exits (`HomeShellDestination`). `Route` deliberately
@@ -111,20 +123,36 @@ struct MainTabView: View {
 
     private func stackBody<Content: View>(_ content: Content) -> some View {
         content
-            .toolbar { signOutToolbarItem }
+            .toolbar { accountToolbarItem }
             .navigationDestination(for: NavSection.self) { $0.destination }
             .navigationDestination(for: Route.self) { RouteView(route: $0) }
     }
 
+    /// The account menu — the shell's one trailing control, on every stack.
+    ///
+    /// Sign out was a bare button here until the account screen needed a way in.
+    /// It stays exactly one extra tap away and it stays LAST, under the opener,
+    /// because the destructive-adjacent item is the one a mis-aimed tap must not
+    /// find first. The menu itself is labelled with the account title, so the
+    /// icon-only control still announces what it opens.
     @ToolbarContentBuilder
-    private var signOutToolbarItem: some ToolbarContent {
+    private var accountToolbarItem: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
-            Button {
-                Task { await session.logout() }
+            Menu {
+                Button {
+                    showAccountSettings = true
+                } label: {
+                    Label(I18n.t("account.title"), systemImage: "gearshape")
+                }
+                Button {
+                    Task { await session.logout() }
+                } label: {
+                    Label(I18n.t("topBar.signOut"), systemImage: "rectangle.portrait.and.arrow.right")
+                }
             } label: {
-                Label(I18n.t("topBar.signOut"), systemImage: "rectangle.portrait.and.arrow.right")
+                Image(systemName: "person.crop.circle")
             }
-            .labelStyle(.iconOnly)
+            .accessibilityLabel(I18n.t("account.title"))
         }
     }
 }

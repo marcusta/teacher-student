@@ -6,6 +6,7 @@ import { mount } from '@basics/core/server/mount';
 import { log } from '@basics/core/server/logger';
 import { createServices } from './services/index';
 import { createRegisterApi } from './api/register.api';
+import { createAccountApi } from './api/account.api';
 import { createInvitationsApi } from './api/invitations.api';
 import { createStudentsApi } from './api/students.api';
 import { createExercisesApi } from './api/exercises.api';
@@ -41,6 +42,7 @@ const { sessions } = await bootstrapAuth({
 // --- Feature API mounts ---
 
 mount(app, '/api', createRegisterApi(userService, sessions));
+mount(app, '/api', createAccountApi(userService));
 mount(app, '/api', createInvitationsApi(invitationService));
 mount(app, '/api', createStudentsApi(
     relationService, horseService, planService, trainingSessionService, lessonService, goalService,

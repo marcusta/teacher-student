@@ -31,6 +31,28 @@ const itemTpl = template(`
     <li><a bind="link"></a></li>
 `);
 
+/**
+ * Kontoinställningar. Deliberately NOT a `NAV_GROUPS` entry: design system 4.1
+ * caps the navigation at four groups and assigns every one of them a domain,
+ * and account settings belong to none of them — it is chrome, not a
+ * destination in the information architecture. Nor does it belong in the top
+ * bar, whose width below 640px is budgeted to the pixel for the menu button,
+ * title and theme toggle.
+ *
+ * So it sits below the groups, behind a rule: same link affordances, visibly
+ * not one of the nine. `nav.structure.ts` stays exactly as the IA describes it,
+ * and `tests/nav.test.ts` keeps counting nine links.
+ */
+const ACCOUNT_PATH = '/konto';
+
+const footerTpl = template(`
+    <div class="nav__footer">
+        <ul class="nav__links">
+            <li><a bind="link"></a></li>
+        </ul>
+    </div>
+`);
+
 const badgedItemTpl = template(`
     <li>
         <a bind="link">
@@ -114,6 +136,18 @@ export class NavComponent extends Component<NavProps> {
                 text-align: center;
             }
             & .nav__badge.hidden { display: none; }
+
+            /* The account link is not one of the destinations, so it does not
+               read as one: a hairline separates it from the last group, while
+               it keeps the same hit target, hover and active states as the
+               links above it. It follows the groups rather than being pinned
+               to the floor — the nav is content-height in both the sidebar and
+               the drawer, so a pinned footer would only be pinned in one of
+               them. */
+            & .nav__footer {
+                padding-top: ${s('md')};
+                border-top: 1px solid ${token('border')};
+            }
         }
     `;
 
@@ -127,8 +161,29 @@ export class NavComponent extends Component<NavProps> {
 
         const host = this.ref(frag, 'nav');
         for (const group of NAV_GROUPS) host.appendChild(this.renderGroup(group));
+        host.appendChild(this.renderFooter());
 
         return frag;
+    }
+
+    /**
+     * The account link, routed and drawer-closing exactly like every other link
+     * here — `navLink` is the same helper, so Kontoinställningar cannot end up
+     * being the one entry that leaves the drawer sitting over the page it just
+     * navigated to.
+     *
+     * No sign-in check: the shell hides the whole navigation while signed out
+     * (`app-layout--anon`), so nothing here is ever rendered to a visitor
+     * without a session.
+     */
+    private renderFooter(): HTMLElement {
+        return this.wireEl(footerTpl, {
+            link: {
+                ...this.navLink(ACCOUNT_PATH),
+                href: ACCOUNT_PATH,
+                textContent: () => t('account.title'),
+            },
+        });
     }
 
     private renderGroup(group: NavGroup): HTMLElement {

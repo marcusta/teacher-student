@@ -1,6 +1,6 @@
 import type { Kysely } from 'kysely';
 import type { Database } from '../db/schema';
-import type { AuthUser } from '@basics/core/server/auth';
+import { ConflictError, NotFoundError, type AuthUser } from '@basics/core/server/auth';
 import { UniqueViolationError, parseUniqueViolation } from '@basics/core/server/unique-violation';
 
 // --- Output types ---
@@ -71,5 +71,36 @@ export class UserService {
             .executeTakeFirst();
         if (!row) return null;
         return { id: row.id, username: row.email };
+    }
+
+    /**
+     * Change the password of a signed-in user.
+     *
+     * A wrong `currentPassword` throws `ConflictError` (409), deliberately not
+     * `AuthenticationError` (401): both the web and iOS clients treat a 401 on
+     * any endpoint as "session expired" and sign the user out mid-form. 409 is
+     * the single failure mode this method has, so clients can map it
+     * unambiguously to "current password does not match".
+     *
+     * "New password equals current password" is *not* rejected here — that is a
+     * client-side validation rule only.
+     */
+    async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+        const row = await this.db
+            .selectFrom('users')
+            .select(['id', 'password_hash'])
+            .where('id', '=', userId)
+            .executeTakeFirst();
+        if (!row) throw new NotFoundError('User not found');
+
+        const valid = await Bun.password.verify(currentPassword, row.password_hash);
+        if (!valid) throw new ConflictError('Current password does not match');
+
+        const passwordHash = await Bun.password.hash(newPassword);
+        await this.db
+            .updateTable('users')
+            .set({ password_hash: passwordHash })
+            .where('id', '=', userId)
+            .execute();
     }
 }

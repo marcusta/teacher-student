@@ -72,6 +72,10 @@ const PAGE_TITLES: Readonly<Record<string, string>> = {
     '/library': 'nav.library',
     '/program': 'nav.programs',
     '/invitations': 'nav.invitations',
+    // Kontoinställningar is reached from the nav footer rather than from a nav
+    // group, so its name here is the page's own title rather than a `nav.*`
+    // key — there is no highlighted group label for the bar to agree with.
+    '/konto': 'account.title',
 };
 
 /**

@@ -5,6 +5,7 @@ import { seedUser } from './db/seeds/users';
 import { mount } from '@basics/core/server/mount';
 import { SessionStore, createAuth, createAuthApi } from '@basics/core/server/auth';
 import { createRegisterApi } from './api/register.api';
+import { createAccountApi } from './api/account.api';
 import { createInvitationsApi } from './api/invitations.api';
 import { createStudentsApi } from './api/students.api';
 import { createExercisesApi } from './api/exercises.api';
@@ -34,6 +35,7 @@ async function setup(seeds: SeedFn[] = []) {
     app.use(createAuth(sessions, (id) => userService.findById(id)));
     mount(app, '/api', createAuthApi({ verify: (u, p) => userService.verify(u, p), sessions }));
     mount(app, '/api', createRegisterApi(userService, sessions));
+    mount(app, '/api', createAccountApi(userService));
     mount(app, '/api', createInvitationsApi(invitationService));
     mount(app, '/api', createStudentsApi(
         relationService, horseService, planService, trainingSessionService, lessonService, goalService,
@@ -188,6 +190,191 @@ test('after register, login with same credentials succeeds', async () => {
     });
     expect(res.status).toBe(200);
     expect(extractSessionCookie(res)).toBeTruthy();
+});
+
+// --- Account: change password ---
+
+test('POST /api/account/password happy path returns ok and keeps the caller signed in', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const res = await req(app, 'POST', '/api/account/password', {
+        currentPassword: 'secret123',
+        newPassword: 'newsecret456',
+    }, cookie);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+
+    // The UI promises "You stay signed in on this device" — the caller's own
+    // session must survive the change.
+    const me = await req(app, 'GET', '/api/auth/me', undefined, cookie);
+    expect(me.status).toBe(200);
+});
+
+test('after POST /api/account/password the old password fails and the new one works', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    await req(app, 'POST', '/api/account/password', {
+        currentPassword: 'secret123',
+        newPassword: 'newsecret456',
+    }, cookie);
+
+    const old = await req(app, 'POST', '/api/auth/login', {
+        username: 'anna@example.com',
+        password: 'secret123',
+    });
+    expect(old.status).toBe(401);
+
+    const fresh = await req(app, 'POST', '/api/auth/login', {
+        username: 'anna@example.com',
+        password: 'newsecret456',
+    });
+    expect(fresh.status).toBe(200);
+    expect(extractSessionCookie(fresh)).toBeTruthy();
+});
+
+test('POST /api/account/password with wrong current password returns 409', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const res = await req(app, 'POST', '/api/account/password', {
+        currentPassword: 'not-my-password',
+        newPassword: 'newsecret456',
+    }, cookie);
+    expect(res.status).toBe(409);
+});
+
+test('POST /api/account/password without session returns 401', async () => {
+    const { app } = await setup([seedUser]);
+    const res = await req(app, 'POST', '/api/account/password', {
+        currentPassword: 'secret123',
+        newPassword: 'newsecret456',
+    });
+    expect(res.status).toBe(401);
+});
+
+test('POST /api/account/password with a new password below the 8-char minimum returns 400', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+    // Exactly 7 chars — pins the boundary, so drift away from register.api.ts's
+    // `minLength: 8` rule (to 6 or 7) fails this test instead of passing it.
+    const res = await req(app, 'POST', '/api/account/password', {
+        currentPassword: 'secret123',
+        newPassword: 'seven77',
+    }, cookie);
+    expect(res.status).toBe(400);
+});
+
+test('POST /api/account/password changes only the acting user', async () => {
+    const { app } = await setup([seedUser]);
+    // Distinct starting password from Anna's, so "changed the right user" is
+    // distinguishable from "changed nobody".
+    const otherCookie = await registerAndLogin(app, 'other@example.com', 'otherpass1');
+    const res = await req(app, 'POST', '/api/account/password', {
+        currentPassword: 'otherpass1',
+        newPassword: 'newsecret456',
+    }, otherCookie);
+    expect(res.status).toBe(200);
+
+    // The acting user's password actually changed
+    const otherNew = await req(app, 'POST', '/api/auth/login', {
+        username: 'other@example.com',
+        password: 'newsecret456',
+    });
+    expect(otherNew.status).toBe(200);
+    const otherOld = await req(app, 'POST', '/api/auth/login', {
+        username: 'other@example.com',
+        password: 'otherpass1',
+    });
+    expect(otherOld.status).toBe(401);
+
+    // Anna is untouched
+    const anna = await req(app, 'POST', '/api/auth/login', {
+        username: 'anna@example.com',
+        password: 'secret123',
+    });
+    expect(anna.status).toBe(200);
+});
+
+// Budget is 5 failures per 60s, matching the framework's login limiter. These
+// tests exercise a single window: the whole block runs in well under a second,
+// so the window never rolls over mid-test.
+test('POST /api/account/password throttles repeated wrong current passwords with 429', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+
+    for (let i = 0; i < 5; i++) {
+        const res = await req(app, 'POST', '/api/account/password', {
+            currentPassword: `wrong-${i}`,
+            newPassword: 'newsecret456',
+        }, cookie);
+        expect(res.status).toBe(409);
+    }
+
+    const sixth = await req(app, 'POST', '/api/account/password', {
+        currentPassword: 'wrong-5',
+        newPassword: 'newsecret456',
+    }, cookie);
+    expect(sixth.status).toBe(429);
+
+    // Throttled even with the *correct* password — the 60s window has to
+    // expire (or a successful change has to land) before the budget returns.
+    const correct = await req(app, 'POST', '/api/account/password', {
+        currentPassword: 'secret123',
+        newPassword: 'newsecret456',
+    }, cookie);
+    expect(correct.status).toBe(429);
+});
+
+test('POST /api/account/password: a successful change clears the failure counter', async () => {
+    const { app } = await setup([seedUser]);
+    const cookie = await loginAs(app, 'anna@example.com', 'secret123');
+
+    for (let i = 0; i < 4; i++) {
+        const res = await req(app, 'POST', '/api/account/password', {
+            currentPassword: `wrong-${i}`,
+            newPassword: 'newsecret456',
+        }, cookie);
+        expect(res.status).toBe(409);
+    }
+
+    const ok = await req(app, 'POST', '/api/account/password', {
+        currentPassword: 'secret123',
+        newPassword: 'newsecret456',
+    }, cookie);
+    expect(ok.status).toBe(200);
+
+    // Counter reset: a fresh run of failures gets the full budget again.
+    for (let i = 0; i < 5; i++) {
+        const res = await req(app, 'POST', '/api/account/password', {
+            currentPassword: `wrong-again-${i}`,
+            newPassword: 'thirdsecret789',
+        }, cookie);
+        expect(res.status).toBe(409);
+    }
+});
+
+test('POST /api/account/password throttling is per user', async () => {
+    const { app } = await setup([seedUser]);
+    const annaCookie = await loginAs(app, 'anna@example.com', 'secret123');
+    const otherCookie = await registerAndLogin(app, 'other@example.com', 'otherpass1');
+
+    for (let i = 0; i < 6; i++) {
+        await req(app, 'POST', '/api/account/password', {
+            currentPassword: `wrong-${i}`,
+            newPassword: 'newsecret456',
+        }, annaCookie);
+    }
+    const annaBlocked = await req(app, 'POST', '/api/account/password', {
+        currentPassword: 'secret123',
+        newPassword: 'newsecret456',
+    }, annaCookie);
+    expect(annaBlocked.status).toBe(429);
+
+    // The other user is unaffected
+    const other = await req(app, 'POST', '/api/account/password', {
+        currentPassword: 'otherpass1',
+        newPassword: 'newsecret456',
+    }, otherCookie);
+    expect(other.status).toBe(200);
 });
 
 // --- Invitations ---

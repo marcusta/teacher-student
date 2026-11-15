@@ -24,6 +24,7 @@ import { TeachersService } from '../training-sessions/teachers.service';
 import { ProgramsShellComponent } from '../programs/programs-shell.component';
 import { PlansShellComponent } from '../plans/plans-shell.component';
 import { GoalsShellComponent } from '../goals/goals-shell.component';
+import { AccountComponent } from '../account/account.component';
 import { ScheduleComponent } from '../schedule/schedule.component';
 import { HorseLogComponent } from '../horse-log/horse-log.component';
 import { clearSchedulePreferences } from '../schedule/schedule-copy';
@@ -54,6 +55,7 @@ export const ROUTE_COMPONENTS = {
     '/program': ProgramsShellComponent,
     '/planer': PlansShellComponent,
     '/mal': GoalsShellComponent,
+    '/konto': AccountComponent,
     '/veckoschema': ScheduleComponent,
     '/hastlogg': HorseLogComponent,
 };

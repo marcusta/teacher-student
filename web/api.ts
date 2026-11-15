@@ -1,4 +1,5 @@
 import { createRegisterClient } from './api/register.gen';
+import { createAccountClient } from './api/account.gen';
 import { createInvitationsClient } from './api/invitations.gen';
 import { createStudentsClient } from './api/students.gen';
 import { createExercisesClient } from './api/exercises.gen';
@@ -45,6 +46,7 @@ const API_BASE = (import.meta.env?.BASE_URL ?? '/').replace(/\/+$/, '') + '/api'
 
 export const api = {
     register: createRegisterClient(API_BASE),
+    account: createAccountClient(API_BASE),
     invitations: createInvitationsClient(API_BASE),
     students: createStudentsClient(API_BASE),
     exercises: createExercisesClient(API_BASE),

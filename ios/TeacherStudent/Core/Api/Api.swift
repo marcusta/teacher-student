@@ -15,6 +15,7 @@ import Foundation
 /// `auth` instead of `register`.
 struct Api: Sendable {
     let auth: AuthApi
+    let account: AccountApi
     let invitations: InvitationsApi
     let students: StudentsApi
     let exercises: ExercisesApi
@@ -30,6 +31,7 @@ struct Api: Sendable {
 
     init(client: ApiClient = .shared) {
         auth = AuthApi(client: client)
+        account = AccountApi(client: client)
         invitations = InvitationsApi(client: client)
         students = StudentsApi(client: client)
         exercises = ExercisesApi(client: client)
