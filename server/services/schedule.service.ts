@@ -9,6 +9,10 @@ import { addDays, calendarDate, mondayOf, zonedInstant } from '../../shared/sche
 import type { Activity, CreateActivityInput, UpdateActivityInput, CompleteActivityInput, ScheduleWeek, HorseLog, LogInput } from './schedule.types';
 
 type ActivityRow = Selectable<ScheduleDatabase['stable_activities']>;
+function canPlanActivity(actorId: string, row: ActivityRow, assigneeIds: string[]): boolean {
+    return !!row.horse_id && row.created_by === actorId && assigneeIds.length === 1 && assigneeIds[0] === actorId;
+}
+
 export type ScheduleDb = Kysely<Database>;
 export function scheduleTransaction<T>(db: ScheduleDb, write: (db: ScheduleDb) => Promise<T>): Promise<T> {
     return db.isTransaction ? write(db) : db.transaction().execute(write);
@@ -114,10 +118,18 @@ export class ScheduleService {
         validateDate(startDate);
         if (mondayOf(startDate) !== startDate) throw new ScheduleError('monday_required');
         const stable = await new StableService(this.db).detail(actorId, stableId);
-        const rows = await this.db.selectFrom('stable_activities').selectAll().where('stable_id', '=', stableId)
-            .where('scheduled_date', '>=', startDate).where('scheduled_date', '<', addDays(startDate, 7)).orderBy('scheduled_date').orderBy('scheduled_time').orderBy('id').execute();
+        const endDate = addDays(startDate, 7);
+        const [rows, days, defaultTemplate] = await Promise.all([
+            this.db.selectFrom('stable_activities').selectAll().where('stable_id', '=', stableId)
+                .where('scheduled_date', '>=', startDate).where('scheduled_date', '<', endDate).orderBy('scheduled_date').orderBy('scheduled_time').orderBy('id').execute(),
+            this.db.selectFrom('schedule_days').select('date').where('stable_id', '=', stableId)
+                .where('date', '>=', startDate).where('date', '<', endDate).orderBy('date').execute(),
+            this.db.selectFrom('schedule_templates').select('name').where('stable_id', '=', stableId).where('is_default', '=', 1).executeTakeFirst(),
+        ]);
         const activities = await this.views(actorId, stable, rows);
-        return { stable, startDate, activities, total: activities.length, completed: activities.filter(a => a.status === 'completed').length, unassigned: activities.filter(a => a.status !== 'cancelled' && !a.assigneeIds.length).length };
+        return { stable, startDate, activities, total: activities.length, completed: activities.filter(a => a.status === 'completed').length,
+            unassigned: activities.filter(a => a.status !== 'cancelled' && !a.assigneeIds.length).length,
+            addedDates: days.map(day => day.date), defaultDayTemplateName: defaultTemplate?.name ?? null };
     }
 
     async views(actorId: string, stable: Awaited<ReturnType<StableService['detail']>>, rows: ActivityRow[]): Promise<Activity[]> {
@@ -147,7 +159,7 @@ export class ScheduleService {
                 hasProgram: programs.some(p => p.activity_id === row.id),
                 programs: programs.filter(p => p.activity_id === row.id && visibleAuthors.has(p.teacher_id)).map(p => ({ id: p.program_id, title: p.title })),
                 exercises: exercises.filter(e => e.activity_id === row.id && visibleAuthors.has(e.teacher_id)).map(e => ({ exerciseId: e.exercise_id, sourceProgramId: e.source_program_id, name: e.name, description: e.description, notes: e.notes, sortOrder: e.sort_order })),
-                canEdit: stable.role === 'admin' || (!!row.horse_id && row.created_by === actorId && assigned.length === 1 && assigned[0] === actorId),
+                canEdit: stable.role === 'admin' || canPlanActivity(actorId, row, assigned),
                 canComplete: stable.role === 'admin' || assigned.includes(actorId),
                 canClaim: row.status === 'planned' && !assigned.length && !horseInactive,
                 canRegisterTraining: ownsTraining && row.status !== 'cancelled' && !horseInactive && assigned.includes(actorId),
@@ -166,7 +178,7 @@ export class ScheduleService {
             const svc = new ScheduleService(db), role = await new StableService(db).requireMember(actorId, stableId), row = await svc.row(stableId, activityId);
             const assignees = await db.selectFrom('stable_activity_assignees').select('user_id').where('activity_id', '=', activityId).execute();
             const outcomeOnly = Object.keys(input).every(key => ['version', 'resultNote', 'performedAt', 'performerIds', 'stableId', 'activityId'].includes(key));
-            const canPlan = !!row.horse_id && row.created_by === actorId && assignees.length === 1 && assignees[0]!.user_id === actorId;
+            const canPlan = canPlanActivity(actorId, row, assignees.map(a => a.user_id));
             if (role !== 'admin' && !canPlan && !(outcomeOnly && assignees.some(a => a.user_id === actorId))) throw new ForbiddenError('Activity owner or administrator required');
             if ((input.performedAt !== undefined || input.performerIds !== undefined) && row.status !== 'completed') throw new ScheduleError('invalid_scope');
             const correctedPerformers = input.performerIds !== undefined ? await svc.members(stableId, input.performerIds) : null;
@@ -204,6 +216,21 @@ export class ScheduleService {
                 await db.deleteFrom('stable_activity_programs').where('activity_id', '=', activityId).execute();
             } else if (input.programIds !== undefined || input.exerciseIds !== undefined) await svc.setContent(actorId, activityId, validated?.trainingStudentId ?? row.training_student_id, input.programIds ?? [], input.exerciseIds ?? []);
             return svc.get(actorId, stableId, activityId);
+        });
+    }
+
+    async remove(actorId: string, stableId: string, activityId: string, version: number): Promise<{ ok: true }> {
+        return scheduleTransaction(this.db, async db => {
+            const role = await new StableService(db).requireMember(actorId, stableId);
+            const row = await new ScheduleService(db).row(stableId, activityId);
+            if (role !== 'admin') {
+                const assignees = await db.selectFrom('stable_activity_assignees').select('user_id').where('activity_id', '=', activityId).execute();
+                if (!canPlanActivity(actorId, row, assignees.map(a => a.user_id))) throw new ForbiddenError('Activity owner or administrator required');
+            }
+            const deleted = await db.deleteFrom('stable_activities').where('stable_id', '=', stableId)
+                .where('id', '=', activityId).where('version', '=', version).returning('id').executeTakeFirst();
+            if (!deleted) throw new ScheduleError('version_conflict');
+            return { ok: true };
         });
     }
 

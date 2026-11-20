@@ -61,15 +61,22 @@ test('migration and health commands upgrade only the supplied snapshot and prese
             requestId: 'deploy-preserves-week', startDate: '2026-11-16',
             typeIds: ['morning_feed', 'turnout', 'lunch_feed', 'bring_in', 'evening_feed'].map(c.type),
         });
+        await c.scheduleTemplateService.save(c.admin.id, c.stable.id, {
+            requestId: 'deploy-preserves-template', startDate: '2026-11-16', name: 'Basvecka',
+        });
         await sql`VACUUM INTO ${file}`.execute(c.db);
     } finally { await c.db.destroy(); }
 
     const old = new Database(file);
     // Recreate the schema immediately before migration 031.
-    old.exec(`ALTER TABLE training_session_exercise DROP COLUMN snapshot_name;
+    old.exec(`DROP TABLE schedule_days;
+        DROP INDEX schedule_templates_one_default;
+        ALTER TABLE schedule_templates DROP COLUMN is_default;
+        ALTER TABLE schedule_templates DROP COLUMN kind;
+        ALTER TABLE training_session_exercise DROP COLUMN snapshot_name;
         ALTER TABLE training_session_exercise DROP COLUMN snapshot_description;
         ALTER TABLE training_session_program DROP COLUMN snapshot_title;
-        DELETE FROM kysely_migration WHERE name = '031_scheduled_training_snapshots';`);
+        DELETE FROM kysely_migration WHERE name >= '031_scheduled_training_snapshots';`);
     const before = old.query('SELECT * FROM stable_activities ORDER BY id').all();
     expect(before).toHaveLength(35);
     old.close();
@@ -77,6 +84,7 @@ test('migration and health commands upgrade only the supplied snapshot and prese
     const pending = await command('db:health', file, folder);
     expect(pending.code).not.toBe(0);
     expect(pending.output).toContain('031_scheduled_training_snapshots');
+    expect(pending.output).toContain('032_schedule_day_templates');
 
     for (let attempt = 0; attempt < 2; attempt++) {
         const migrated = await command('db:migrate', file, folder);
@@ -89,6 +97,10 @@ test('migration and health commands upgrade only the supplied snapshot and prese
     const checked = new Database(file, { readonly: true });
     try {
         expect(checked.query('SELECT * FROM stable_activities ORDER BY id').all()).toEqual(before);
+        expect(checked.query('SELECT name, kind, is_default FROM schedule_templates').all()).toEqual([
+            { name: 'Basvecka', kind: 'week', is_default: 0 },
+        ]);
+        expect(checked.query('SELECT template_id FROM schedule_template_items').all()).toHaveLength(35);
         expect(checked.query("SELECT name FROM kysely_migration WHERE name = '031_scheduled_training_snapshots'").get()).not.toBeNull();
         expect(() => checked.query('SELECT snapshot_name, snapshot_description FROM training_session_exercise').all()).not.toThrow();
         expect(() => checked.query('SELECT snapshot_title FROM training_session_program').all()).not.toThrow();

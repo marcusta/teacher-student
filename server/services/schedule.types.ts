@@ -26,6 +26,9 @@ export interface UpdateActivityInput {
     performedAt?: string; performerIds?: string[];
 }
 export interface CompleteActivityInput { version: number; resultNote?: string; performerIds?: string[]; performedAt?: string }
-export interface ScheduleWeek { stable: StableDetail; startDate: string; activities: Activity[]; total: number; completed: number; unassigned: number }
+export interface ScheduleWeek {
+    stable: StableDetail; startDate: string; activities: Activity[]; total: number; completed: number; unassigned: number;
+    addedDates: string[]; defaultDayTemplateName: string | null;
+}
 export interface HorseLog { horse: StableHorse; stableName: string; timeZone: string; items: Activity[]; nextCursor: string | null }
 export interface LogInput { from?: string; to?: string; cursor?: string; limit?: number }

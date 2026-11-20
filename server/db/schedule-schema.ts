@@ -22,8 +22,9 @@ export interface ScheduleDatabase {
     stable_activity_performers: { activity_id: string; user_id: string };
     stable_activity_programs: { activity_id: string; program_id: string; title: string };
     stable_activity_exercises: { id: string; activity_id: string; exercise_id: string; source_program_id: string | null; name: string; description: string; notes: string | null; sort_order: number };
-    schedule_templates: { id: string; stable_id: string; name: string; created_by: string; created_at: string };
+    schedule_templates: { id: string; stable_id: string; name: string; created_by: string; created_at: string; kind: Generated<'day' | 'week'>; is_default: Generated<0 | 1> };
     schedule_template_items: { id: string; template_id: string; weekday: number; type_id: string; horse_id: string | null; title: string; scheduled_time: string | null; instruction: string; training_student_id: string | null; content_json: string; sort_order: number };
     schedule_template_assignees: { item_id: string; user_id: string };
+    schedule_days: { stable_id: string; date: string };
     schedule_operations: { stable_id: string; request_id: string; actor_id: string; fingerprint: string; result_json: string; created_at: string };
 }

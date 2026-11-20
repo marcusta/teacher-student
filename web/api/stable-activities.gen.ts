@@ -8,6 +8,8 @@ export interface ScheduleWeek {
     total: number;
     completed: number;
     unassigned: number;
+    addedDates: string[];
+    defaultDayTemplateName: null | string;
 }
 
 export interface Activity {
@@ -118,10 +120,11 @@ export interface StableInvitation {
 
 export interface StableActivitiesApi {
     week(input: { stableId: string; startDate: string }): Promise<ScheduleWeek>;
-    create(input: { exerciseIds?: string[]; status?: 'planned' | 'completed'; resultNote?: string; performerIds?: string[]; performedAt?: string; horseId?: null | string; time?: null | string; offsetMinutes?: null | number; instruction?: string; assigneeIds?: string[]; trainingStudentId?: null | string; programIds?: string[]; stableId: string; requestId: string; title: string; typeId: string; date: string }): Promise<Activity>;
+    create(input: { exerciseIds?: string[]; status?: 'planned' | 'completed'; resultNote?: string; performerIds?: string[]; performedAt?: string; horseId?: null | string; time?: null | string; offsetMinutes?: null | number; instruction?: string; assigneeIds?: string[]; trainingStudentId?: null | string; programIds?: string[]; stableId: string; requestId: string; date: string; title: string; typeId: string }): Promise<Activity>;
     get(input: { stableId: string; activityId: string }): Promise<Activity>;
-    update(input: { stableId: string; activityId: string; version: number; title?: string; exerciseIds?: string[]; resultNote?: string; performerIds?: string[]; performedAt?: string; typeId?: string; horseId?: null | string; date?: string; time?: null | string; offsetMinutes?: null | number; instruction?: string; assigneeIds?: string[]; trainingStudentId?: null | string; programIds?: string[] }): Promise<Activity>;
-    complete(input: { resultNote?: string; performerIds?: string[]; performedAt?: string; patch?: { title?: string; exerciseIds?: string[]; resultNote?: string; performerIds?: string[]; performedAt?: string; typeId?: string; horseId?: null | string; date?: string; time?: null | string; offsetMinutes?: null | number; instruction?: string; assigneeIds?: string[]; trainingStudentId?: null | string; programIds?: string[] }; stableId: string; activityId: string; version: number }): Promise<Activity>;
+    update(input: { stableId: string; activityId: string; version: number; date?: string; title?: string; exerciseIds?: string[]; resultNote?: string; performerIds?: string[]; performedAt?: string; typeId?: string; horseId?: null | string; time?: null | string; offsetMinutes?: null | number; instruction?: string; assigneeIds?: string[]; trainingStudentId?: null | string; programIds?: string[] }): Promise<Activity>;
+    remove(input: { stableId: string; activityId: string; version: number }): Promise<{ ok: true }>;
+    complete(input: { resultNote?: string; performerIds?: string[]; performedAt?: string; patch?: { date?: string; title?: string; exerciseIds?: string[]; resultNote?: string; performerIds?: string[]; performedAt?: string; typeId?: string; horseId?: null | string; time?: null | string; offsetMinutes?: null | number; instruction?: string; assigneeIds?: string[]; trainingStudentId?: null | string; programIds?: string[] }; stableId: string; activityId: string; version: number }): Promise<Activity>;
     reopen(input: { resultNote?: string; performerIds?: string[]; performedAt?: string; stableId: string; activityId: string; version: number }): Promise<Activity>;
     cancel(input: { resultNote?: string; performerIds?: string[]; performedAt?: string; stableId: string; activityId: string; version: number }): Promise<Activity>;
     claim(input: { resultNote?: string; performerIds?: string[]; performedAt?: string; stableId: string; activityId: string; version: number }): Promise<Activity>;
@@ -161,6 +164,13 @@ export function createStableActivitiesClient(baseUrl: string): StableActivitiesA
             for (const [k, v] of Object.entries(input as any))
                 if (!pathParams.has(k)) body[k] = v;
             return apiFetch({ method: 'PATCH', url: `${baseUrl}/stables/${input.stableId}/activities/${input.activityId}`, body });
+        },
+        async remove(input) {
+            const pathParams = new Set(['stableId', 'activityId']);
+            const body: Record<string, unknown> = {};
+            for (const [k, v] of Object.entries(input as any))
+                if (!pathParams.has(k)) body[k] = v;
+            return apiFetch({ method: 'POST', url: `${baseUrl}/stables/${input.stableId}/activities/${input.activityId}/delete`, body });
         },
         async complete(input) {
             const pathParams = new Set(['stableId', 'activityId']);

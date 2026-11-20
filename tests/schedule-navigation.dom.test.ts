@@ -11,6 +11,7 @@ import { createHorsesApi } from '../server/api/horses.api';
 import { AppComponent } from '../web/app/app.component';
 import { AppService } from '../web/app/app.service';
 import { ScheduleService } from '../web/schedule/schedule.service';
+import { DEFAULT_FILTERS, savePreferences } from '../web/schedule/schedule-copy';
 import { addDays, localToday, mondayOf } from '../shared/schedule-calendar';
 import { EMPTY_DASHBOARD_JSON, isDashboardUrl } from './dashboard-stub';
 
@@ -53,8 +54,7 @@ async function fixture() {
         di.get(AppService).navOpen.set(true);
         document.querySelector<HTMLAnchorElement>(`#app-nav-drawer a[href="${path}"]`)!.click();
     };
-    const reload = async () => {
-        const path = di.get(Router).route.get();
+    const reload = async (path = di.get(Router).route.get()) => {
         app.destroy();
         while (requests.size) await Promise.all(requests);
         di.reset();
@@ -72,6 +72,30 @@ async function fixture() {
     };
     return { ...c, router, navigate, reload, close };
 }
+
+test('a dated schedule link overrides saved dates and opens the selected day on reload', async () => {
+    const c = await fixture();
+    const dom = (window as unknown as { happyDOM: { setURL(url: string): void } }).happyDOM;
+    const oldUrl = location.href;
+    dom.setURL('http://localhost/home');
+    try {
+        savePreferences(c.admin.id, c.stable.id, { filters: DEFAULT_FILTERS, startDate: '2026-11-30', dayIndex: 5 });
+        const path = `/veckoschema/${c.stable.id}/2026-11-18`;
+        await c.reload(path);
+        await waitFor(() => !!document.querySelector('.schedule-table') && !di.get(ScheduleService).loading.get());
+        expect(di.get(ScheduleService).week.get()?.startDate).toBe('2026-11-16');
+        expect(document.querySelector('.schedule-day-strip [aria-pressed="true"]')?.getAttribute('data-day')).toBe('2');
+        document.querySelector<HTMLButtonElement>('[data-action="share-day"]')!.click();
+        expect(new URL(document.querySelector<HTMLInputElement>('dialog [name="shareUrl"]')!.value).pathname).toBe(path);
+        document.querySelector<HTMLButtonElement>('dialog [data-action="close"]')!.click();
+        document.querySelector<HTMLButtonElement>('[data-action="next"]')!.click();
+        await waitFor(() => di.get(ScheduleService).week.get()?.startDate === '2026-11-23');
+        expect(di.get(Router).route.get()).toBe(`/veckoschema/${c.stable.id}/2026-11-25`);
+    } finally {
+        await c.close();
+        dom.setURL(oldUrl);
+    }
+});
 
 test('mobile drawer reaches Horses after reopening a previously loaded weekly schedule', async () => {
     const c = await fixture();

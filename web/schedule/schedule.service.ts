@@ -8,7 +8,7 @@ export function scheduleErrorKey(error: unknown): string {
         if (error.status === 404) return 'schedule.error.not_found';
         if (error.status === 403) return 'schedule.error.forbidden';
         if (error.status === 400) return 'schedule.error.validation';
-        const known = ['version_conflict', 'horse_inactive', 'member_inactive', 'type_inactive', 'invalid_date', 'invalid_time', 'nonexistent_time', 'ambiguous_time', 'invalid_offset', 'last_admin', 'invitation_pending', 'invitation_expired', 'already_assigned', 'catalog_unavailable', 'training_student_required', 'training_already_linked', 'invalid_targets', 'source_changed', 'request_conflict', 'monday_required', 'invalid_duration', 'activity_cancelled', 'invalid_scope', 'type_in_use'];
+        const known = ['version_conflict', 'horse_inactive', 'member_inactive', 'type_inactive', 'invalid_date', 'invalid_time', 'nonexistent_time', 'ambiguous_time', 'invalid_offset', 'last_admin', 'invitation_pending', 'invitation_expired', 'already_assigned', 'catalog_unavailable', 'training_student_required', 'training_already_linked', 'invalid_targets', 'source_changed', 'request_conflict', 'monday_required', 'invalid_duration', 'activity_cancelled', 'invalid_scope', 'type_in_use', 'empty_day_template'];
         if (known.includes(error.message)) return 'schedule.error.' + error.message;
     }
     return 'schedule.error.generic';

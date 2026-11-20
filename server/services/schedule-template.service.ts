@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Selectable } from 'kysely';
 import type { ScheduleDatabase } from '../db/schedule-schema';
 import { addDays, mondayOf } from '../../shared/schedule-calendar';
-import { ScheduleService, validateDate, type ScheduleDb } from './schedule.service';
+import { ScheduleService, scheduleTransaction, validateDate, type ScheduleDb } from './schedule.service';
 import type { CreateActivityInput } from './schedule.types';
 import { StableService } from './stable.service';
 import { ScheduleError, text } from './schedule-errors';
@@ -12,7 +12,14 @@ type Snapshot = { programs: { program_id: string; title: string }[]; exercises: 
 type Planned = Omit<CreateActivityInput, 'requestId'> & { content: Snapshot };
 export interface CopyScheduleInput { requestId: string; sourceDate: string; targetDates: string[]; week?: boolean; keepAssignees: boolean; preview?: boolean; sourceVersion?: string }
 export interface ScheduleCopyResult { count: number; sourceCount: number; sourceVersion: string; createdIds: string[] }
-export interface ScheduleTemplate { id: string; name: string; count: number }
+export type ScheduleTemplateKind = 'day' | 'week';
+export interface ScheduleTemplate { id: string; name: string; count: number; kind: ScheduleTemplateKind; isDefault: boolean }
+export interface ScheduleDayResult { added: boolean; count: number }
+
+function templateDate(startDate: string, kind: ScheduleTemplateKind): void {
+    validateDate(startDate);
+    if (kind === 'week' && mondayOf(startDate) !== startDate) throw new ScheduleError('monday_required');
+}
 
 export class ScheduleTemplateService {
     constructor(private db: ScheduleDb) {}
@@ -83,22 +90,29 @@ export class ScheduleTemplateService {
     async list(actorId: string, stableId: string): Promise<ScheduleTemplate[]> {
         await new StableService(this.db).requireMember(actorId, stableId);
         const rows = await this.db.selectFrom('schedule_templates').leftJoin('schedule_template_items', 'schedule_template_items.template_id', 'schedule_templates.id')
-            .select(['schedule_templates.id', 'schedule_templates.name']).select(({ fn }) => fn.count<number>('schedule_template_items.id').as('count'))
-            .where('schedule_templates.stable_id', '=', stableId).groupBy(['schedule_templates.id', 'schedule_templates.name']).orderBy('schedule_templates.name').execute();
-        return rows.map(r => ({ id: r.id, name: r.name, count: Number(r.count) }));
+            .select(['schedule_templates.id', 'schedule_templates.name', 'schedule_templates.kind', 'schedule_templates.is_default'])
+            .select(({ fn }) => fn.count<number>('schedule_template_items.id').as('count'))
+            .where('schedule_templates.stable_id', '=', stableId).groupBy('schedule_templates.id').orderBy('schedule_templates.name').execute();
+        return rows.map(r => ({ id: r.id, name: r.name, count: Number(r.count), kind: r.kind, isDefault: r.is_default === 1 }));
     }
 
-    async save(actorId: string, stableId: string, input: { requestId: string; name: string; startDate: string }): Promise<ScheduleTemplate> {
-        return this.db.transaction().execute(async db => {
+    async save(actorId: string, stableId: string, input: { requestId: string; name: string; startDate: string; kind?: ScheduleTemplateKind }): Promise<ScheduleTemplate> {
+        return scheduleTransaction(this.db, async db => {
             await new StableService(db).requireMember(actorId, stableId, true);
-            if (mondayOf(validateDate(input.startDate)) !== input.startDate) throw new ScheduleError('monday_required');
+            const kind = input.kind ?? 'week';
+            templateDate(input.startDate, kind);
             const svc = new ScheduleTemplateService(db);
             const ids = await new ScheduleService(db).operation(actorId, stableId, input.requestId, { kind: 'save-template', input }, async () => {
-                const rows = await db.selectFrom('stable_activities').selectAll().where('stable_id', '=', stableId).where('scheduled_date', '>=', input.startDate).where('scheduled_date', '<', addDays(input.startDate, 7)).orderBy('id').execute();
+                let source = db.selectFrom('stable_activities').selectAll().where('stable_id', '=', stableId);
+                source = kind === 'day'
+                    ? source.where('scheduled_date', '=', input.startDate).where('status', '!=', 'cancelled')
+                    : source.where('scheduled_date', '>=', input.startDate).where('scheduled_date', '<', addDays(input.startDate, 7));
+                const rows = await source.orderBy('id').execute();
+                if (kind === 'day' && !rows.length) throw new ScheduleError('empty_day_template');
                 const plans = await Promise.all(rows.map(r => svc.planning(r, r.scheduled_date, true)));
                 await svc.validate(actorId, stableId, plans);
                 const id = crypto.randomUUID();
-                await db.insertInto('schedule_templates').values({ id, stable_id: stableId, name: text(input.name), created_by: actorId, created_at: new Date().toISOString() }).execute();
+                await db.insertInto('schedule_templates').values({ id, stable_id: stableId, name: text(input.name), kind, created_by: actorId, created_at: new Date().toISOString() }).execute();
                 for (const [index, plan] of plans.entries()) {
                     const itemId = crypto.randomUUID(), weekday = Math.round((Date.parse(plan.date + 'T12:00Z') - Date.parse(input.startDate + 'T12:00Z')) / 86400000);
                     await db.insertInto('schedule_template_items').values({ id: itemId, template_id: id, weekday, type_id: plan.typeId, horse_id: plan.horseId ?? null, title: plan.title, scheduled_time: plan.time ?? null, instruction: plan.instruction ?? '', training_student_id: plan.trainingStudentId ?? null, content_json: JSON.stringify(plan.content), sort_order: index }).execute();
@@ -106,28 +120,64 @@ export class ScheduleTemplateService {
                 }
                 return [id];
             });
-            return (await new ScheduleTemplateService(db).list(actorId, stableId)).find(t => t.id === ids[0])!;
+            return (await svc.list(actorId, stableId)).find(t => t.id === ids[0])!;
         });
     }
 
     async apply(actorId: string, stableId: string, input: { requestId: string; templateId: string; startDate: string; keepAssignees: boolean }): Promise<ScheduleCopyResult> {
-        return this.db.transaction().execute(async db => {
+        return scheduleTransaction(this.db, async db => {
             await new StableService(db).requireMember(actorId, stableId, true);
-            if (mondayOf(validateDate(input.startDate)) !== input.startDate) throw new ScheduleError('monday_required');
-            const template = await db.selectFrom('schedule_templates').select('id').where('id', '=', input.templateId).where('stable_id', '=', stableId).executeTakeFirst();
+            const template = await db.selectFrom('schedule_templates').select('kind').where('id', '=', input.templateId).where('stable_id', '=', stableId).executeTakeFirst();
             if (!template) throw new NotFoundError('Template not found');
+            templateDate(input.startDate, template.kind);
             const svc = new ScheduleTemplateService(db);
-            const createdIds = await new ScheduleService(db).operation(actorId, stableId, input.requestId, { kind: 'apply-template', input }, async () => {
-                const items = await db.selectFrom('schedule_template_items').selectAll().where('template_id', '=', input.templateId).orderBy('sort_order').execute();
-                const plans: Planned[] = [];
-                for (const item of items) {
-                    const assigned = input.keepAssignees ? (await db.selectFrom('schedule_template_assignees').select('user_id').where('item_id', '=', item.id).execute()).map(a => a.user_id) : [];
-                    plans.push({ typeId: item.type_id, horseId: item.horse_id, title: item.title, date: addDays(input.startDate, item.weekday), time: item.scheduled_time, instruction: item.instruction, trainingStudentId: input.keepAssignees ? item.training_student_id : null, assigneeIds: assigned, content: JSON.parse(item.content_json) as Snapshot });
-                }
-                return svc.write(actorId, stableId, plans);
-            });
+            const createdIds = await new ScheduleService(db).operation(actorId, stableId, input.requestId, { kind: 'apply-template', input },
+                () => svc.writeTemplate(actorId, stableId, input.templateId, input.startDate, input.keepAssignees));
             return { count: createdIds.length, sourceCount: createdIds.length, sourceVersion: '', createdIds };
         });
+    }
+
+    async setDefault(actorId: string, stableId: string, templateId: string | null): Promise<{ ok: true }> {
+        return scheduleTransaction(this.db, async db => {
+            await new StableService(db).requireMember(actorId, stableId, true);
+            const templates = db.selectFrom('schedule_templates').select('id').where('stable_id', '=', stableId).where('kind', '=', 'day');
+            if (templateId !== null && !await templates.where('id', '=', templateId).executeTakeFirst()) throw new NotFoundError('Day template not found');
+            const update = db.updateTable('schedule_templates').where('stable_id', '=', stableId);
+            await update.set({ is_default: 0 }).where('is_default', '=', 1).execute();
+            if (templateId !== null) await update.set({ is_default: 1 }).where('id', '=', templateId).execute();
+            return { ok: true };
+        });
+    }
+
+    async addDay(actorId: string, stableId: string, date: string): Promise<ScheduleDayResult> {
+        validateDate(date);
+        return scheduleTransaction(this.db, async db => {
+            await new StableService(db).requireMember(actorId, stableId, true);
+            const existing = await db.selectFrom('stable_activities').select('id').where('stable_id', '=', stableId).where('scheduled_date', '=', date).executeTakeFirst();
+            if (existing) return { added: false, count: 0 };
+            const day = await db.insertInto('schedule_days').values({ stable_id: stableId, date })
+                .onConflict(conflict => conflict.columns(['stable_id', 'date']).doNothing()).returning('date').executeTakeFirst();
+            if (!day) return { added: false, count: 0 };
+            const template = await db.selectFrom('schedule_templates').select('id').where('stable_id', '=', stableId).where('is_default', '=', 1).executeTakeFirst();
+            const ids = template ? await new ScheduleTemplateService(db).writeTemplate(actorId, stableId, template.id, date, true) : [];
+            return { added: true, count: ids.length };
+        });
+    }
+
+    private async writeTemplate(actorId: string, stableId: string, templateId: string, date: string, keepAssignees: boolean): Promise<string[]> {
+        const items = await this.db.selectFrom('schedule_template_items').selectAll().where('template_id', '=', templateId).orderBy('sort_order').execute();
+        const plans: Planned[] = [];
+        for (const item of items) {
+            const assigneeIds = keepAssignees
+                ? (await this.db.selectFrom('schedule_template_assignees').select('user_id').where('item_id', '=', item.id).execute()).map(a => a.user_id)
+                : [];
+            plans.push({
+                typeId: item.type_id, horseId: item.horse_id, title: item.title, date: addDays(date, item.weekday),
+                time: item.scheduled_time, instruction: item.instruction, trainingStudentId: keepAssignees ? item.training_student_id : null,
+                assigneeIds, content: JSON.parse(item.content_json) as Snapshot,
+            });
+        }
+        return this.write(actorId, stableId, plans);
     }
 
     async routines(actorId: string, stableId: string, input: { requestId: string; startDate: string; typeIds: string[] }): Promise<ScheduleCopyResult> {

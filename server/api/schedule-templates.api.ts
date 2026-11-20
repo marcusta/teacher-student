@@ -6,8 +6,10 @@ import { Id, Ids, DateValue, StablePath } from './schedule.schemas';
 
 const StableInput = Type.Object(StablePath);
 const CopyInput = Type.Object({ ...StablePath, requestId: Id, sourceDate: DateValue, targetDates: Type.Array(DateValue, { minItems: 1, maxItems: 14, uniqueItems: true }), week: Type.Optional(Type.Boolean()), keepAssignees: Type.Boolean(), preview: Type.Optional(Type.Boolean()), sourceVersion: Type.Optional(Type.String({ maxLength: 100 })) });
-const SaveInput = Type.Object({ ...StablePath, requestId: Id, name: Type.String({ minLength: 1, maxLength: 200 }), startDate: DateValue });
+const SaveInput = Type.Object({ ...StablePath, requestId: Id, name: Type.String({ minLength: 1, maxLength: 200 }), startDate: DateValue, kind: Type.Optional(Type.Union([Type.Literal('day'), Type.Literal('week')])) });
 const ApplyInput = Type.Object({ ...StablePath, requestId: Id, templateId: Id, startDate: DateValue, keepAssignees: Type.Boolean() });
+const DefaultInput = Type.Object({ ...StablePath, templateId: Type.Union([Id, Type.Null()]) });
+const DayInput = Type.Object({ ...StablePath, date: DateValue });
 const RoutinesInput = Type.Object({ ...StablePath, requestId: Id, startDate: DateValue, typeIds: Ids });
 
 export function createScheduleTemplatesApi(svc: ScheduleTemplateService) {
@@ -15,6 +17,8 @@ export function createScheduleTemplatesApi(svc: ScheduleTemplateService) {
         list: { method: 'GET' as const, path: '/stables/:stableId/templates', schema: StableInput, middleware: [requireAuth()], fn: async (_input: Static<typeof StableInput>, c: Context) => svc.list(requireUser(c).id, c.req.param('stableId')!) },
         save: { method: 'POST' as const, path: '/stables/:stableId/templates', schema: SaveInput, middleware: [requireAuth()], fn: async (input: Static<typeof SaveInput>, c: Context) => svc.save(requireUser(c).id, c.req.param('stableId')!, input) },
         apply: { method: 'POST' as const, path: '/stables/:stableId/templates/apply', schema: ApplyInput, middleware: [requireAuth()], fn: async (input: Static<typeof ApplyInput>, c: Context) => svc.apply(requireUser(c).id, c.req.param('stableId')!, input) },
+        setDefault: { method: 'PUT' as const, path: '/stables/:stableId/templates/default', schema: DefaultInput, middleware: [requireAuth()], fn: async (input: Static<typeof DefaultInput>, c: Context) => svc.setDefault(requireUser(c).id, c.req.param('stableId')!, input.templateId) },
+        addDay: { method: 'POST' as const, path: '/stables/:stableId/days', schema: DayInput, middleware: [requireAuth()], fn: async (input: Static<typeof DayInput>, c: Context) => svc.addDay(requireUser(c).id, c.req.param('stableId')!, input.date) },
         routines: { method: 'POST' as const, path: '/stables/:stableId/routines', schema: RoutinesInput, middleware: [requireAuth()], fn: async (input: Static<typeof RoutinesInput>, c: Context) => svc.routines(requireUser(c).id, c.req.param('stableId')!, input) },
         copy: { method: 'POST' as const, path: '/stables/:stableId/copy', schema: CopyInput, middleware: [requireAuth()], fn: async (input: Static<typeof CopyInput>, c: Context) => svc.copy(requireUser(c).id, c.req.param('stableId')!, input) },
     };

@@ -99,7 +99,9 @@ export const scheduleStyles = `
 .schedule-day-strip button { border:1px solid ${token('border')}; border-radius:4px; background:${token('surface')}; color:${token('text-muted')}; padding:8px 3px; flex:1; min-width:38px; font-size:11px; }
 .schedule-day-strip button[aria-pressed=true] { background:${token('accent-soft')}; color:${token('accent')}; border-color:${token('accent')}; }
 .schedule-day-strip strong { display:block; font:500 22px/1.4 ${token('font-display')}; }
-.schedule-mobile-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:18px 0; }
+.schedule-day-actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 16px; margin:16px 0; }
+.schedule-day-actions h3 { font-size:14px; font-weight:600; margin:0; }
+.schedule-day-actions small { color:${token('text-muted')}; }
 .schedule-mobile-routine { display:grid; grid-template-columns:42px minmax(0,1fr); gap:8px; align-items:start; margin:10px 0; }
 .schedule-mobile-routine>span { font-size:11px; color:${token('text-muted')}; padding-top:12px; }
 .schedule-mobile .schedule-card { padding:12px; }
@@ -136,6 +138,9 @@ export const scheduleStyles = `
 .schedule-check input { accent-color:${token('accent')}; }
 .schedule-dialog .schedule-alert:empty { display:none; }
 .schedule-dialog-footer { display:flex; flex-wrap:wrap; align-items:center; gap:8px; border-top:1px solid ${token('border')}; padding-top:16px; margin-top:20px; }
+.schedule-delete { border-top:1px solid ${token('border')}; margin-top:16px; padding:12px 0; }
+.schedule-delete summary { cursor:pointer; font-weight:600; }
+.schedule-delete p { margin:8px 0 12px; }
 .schedule-dialog-hint { font-size:12px; color:${token('text-muted')}; }
 .schedule-dialog-info { background:${token('accent-soft')}; padding:12px; border-radius:4px; font-size:12px; margin:14px 0; }
 .schedule-program { background:${token('info-soft')}; padding:12px; border-radius:4px; color:${token('info')}; font-size:12px; margin:14px 0; }

@@ -1,5 +1,5 @@
 import { t } from '../i18n';
-import type { Activity, StableDetail, ScheduleCatalog } from '../api';
+import type { Activity, StableDetail, ScheduleCatalog, ScheduleTemplate } from '../api';
 import { escapeHtml as esc } from './schedule-copy';
 import { zonedOffsets } from '../../shared/schedule-calendar';
 
@@ -37,6 +37,37 @@ export function offsetField(name: string, date: string, time: string, zone: stri
     return select(name, tr('overlap'), value === null ? '' : String(value), [{ value: '', label: tr('choose') }, ...offsets.map((o, i) => ({ value: String(o), label: `${tr(i === 0 ? 'first_time' : 'second_time')} (UTC${o >= 0 ? '+' : '-'}${String(Math.floor(Math.abs(o) / 60)).padStart(2, '0')}:${String(Math.abs(o) % 60).padStart(2, '0')})` }))], 'required');
 }
 
+export function dayTemplatesPanel(templates: ScheduleTemplate[], date: string, dateLabel: string): string {
+    const options = templates.map(t => ({ value: t.id, label: t.name }));
+    return `
+        <h3>${esc(tr('create_day_template'))}</h3>
+        <form data-form="save-day-template">
+            <div class="schedule-fieldrow">
+                ${field('sourceDate', tr('template_source_date'), date, 'date', 'required')}
+                ${field('name', tr('template_name'), '', 'text', 'required maxlength="200"')}
+            </div>
+            <p class="schedule-dialog-hint">${esc(tr('day_template_description'))}</p>
+            <button type="submit" class="schedule-button">${esc(tr('save_day_template'))}</button>
+        </form>
+        ${templates.length ? `
+            <h3>${esc(tr('use_day_template', { date: dateLabel }))}</h3>
+            <form data-form="apply-day-template">
+                ${select('templateId', tr('choose_day_template'), templates[0]!.id,
+                    templates.map(t => ({ value: t.id, label: t.name + ' · ' + t.count + ' ' + tr('activities') })))}
+                <label class="schedule-check"><input type="checkbox" name="keepAssignees" checked>${esc(tr('keep_assignees'))}</label>
+                <div class="schedule-dialog-footer"><button type="submit" class="schedule-button">${esc(tr('apply_day_template'))}</button></div>
+            </form>
+            <h3>${esc(tr('default_day_template'))}</h3>
+            <form data-form="default-day-template">
+                ${select('defaultTemplateId', tr('default_template_label'), templates.find(t => t.isDefault)?.id ?? '',
+                    [{ value: '', label: tr('no_default_template') }, ...options])}
+                <p class="schedule-dialog-hint">${esc(tr('default_template_description'))}</p>
+                <button type="submit" class="schedule-button">${esc(tr('save_default_template'))}</button>
+            </form>
+        ` : ''}
+    `;
+}
+
 export function activityPanel(d: ActivityDraft, stable: StableDetail, userId: string, catalog: ScheduleCatalog | null): string {
     const editing = !d.record || d.record.canEdit, disabled = editing ? '' : 'disabled';
     const type = stable.types.find(t => t.id === d.typeId), training = type?.category === 'training';
@@ -66,5 +97,9 @@ export function activityPanel(d: ActivityDraft, stable: StableDetail, userId: st
     ${d.record?.canComplete && d.record.status !== 'cancelled' ? `<button type="button" class="schedule-danger schedule-small" data-action="cancel">${esc(tr('cancel_activity'))}</button>` : ''}
     ${d.record?.canRegisterTraining && !d.record.hasTrainingSession ? `<button type="button" class="schedule-button" data-action="training">${esc(tr('register_training'))}</button>` : ''}
     ${d.record?.trainingSessionId ? `<a class="schedule-log-link" href="#" data-training-link="${esc(d.record.trainingSessionId)}">${esc(tr('open_training'))} ↗</a>` : d.record?.hasTrainingSession ? `<p class="schedule-dialog-hint">${esc(tr('training_private'))}</p>` : ''}
+    ${d.record?.canEdit ? `<details class="schedule-delete"><summary>${esc(tr('delete_activity'))}</summary>
+        <p>${esc(tr(d.record.hasTrainingSession ? 'delete_activity_linked' : 'delete_activity_confirm'))}</p>
+        <button type="button" class="schedule-danger schedule-small" data-action="delete-activity">${esc(tr('confirm_delete_activity'))}</button>
+    </details>` : ''}
     </form>`;
 }

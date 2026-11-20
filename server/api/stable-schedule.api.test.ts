@@ -24,6 +24,12 @@ test('real sessions protect the weekly API and validate dates and optimistic ver
         const activity = await created.json() as { id: string; version: number };
         const done = await request(`/stables/${c.stable.id}/activities/${activity.id}/complete`, { version: activity.version, resultNote: 'Klart' });
         expect(done.status).toBe(200);
+        const finished = await done.json() as { version: number };
+        const deletePath = `/stables/${c.stable.id}/activities/${activity.id}/delete`;
+        expect((await request(deletePath, { version: activity.version })).status).toBe(409);
+        expect((await request(deletePath, { version: finished.version }, false)).status).toBe(401);
+        expect((await request(deletePath, { version: finished.version })).status).toBe(200);
+        expect((await request(`/stables/${c.stable.id}/activities/${activity.id}`)).status).toBe(404);
         const other = `session=${await sessions.create(c.stranger.id)}`;
         expect((await app.request(`/api/stables/${c.stable.id}/week?startDate=2026-11-16`, { headers: { cookie: other } })).status).toBe(404);
         const invalid = await request(`/stables/${c.stable.id}/activities`, { requestId: 'bad', title: 'Saknar typ', date: 'fel' });

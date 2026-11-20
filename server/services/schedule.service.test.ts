@@ -50,6 +50,10 @@ test('scheduled training on another owners horse preserves snapshots and private
     expect(publicView.trainingSessionId).toBeNull();
     expect(publicView.resultNote).toBe('Utfört enligt plan.');
     expect((await c.trainingSessionService.listForStudent(c.member.id))).toHaveLength(1);
+    await c.scheduleService.remove(c.admin.id, c.stable.id, activity.id, result.version);
+    expect((await c.scheduleService.log(c.admin.id, c.stable.id, c.horse.id, {})).items).toEqual([]);
+    expect(await c.db.selectFrom('stable_activity_programs').selectAll().execute()).toEqual([]);
+    expect(await c.trainingSessionService.getForViewer(c.member.id, result.trainingSessionId!)).toEqual(pass);
 });
 
 test('changing the main performer revalidates catalog access and preserves a failed edit atomically', async () => {
@@ -116,4 +120,73 @@ test('copying and weekly templates retain planning but exclude outcomes and surv
     const next = await c.scheduleService.week(c.member.id, c.stable.id, '2026-11-23');
     expect(next.activities).toHaveLength(2);
     expect(next.activities.every(a => a.status === 'planned' && !a.assigneeIds.length && !a.resultNote)).toBe(true);
+});
+
+test('day templates copy one date and add a new day with its default only once', async () => {
+    const c = await scheduleFixture();
+    try {
+        const { scheduleService: schedule, scheduleTemplateService: templates } = c;
+        const actor = c.admin.id, stable = c.stable.id;
+        const source = { typeId: c.type('care'), horseId: c.horse.id, date: '2026-11-18', assigneeIds: [c.member.id] };
+        await schedule.create(actor, stable, {
+            ...source, requestId: 'completed', title: 'Hovkontroll', time: '12:00',
+            instruction: 'Kontrollera alla hovar', status: 'completed', resultNote: 'Klart',
+        });
+        const cancelled = await schedule.create(actor, stable, { ...source, requestId: 'cancelled', title: 'Inställd' });
+        await schedule.transition(actor, stable, cancelled.id, 'cancelled', { version: cancelled.version });
+        await schedule.create(actor, stable, { ...source, requestId: 'other-day', title: 'Torsdag', date: '2026-11-19' });
+        const template = await templates.save(actor, stable, { requestId: 'save-day', kind: 'day', name: 'Basdag', startDate: source.date });
+        expect(template).toMatchObject({ kind: 'day', count: 1, isDefault: false });
+        await expect(templates.setDefault(c.member.id, stable, template.id)).rejects.toThrow();
+        await expect(templates.addDay(c.member.id, stable, '2026-11-20')).rejects.toThrow();
+        await templates.setDefault(actor, stable, template.id);
+        expect(await templates.list(actor, stable)).toEqual([{ ...template, isDefault: true }]);
+        expect(await templates.addDay(actor, stable, source.date)).toEqual({ added: false, count: 0 });
+        const date = '2026-11-20';
+        expect(await Promise.all([templates.addDay(actor, stable, date), templates.addDay(actor, stable, date)])).toEqual([
+            { added: true, count: 1 }, { added: false, count: 0 },
+        ]);
+        const week = await schedule.week(actor, stable, '2026-11-16');
+        expect(week.addedDates).toEqual([date]);
+        expect(week.defaultDayTemplateName).toBe('Basdag');
+        const copies = week.activities.filter(a => a.date === date);
+        expect(copies).toHaveLength(1);
+        expect(copies[0]).toMatchObject({
+            title: 'Hovkontroll', time: '12:00', status: 'planned', instruction: 'Kontrollera alla hovar',
+            assigneeIds: [c.member.id], resultNote: '', performerIds: [],
+        });
+        await schedule.remove(actor, stable, copies[0]!.id, copies[0]!.version);
+        expect(await templates.addDay(actor, stable, date)).toEqual({ added: false, count: 0 });
+
+        await templates.setDefault(actor, stable, null);
+        expect(await templates.addDay(actor, stable, '2026-11-21')).toEqual({ added: true, count: 0 });
+        const manual = await templates.apply(actor, stable, {
+            requestId: 'apply-day', templateId: template.id, startDate: '2026-11-22', keepAssignees: false,
+        });
+        expect(await schedule.get(actor, stable, manual.createdIds[0]!)).toMatchObject({ date: '2026-11-22', assigneeIds: [] });
+    } finally { await c.db.destroy(); }
+});
+
+test('an invalid default leaves the date available for a new attempt', async () => {
+    const c = await scheduleFixture();
+    try {
+        const actor = c.admin.id, stable = c.stable.id;
+        await c.scheduleService.create(actor, stable, {
+            requestId: 'feed', typeId: c.type('morning_feed'), title: 'Fodring', date: '2026-11-18',
+        });
+        await c.scheduleService.create(actor, stable, {
+            requestId: 'care', typeId: c.type('care'), title: 'Skötsel', date: '2026-11-18', horseId: c.horse.id,
+        });
+        const template = await c.scheduleTemplateService.save(actor, stable, {
+            requestId: 'save', kind: 'day', name: 'Basdag', startDate: '2026-11-18',
+        });
+        await c.scheduleTemplateService.setDefault(actor, stable, template.id);
+        await c.stableService.detachHorse(actor, stable, c.horse.id);
+        await expect(c.scheduleTemplateService.addDay(actor, stable, '2026-11-19')).rejects.toThrow('horse_inactive');
+        const week = await c.scheduleService.week(actor, stable, '2026-11-16');
+        expect(week.addedDates).toEqual([]);
+        expect(week.activities).toHaveLength(2);
+        await c.scheduleTemplateService.setDefault(actor, stable, null);
+        expect(await c.scheduleTemplateService.addDay(actor, stable, '2026-11-19')).toEqual({ added: true, count: 0 });
+    } finally { await c.db.destroy(); }
 });

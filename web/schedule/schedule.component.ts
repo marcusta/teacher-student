@@ -1,21 +1,34 @@
 import { Component, Router, effect, template, untrack } from '@basics/core/client/core';
 import { AuthService } from '@basics/core/client/auth';
-import { api, type Activity, type StableDetail, type StableHorse, type ActivityType, type Horse, type ScheduleCatalog, type ScheduleTemplate, type ScheduleCopyResult, type TrainingSession } from '../api';
+import { api, type Activity, type StableDetail, type StableHorse, type ActivityType, type Horse, type ScheduleCatalog, type ScheduleTemplate, type ScheduleCopyResult, type ScheduleWeek, type TrainingSession } from '../api';
 import { getLocale } from '../i18n';
-import { addDays, mondayOf, isoWeek, localToday, zonedInstant } from '../../shared/schedule-calendar';
+import { addDays, calendarDate, mondayOf, isoWeek, localToday, zonedInstant } from '../../shared/schedule-calendar';
 import { ScheduleService, scheduleErrorKey } from './schedule.service';
 import { DEFAULT_FILTERS, activityOrder, escapeHtml as esc, filterActivities, horseLanes, initials, readPreferences, savePreferences, type ScheduleFilters } from './schedule-copy';
-import { activityPanel, field, area, select, checks, offsetField, wallTime, wallOffset, tr, type ActivityDraft } from './schedule-panels';
+import { activityPanel, dayTemplatesPanel, field, area, select, checks, offsetField, wallTime, wallOffset, tr, type ActivityDraft } from './schedule-panels';
 import { scheduleStyles } from './schedule-styles';
 
 type CopyPanel = { kind:'copy'; requestId:string; sourceDate:string; targetDates:string[]; week:boolean; keepAssignees:boolean; preview:ScheduleCopyResult|null };
 type Panel = { kind:'activity'; draft:ActivityDraft } | CopyPanel | { kind:'settings'; horses:Horse[] } | { kind:'create-stable' }
-    | { kind:'templates'; templates:ScheduleTemplate[]; requests:{save:string;apply:string;routines:string} }
+    | { kind:'templates'; mode:'day'|'week'; templates:ScheduleTemplate[]; requests:ReturnType<typeof templateRequests>; status?:string }
+    | { kind:'share'; url:string }
     | { kind:'training'; activity:Activity; sessions:TrainingSession[]; performedWall:string; performedOffset:number|null; summary:string; duration:string; resultNote:string; sessionId:string; performerIds:string[] };
 
 const tpl = template(`<section class="schedule" bind="main"></section><div bind="dialogs"></div>`);
 const colgroup = '<colgroup><col class="schedule-label-col"><col span="7"></colgroup>';
 const button = (label:string, action:string, className='schedule-button', extra='') => `<button type="button" class="${className}" data-action="${action}" ${extra}>${esc(label)}</button>`;
+const templateRequests = () => ({ save: crypto.randomUUID(), apply: crypto.randomUUID(), routines: crypto.randomUUID() });
+
+function scheduleLinkDate(value: string | undefined): string | null {
+    if (!value) return null;
+    try {
+        calendarDate(value);
+        calendarDate(addDays(mondayOf(value), 7));
+        return value;
+    } catch {
+        return null;
+    }
+}
 
 export class ScheduleComponent extends Component {
     static styles = scheduleStyles;
@@ -72,6 +85,8 @@ export class ScheduleComponent extends Component {
     private link(label:string,path:string,className=''): string { return `<a href="${esc(this.route(path))}" data-route="${esc(path)}" class="${className}">${esc(label)}</a>`; }
     private date(value:string,options:Intl.DateTimeFormatOptions={day:'numeric',month:'long'}): string { return new Intl.DateTimeFormat(getLocale(),{...options,timeZone:'UTC'}).format(new Date(value+'T12:00Z')); }
     private dayName(value:string,short=false): string { return this.date(value,{weekday:short?'short':'long'}); }
+    private selectedDate():string { return addDays(this.startDate,this.dayIndex); }
+    private dayRoute(date:string):string { return `/veckoschema/${this.stableId}/${date}`; }
     private persist(): void { if(this.accountId&&this.stableId)savePreferences(this.accountId,this.stableId,{filters:this.filters,startDate:this.startDate,dayIndex:this.dayIndex}); }
 
     private async routeChanged(path:string,userId:string): Promise<void> {
@@ -95,13 +110,19 @@ export class ScheduleComponent extends Component {
         const fallback=mondayOf(localToday(this.svc.stables.get().find(s=>s.id===this.stableId)?.timeZone));
         const saved=readPreferences(userId,this.stableId,[],fallback);
         this.startDate=saved.startDate; this.dayIndex=saved.dayIndex;
+        const linkedDate = this.logMode ? null : scheduleLinkDate(parts[2]);
+        if (linkedDate) {
+            this.startDate = mondayOf(linkedDate);
+            this.dayIndex = (new Date(linkedDate + 'T12:00Z').getUTCDay() + 6) % 7;
+        }
         if(this.logMode&&this.horseId)await this.svc.loadLog(this.stableId,this.horseId,this.logFrom,this.logTo);
         else await this.svc.loadWeek(this.stableId,this.startDate);
         if(this.disposed||generation!==this.routeGeneration)return;
         const stable=this.stable();
         if(stable){
             const prefs=readPreferences(userId,this.stableId,stable.horses.map(h=>h.id),mondayOf(localToday(stable.timeZone)));
-            this.filters=prefs.filters;this.dayIndex=prefs.dayIndex;
+            this.filters=prefs.filters;
+            if(linkedDate)this.persist();
             if(this.logMode&&!this.horseId){
                 const horse=stable.horses.find(h=>h.active)??stable.horses[0];
                 if(horse){this.router.navigate(`/hastlogg/${stable.id}/${horse.id}`,true);return;}
@@ -118,7 +139,7 @@ export class ScheduleComponent extends Component {
         const tabs=this.stableId?`<nav class="schedule-tabs" aria-label="${esc(tr('views'))}"><a href="${esc(this.route('/veckoschema/'+this.stableId))}" data-route="/veckoschema/${esc(this.stableId)}" ${!this.logMode?'aria-current="page"':''}>${esc(tr('heading'))}</a><a href="${esc(this.route('/hastlogg/'+this.stableId+(this.horseId?'/'+this.horseId:'')))}" data-route="/hastlogg/${esc(this.stableId)}${this.horseId?'/'+esc(this.horseId):''}" ${this.logMode?'aria-current="page"':''}>${esc(tr('horse_log'))}</a></nav>`:'';
         const stables=this.svc.stables.get();
         const picker=stables.length>1?`<label class="schedule-field"><span>${esc(tr('choose_stable'))}</span><select class="schedule-select" name="stable-picker">${stables.map(s=>`<option value="${esc(s.id)}" ${s.id===this.stableId?'selected':''}>${esc(s.name)}</option>`).join('')}</select></label>`:'';
-        const top=`<header class="schedule-head"><div><p class="schedule-kicker">${esc(stable?.name??tr('stable'))}</p><h1>${esc(heading)}</h1><p class="schedule-description">${esc(tr(this.logMode?'log_description':'description'))}</p></div><div class="schedule-actions">${stable?`${button(tr('settings'),'settings','schedule-ghost schedule-small')}${stable.role==='admin'&&!this.logMode?button(tr('weekly_template'),'templates','schedule-ghost'):''}${button(tr(this.logMode?'log_event':'activity'),'new','schedule-primary')}`:''}</div></header>${picker}${tabs}`;
+        const top=`<header class="schedule-head"><div><p class="schedule-kicker">${esc(stable?.name??tr('stable'))}</p><h1>${esc(heading)}</h1><p class="schedule-description">${esc(tr(this.logMode?'log_description':'description'))}</p></div><div class="schedule-actions">${stable?`${button(tr('settings'),'settings','schedule-ghost schedule-small')}${stable.role==='admin'&&!this.logMode?button(tr('templates'),'templates','schedule-ghost'):''}${button(tr(this.logMode?'log_event':'activity'),'new','schedule-primary')}`:''}</div></header>${picker}${tabs}`;
         const error=this.svc.error.get();
         if(!this.svc.loaded.get()||(!stable&&this.svc.loading.get())){this.main.innerHTML=top+`<p class="schedule-loading" role="status">${esc(tr('loading'))}</p>`;return;}
         if(!this.stableId){this.main.innerHTML=top+(error?this.errorHTML(error):`<div class="schedule-panel schedule-empty"><h2>${esc(tr('start_heading'))}</h2><p>${esc(tr('start_description'))}</p>${button(tr('create_stable'),'create-stable','schedule-primary')}</div>`);return;}
@@ -142,7 +163,7 @@ export class ScheduleComponent extends Component {
     }
     private state(activity:Activity): string { return `<span class="schedule-state ${activity.status}" aria-label="${esc(tr('status.'+activity.status))}">${activity.status==='completed'?'✓':''}</span>`; }
     private card(stable:StableDetail,activity:Activity): string { return `<button type="button" class="schedule-card ${activity.category} ${activity.status}" data-activity="${esc(activity.id)}" aria-label="${esc(activity.title+', '+(activity.time??tr('no_time'))+', '+tr('status.'+activity.status))}"><span class="schedule-card-time">${this.state(activity)}${esc(activity.time??tr('no_time'))}</span><strong>${esc(activity.title)}</strong><span class="schedule-card-people">${this.people(stable,activity.assigneeIds,true)}</span>${activity.horseInactive?`<span class="schedule-warning">${esc(tr('needs_attention'))}</span>`:''}</button>`; }
-    private dayHead(day:number,copy=false): string {const date=addDays(this.startDate,day);return `<th scope="col" class="${day===this.dayIndex?'schedule-selected':''}"><div class="schedule-day-head"><button type="button" data-day="${day}" aria-label="${esc(this.date(date,{weekday:'long',day:'numeric',month:'long'}))}">${esc(this.dayName(date,true))}<strong>${Number(date.slice(8))}</strong></button>${copy?`<button type="button" class="schedule-icon schedule-copy-day" data-copy-day="${day}" aria-label="${esc(tr('copy_day_named',{day:this.dayName(date)}))}">⧉</button>`:''}</div></th>`;}
+    private dayHead(day:number,copy=false): string {const date=addDays(this.startDate,day);return `<th scope="col" class="${day===this.dayIndex?'schedule-selected':''}"><div class="schedule-day-head"><button type="button" data-day="${day}" aria-pressed="${day===this.dayIndex}" aria-label="${esc(this.date(date,{weekday:'long',day:'numeric',month:'long'}))}">${esc(this.dayName(date,true))}<strong>${Number(date.slice(8))}</strong></button>${copy?`<button type="button" class="schedule-icon schedule-copy-day" data-copy-day="${day}" aria-label="${esc(tr('copy_day_named',{day:this.dayName(date)}))}">⧉</button>`:''}</div></th>`;}
     private addCell(horse:StableHorse,day:number):string {return horse.active?`<button type="button" class="schedule-lane-add" data-new-horse="${esc(horse.id)}" data-new-day="${day}" aria-label="${esc(tr('add_for_horse',{name:horse.name,day:this.dayName(addDays(this.startDate,day))}))}">+</button>`:'';}
 
     private renderWeek(stable:StableDetail,activities:Activity[]): string {
@@ -156,13 +177,34 @@ export class ScheduleComponent extends Component {
         const stall=showStable?`<section class="schedule-panel"><div class="schedule-band"><strong>${esc(tr('who_does_what'))}</strong><span>${esc(tr('assignment_hint'))}</span></div><table class="schedule-table schedule-stable-table" aria-label="${esc(tr('stable_week'))}">${colgroup}<thead><tr><th scope="col">${esc(tr('stable_routines'))}</th>${Array.from({length:7},(_,d)=>this.dayHead(d,stable.role==='admin')).join('')}</tr></thead><tbody>${stableTypes.map(type=>`<tr><th scope="row">${esc(type.name)}${type.defaultTime?'<small>'+esc(type.defaultTime)+'</small>':''}</th>${Array.from({length:7},(_,d)=>{const items=visible.filter(a=>!a.horseId&&a.typeId===type.id&&a.date===addDays(this.startDate,d)).sort(activityOrder);return `<td class="${d===this.dayIndex?'schedule-selected':''}">${items.length?items.map(a=>`<button type="button" class="schedule-assignment ${a.status}" data-activity="${esc(a.id)}" aria-label="${esc(a.title+', '+this.dayName(a.date)+', '+tr('status.'+a.status))}">${this.people(stable,a.assigneeIds)}${a.status==='completed'?'<span aria-hidden="true">✓</span>':a.status==='cancelled'?'<small>'+esc(tr('status.cancelled'))+'</small>':''}${a.time!==type.defaultTime?'<small>'+esc(a.time??tr('no_time'))+'</small>':''}</button>`).join(''):stable.role==='admin'?`<button type="button" class="schedule-assignment empty" data-new-type="${esc(type.id)}" data-new-day="${d}" aria-label="${esc(tr('add_named',{name:type.name,day:this.dayName(addDays(this.startDate,d))}))}">+</button>`:'<span aria-label="'+esc(tr('nothing_planned'))+'">·</span>'}</td>`;}).join('')}</tr>`).join('')}</tbody></table>${stableTypes.length?'':`<p class="schedule-empty">${esc(tr('no_matches'))}</p>`}</section>`:'';
         const horses=horseLanes(stable.horses,visible,this.filters);
         const horseTable=this.filters.scope!=='stable'?`<section><div class="schedule-horse-heading"><div><h2>${esc(tr('horses_week'))}</h2><p>${esc(tr('horses_description'))}</p></div><span>${esc(tr('horse_counts',{horses:horses.length,activities:visible.filter(a=>a.horseId).length}))}</span></div><div class="schedule-panel"><div class="schedule-band"><strong>${esc(tr('planned_per_horse'))}</strong><span>${esc(tr('multiple_hint'))}</span></div><table class="schedule-table schedule-horse-table" aria-label="${esc(tr('horse_week'))}">${colgroup}<thead><tr><th scope="col">${esc(tr('horse'))}</th>${Array.from({length:7},(_,d)=>this.dayHead(d)).join('')}</tr></thead><tbody>${horses.map(horse=>{const items=visible.filter(a=>a.horseId===horse.id);return `<tr data-horse-lane="${esc(horse.id)}"><th scope="row"><span class="schedule-horse-name">${esc(horse.name)}</span><small>${esc(tr('done_count',{done:items.filter(a=>a.status==='completed').length,total:items.length}))}</small>${!horse.active?'<small class="schedule-warning">'+esc(tr('inactive_horse_short'))+'</small>':''}${this.link(tr('horse_log')+' ↗',`/hastlogg/${stable.id}/${horse.id}`,'schedule-log-link')}</th>${Array.from({length:7},(_,d)=>`<td class="${d===this.dayIndex?'schedule-selected':''}"><div class="schedule-cell">${items.filter(a=>a.date===addDays(this.startDate,d)).sort(activityOrder).map(a=>this.card(stable,a)).join('')}</div>${this.addCell(horse,d)}</td>`).join('')}</tr>`;}).join('')}</tbody></table>${horses.length?'':`<p class="schedule-empty">${esc(tr('no_horses_match'))}</p>`}</div></section>`:'';
-        const empty=!visible.length?`<div class="schedule-empty"><p>${esc(tr(activities.length?'no_matches':'empty_week'))}</p>${activities.length?button(tr('reset_filters'),'reset-filters','schedule-ghost'):stable.role==='admin'?button(tr('add_routines'),'templates','schedule-button'):''}</div>`:'';
-        return tools+filters+empty+`<div class="schedule-desktop">${stall}${horseTable}</div><div class="schedule-mobile">${this.mobileWeek(stable,visible,horses,showStable)}</div>`+this.legend();
+        const empty=!visible.length?`<div class="schedule-empty"><p>${esc(tr(activities.length?'no_matches':'empty_week'))}</p>${activities.length?button(tr('reset_filters'),'reset-filters','schedule-ghost'):stable.role==='admin'?button(tr('add_routines'),'week-templates','schedule-button'):''}</div>`:'';
+        const dayStrip = `<div class="schedule-mobile"><div class="schedule-day-strip" aria-label="${esc(tr('choose_day'))}">${Array.from({length:7},(_,d)=>{const date=addDays(this.startDate,d);return `<button type="button" data-day="${d}" aria-pressed="${d===this.dayIndex}">${esc(this.dayName(date,true))}<strong>${Number(date.slice(8))}</strong></button>`;}).join('')}</div></div>`;
+        return tools+filters+dayStrip+this.dayActions(week)+empty+`<div class="schedule-desktop">${stall}${horseTable}</div><div class="schedule-mobile">${this.mobileWeek(stable,visible,horses,showStable)}</div>`+this.legend();
+    }
+
+    private dayActions(week: ScheduleWeek): string {
+        const date = this.selectedDate();
+        const dateLabel = this.date(date, { weekday: 'long', day: 'numeric', month: 'long' });
+        const admin = week.stable.role === 'admin';
+        const hasActivities = week.activities.some(a => a.date === date);
+        const added = week.addedDates.includes(date);
+        const busy = this.svc.saving.get() || this.svc.loading.get();
+        return `<div class="schedule-day-actions">
+            <div><h3>${esc(dateLabel)}</h3>
+                ${admin && !hasActivities && added ? `<small>${esc(tr('day_added'))}</small>` : ''}
+                ${admin && !hasActivities && !added && week.defaultDayTemplateName ? `<small>${esc(tr('day_uses_template', { name: week.defaultDayTemplateName }))}</small>` : ''}
+            </div>
+            <div class="schedule-actions">
+                ${admin && !hasActivities && !added ? button(tr('add_day'), 'add-day', 'schedule-button schedule-small', busy ? 'disabled' : '') : ''}
+                ${button(tr('share_day'), 'share-day', 'schedule-ghost schedule-small')}
+                ${admin ? `<span class="schedule-mobile"><button type="button" class="schedule-icon" data-copy-day="${this.dayIndex}" aria-label="${esc(tr('copy_day'))}">⧉</button></span>` : ''}
+            </div>
+        </div>`;
     }
 
     private mobileWeek(stable:StableDetail,visible:Activity[],horses:StableHorse[],showStable:boolean): string {
         const date=addDays(this.startDate,this.dayIndex), today=visible.filter(a=>a.date===date).sort(activityOrder);
-        return `<div class="schedule-day-strip" aria-label="${esc(tr('choose_day'))}">${Array.from({length:7},(_,d)=>{const value=addDays(this.startDate,d);return `<button type="button" data-day="${d}" aria-pressed="${d===this.dayIndex}">${esc(this.dayName(value,true))}<strong>${Number(value.slice(8))}</strong></button>`;}).join('')}</div><div class="schedule-mobile-head"><h2>${esc(this.date(date,{weekday:'long',day:'numeric'}))}</h2>${stable.role==='admin'?`<button type="button" class="schedule-icon" data-copy-day="${this.dayIndex}" aria-label="${esc(tr('copy_day'))}">⧉</button>`:''}</div>${showStable?`<section><div class="schedule-band"><strong>${esc(tr('stable_routines'))}</strong></div>${today.filter(a=>!a.horseId).map(a=>`<div class="schedule-mobile-routine"><span>${esc(a.time??tr('no_time'))}</span>${this.card(stable,a)}</div>`).join('')||`<p class="schedule-empty">${esc(tr('nothing_planned'))}</p>`}</section>`:''}${this.filters.scope!=='stable'?`<div class="schedule-horse-heading"><h2>${esc(tr('horses'))}</h2></div>${horses.map(horse=>`<section class="schedule-panel schedule-mobile-horse"><header><span class="schedule-horse-name">${esc(horse.name)}</span>${this.link(tr('horse_log')+' ↗',`/hastlogg/${stable.id}/${horse.id}`,'schedule-log-link')}${horse.active?`<button type="button" class="schedule-icon" data-new-horse="${esc(horse.id)}" data-new-day="${this.dayIndex}" aria-label="${esc(tr('add_for_horse',{name:horse.name,day:this.dayName(date)}))}">+</button>`:''}</header><div>${today.filter(a=>a.horseId===horse.id).map(a=>this.card(stable,a)).join('')||`<p>${esc(tr('nothing_planned'))}</p>`}</div></section>`).join('')}`:''}`;
+        return `${showStable?`<section><div class="schedule-band"><strong>${esc(tr('stable_routines'))}</strong></div>${today.filter(a=>!a.horseId).map(a=>`<div class="schedule-mobile-routine"><span>${esc(a.time??tr('no_time'))}</span>${this.card(stable,a)}</div>`).join('')||`<p class="schedule-empty">${esc(tr('nothing_planned'))}</p>`}</section>`:''}${this.filters.scope!=='stable'?`<div class="schedule-horse-heading"><h2>${esc(tr('horses'))}</h2></div>${horses.map(horse=>`<section class="schedule-panel schedule-mobile-horse"><header><span class="schedule-horse-name">${esc(horse.name)}</span>${this.link(tr('horse_log')+' ↗',`/hastlogg/${stable.id}/${horse.id}`,'schedule-log-link')}${horse.active?`<button type="button" class="schedule-icon" data-new-horse="${esc(horse.id)}" data-new-day="${this.dayIndex}" aria-label="${esc(tr('add_for_horse',{name:horse.name,day:this.dayName(date)}))}">+</button>`:''}</header><div>${today.filter(a=>a.horseId===horse.id).map(a=>this.card(stable,a)).join('')||`<p>${esc(tr('nothing_planned'))}</p>`}</div></section>`).join('')}`:''}`;
     }
     private legend():string{return `<div class="schedule-legend">${['planned','completed','cancelled'].map(status=>`<span><span class="schedule-state ${status}" aria-hidden="true">${status==='completed'?'✓':''}</span>${esc(tr('status.'+status))}</span>`).join('')}<span>${esc(tr('details_hint'))}</span></div>`;}
 
@@ -174,7 +216,9 @@ export class ScheduleComponent extends Component {
     }
 
     private async refresh():Promise<void>{if(!this.stableId){await this.svc.loadStables();this.paint();return;}if(this.logMode&&this.horseId)await this.svc.loadLog(this.stableId,this.horseId,this.logFrom,this.logTo);else await this.svc.loadWeek(this.stableId,this.startDate);}
-    private async changeWeek(days:number):Promise<void>{this.startDate=addDays(this.startDate,days);this.persist();this.notice='';await this.refresh();}
+    private changeDate(date: string): void {
+        if (scheduleLinkDate(date)) this.router.navigate(this.dayRoute(date), true);
+    }
     private changeMain(event:Event):void {
         const target=event.target as HTMLInputElement;
         if(target.name==='stable-picker'){this.router.navigate((this.logMode?'/hastlogg/':'/veckoschema/')+target.value);return;}
@@ -188,7 +232,7 @@ export class ScheduleComponent extends Component {
         if(target.dataset.route){if(event instanceof MouseEvent&&(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey))return;event.preventDefault();this.router.navigate(target.dataset.route);return;}
         if(target.dataset.trainingLink){event.preventDefault();this.closePanel();this.router.navigate('/traningspass/'+target.dataset.trainingLink);return;}
         if(target.dataset.scope){this.filters={...this.filters,scope:target.dataset.scope};this.persist();this.paint();return;}
-        if(target.dataset.day!==undefined){this.dayIndex=Number(target.dataset.day);this.persist();this.paint();return;}
+        if(target.dataset.day!==undefined){this.changeDate(addDays(this.startDate,Number(target.dataset.day)));return;}
         if(target.dataset.activity){const a=this.svc.week.get()?.activities.find(a=>a.id===target.dataset.activity)??this.svc.log.get()?.items.find(a=>a.id===target.dataset.activity);if(a)this.openActivity(a);return;}
         if(target.dataset.newHorse!==undefined||target.dataset.newType){this.openActivity(undefined,Number(target.dataset.newDay??this.dayIndex),target.dataset.newHorse,target.dataset.newType);return;}
         if(target.dataset.copyDay!==undefined){this.showPanel({kind:'copy',requestId:crypto.randomUUID(),sourceDate:addDays(this.startDate,Number(target.dataset.copyDay)),targetDates:[],week:false,keepAssignees:true,preview:null});return;}
@@ -197,16 +241,27 @@ export class ScheduleComponent extends Component {
         if(action==='new'){this.openActivity();return;}
         if(action==='create-stable'){this.showPanel({kind:'create-stable'});return;}
         if(action==='settings'){await this.openSettings();return;}
-        if(action==='templates'){await this.openTemplates();return;}
+        if(action==='templates'||action==='week-templates'){await this.openTemplates(action==='templates'?'day':'week');return;}
+        if(action==='template-mode-day'||action==='template-mode-week'){
+            if(this.panel?.kind==='templates'){
+                this.panel.mode=action==='template-mode-day'?'day':'week';
+                this.panel.requests=templateRequests();this.panel.status=undefined;
+                this.svc.writeError.set(null);this.paintDialog(true);
+            }
+            return;
+        }
+        if(action==='add-day'){await this.addDay();return;}
+        if(action==='share-day'){this.showPanel({kind:'share',url:new URL(this.route(this.dayRoute(this.selectedDate())),location.origin).href});return;}
+        if(action==='copy-link'){await this.copyLink();return;}
         if(action==='refresh'){event.preventDefault();await this.refresh();return;}
-        if(action==='previous'){await this.changeWeek(-7);return;}
-        if(action==='next'){await this.changeWeek(7);return;}
-        if(action==='today'){this.startDate=mondayOf(localToday(this.stable()?.timeZone));this.persist();await this.refresh();return;}
+        if(action==='previous'||action==='next'){this.changeDate(addDays(this.selectedDate(),action==='next'?7:-7));return;}
+        if(action==='today'){this.changeDate(localToday(this.stable()?.timeZone));return;}
         if(action==='mine'||action==='unassigned'){this.filters={...this.filters,[action]:!this.filters[action]};this.persist();this.paint();return;}
         if(action==='reset-filters'){this.filters={...DEFAULT_FILTERS};this.persist();this.paint();return;}
         if(action==='load-more'){await this.svc.loadLog(this.stableId,this.horseId,this.logFrom,this.logTo,true);return;}
         if(action==='complete'){await this.saveActivity(true);return;}
         if(action==='claim'||action==='reopen'||action==='cancel'){await this.stateAction(action);return;}
+        if(action==='delete-activity'){await this.deleteActivity();return;}
         if(action==='training'){await this.openTraining();return;}
         if(action==='copy-preview'||action==='copy-confirm'){await this.copy(action==='copy-preview');return;}
         if(action==='copy-week'){this.showPanel({kind:'copy',requestId:crypto.randomUUID(),sourceDate:addDays(this.startDate,-7),targetDates:[this.startDate],week:true,keepAssignees:true,preview:null});return;}
@@ -239,7 +294,7 @@ export class ScheduleComponent extends Component {
         if(!this.dialog){this.dialog=document.createElement('dialog');this.dialog.className='schedule-dialog';this.dialog.addEventListener('cancel',e=>{e.preventDefault();if(!this.svc.saving.get())this.closePanel();});this.dialog.addEventListener('click',e=>{const box=this.dialog!.getBoundingClientRect();if(e.target===this.dialog&&(e.clientX<box.left||e.clientX>box.right||e.clientY<box.top||e.clientY>box.bottom)&&!this.svc.saving.get())this.closePanel();});this.dialogs.appendChild(this.dialog);force=true;}
         if(force){
             const active=document.activeElement as HTMLInputElement|null,focused=active?.name,selection=active?.selectionStart;
-            const title=this.panel.kind==='activity'?(this.panel.draft.record?.title??tr(this.panel.draft.completed?'log_event':'new_activity')):tr(this.panel.kind==='create-stable'?'create_stable':this.panel.kind==='templates'?'weekly_template':this.panel.kind==='copy'?'copy_day':this.panel.kind==='training'?'register_training':'settings');
+            const title=this.panel.kind==='activity'?(this.panel.draft.record?.title??tr(this.panel.draft.completed?'log_event':'new_activity')):tr(this.panel.kind==='create-stable'?'create_stable':this.panel.kind==='templates'?'templates':this.panel.kind==='share'?'share_day':this.panel.kind==='copy'?'copy_day':this.panel.kind==='training'?'register_training':'settings');
             this.dialog.innerHTML=`<div class="schedule-dialog-head"><p class="schedule-kicker">${esc(stable?.name??tr('stable'))}</p>${button('×','close','schedule-icon',`aria-label="${esc(tr('close'))}"`)}</div><h2 id="schedule-dialog-title">${esc(title)}</h2><div class="schedule-alert" role="alert" data-write-error></div><div data-conflict></div><div data-panel-body>${this.panel.kind==='activity'&&stable?activityPanel(this.panel.draft,stable,this.accountId,this.catalog):this.otherPanelHTML()}</div>`;
             this.dialog.setAttribute('aria-labelledby','schedule-dialog-title');
             if(!this.dialog.open){try{this.dialog.showModal();}catch{this.dialog.setAttribute('open','');}}
@@ -268,7 +323,7 @@ export class ScheduleComponent extends Component {
             }
             if(!d.record)d.requestId=crypto.randomUUID();
         }
-        if(this.panel?.kind==='templates')this.panel.requests={save:crypto.randomUUID(),apply:crypto.randomUUID(),routines:crypto.randomUUID()};
+        if(this.panel?.kind==='templates')this.panel.requests=templateRequests();
         if(this.panel?.kind==='training'){
             const p=this.panel;if(['summary','duration','resultNote','performedWall','sessionId'].includes(input.name))(p as unknown as Record<string,unknown>)[input.name]=input.value;
             if(input.name==='performerIds')p.performerIds=[...this.dialog!.querySelectorAll<HTMLInputElement>('[name="performerIds"]:checked')].map(e=>e.value);
@@ -316,12 +371,74 @@ export class ScheduleComponent extends Component {
             return api.stableActivities.update({stableId:stable.id,activityId:record.id,version:record.version,...(record.canEdit?{...values,...content}:{}),resultNote:d.resultNote,...(record.status==='completed'&&record.canComplete?{...(record.performedAt&&(d.performedWall!==wallTime(record.performedAt,stable.timeZone)||d.performedOffset!==wallOffset(record.performedAt,stable.timeZone))?{performedAt}:{}),...(d.performerIds.length!==record.performerIds.length||d.performerIds.some(id=>!record.performerIds.includes(id))?{performerIds:d.performerIds}:{})}:{})});
         });
         if(result){this.svc.merge(result);this.closePanel();this.notice=tr(complete?'completed_saved':'saved');await this.refresh();}
-        else if(this.svc.writeError.get()==='schedule.error.version_conflict'&&record){try{this.latestActivity=await api.stableActivities.get({stableId:stable.id,activityId:record.id});this.panelState();}catch{/* Keep the draft visible even if refreshing the conflict also fails. */}}
+        else if(record)await this.loadConflict(panel,record);
     }
     private async stateAction(action:'claim'|'reopen'|'cancel'):Promise<void>{if(this.panel?.kind!=='activity'||!this.panel.draft.record)return;const a=this.panel.draft.record;const result=await this.svc.write(()=>api.stableActivities[action]({stableId:this.stableId,activityId:a.id,version:a.version}));if(result){this.svc.merge(result);this.closePanel();await this.refresh();}}
 
+    private async loadConflict(panel: Panel, record: Activity): Promise<void> {
+        if (this.svc.writeError.get() !== 'schedule.error.version_conflict') return;
+        try {
+            const latest = await api.stableActivities.get({ stableId: record.stableId, activityId: record.id });
+            if (!this.disposed && this.panel === panel) {
+                this.latestActivity = latest;
+                this.panelState();
+            }
+        } catch { /* Keep the original write error and draft visible. */ }
+    }
+
+    private async deleteActivity(): Promise<void> {
+        const panel = this.panel;
+        if (panel?.kind !== 'activity' || !panel.draft.record?.canEdit) return;
+        const { id, stableId, version } = panel.draft.record;
+        const result = await this.svc.write(() => api.stableActivities.remove({ stableId, activityId: id, version }));
+        if (this.disposed || this.panel !== panel) return;
+        if (!result) {
+            await this.loadConflict(panel, panel.draft.record);
+            return;
+        }
+        this.closePanel();
+        this.notice = tr('activity_deleted');
+        await this.refresh();
+    }
+
+    private async addDay(): Promise<void> {
+        const date = this.selectedDate(), generation = this.routeGeneration;
+        const result = await this.svc.write(() => api.scheduleTemplates.addDay({ stableId: this.stableId, date }));
+        if (!result || this.disposed || generation !== this.routeGeneration) return;
+        this.notice = result.added
+            ? tr(result.count ? 'day_added_with_activities' : 'day_added', { count: result.count })
+            : tr('day_exists');
+        await this.refresh();
+    }
+
+    private async copyLink(): Promise<void> {
+        const panel = this.panel;
+        if (panel?.kind !== 'share') return;
+        try {
+            await navigator.clipboard.writeText(panel.url);
+        } catch {
+            if (this.panel === panel) {
+                const input = this.dialog?.querySelector<HTMLInputElement>('[name="shareUrl"]');
+                input?.focus();
+                input?.select();
+                this.dialog!.querySelector('[role="status"]')!.textContent = tr('copy_link_manually');
+            }
+            return;
+        }
+        if (this.disposed || this.panel !== panel) return;
+        this.closePanel();
+        this.notice = tr('link_copied');
+        this.paint();
+    }
+
     private async openSettings():Promise<void>{const horses=await this.svc.write(()=>api.horses.list());if(horses)this.showPanel({kind:'settings',horses});}
-    private async openTemplates():Promise<void>{const templates=await this.svc.write(()=>api.scheduleTemplates.list({stableId:this.stableId}));if(templates)this.showPanel({kind:'templates',templates,requests:{save:crypto.randomUUID(),apply:crypto.randomUUID(),routines:crypto.randomUUID()}});}
+    private async openTemplates(mode: 'day' | 'week'): Promise<void> {
+        const generation = this.routeGeneration;
+        const templates = await this.svc.write(() => api.scheduleTemplates.list({ stableId: this.stableId }));
+        if (templates && !this.disposed && generation === this.routeGeneration) {
+            this.showPanel({ kind: 'templates', mode, templates, requests: templateRequests() });
+        }
+    }
     private async settingsWrite(operation:()=>Promise<unknown>):Promise<void>{const result=await this.svc.write(operation);if(result!==undefined){await this.svc.loadStables();if(!this.svc.stables.get().some(s=>s.id===this.stableId)){this.closePanel();this.router.navigate('/veckoschema');return;}await this.refresh();if(this.panel?.kind==='settings')this.paintDialog(true);}}
 
     private async openTraining():Promise<void>{if(this.panel?.kind!=='activity'||!this.panel.draft.record)return;const activity=this.panel.draft.record;const sessions=await this.svc.write(()=>api.trainingSessions.list());if(!sessions)return;const value=activity.performedAt??new Date().toISOString();this.showPanel({kind:'training',activity,sessions:sessions.filter(s=>s.horseId===activity.horseId),performedWall:wallTime(value,this.stable()!.timeZone),performedOffset:wallOffset(value,this.stable()!.timeZone),summary:'',duration:'',resultNote:this.panel.draft.resultNote,sessionId:'',performerIds:[this.accountId]});}
@@ -329,9 +446,19 @@ export class ScheduleComponent extends Component {
     private otherPanelHTML():string {
         const p=this.panel,stable=this.stable();if(!p)return'';
         if(p.kind==='create-stable')return `<p>${esc(tr('create_description'))}</p><form data-form="create-stable">${field('name',tr('stable_name'),'','text','required maxlength="200"')}${select('timeZone',tr('time_zone'),'Europe/Stockholm',[{value:'Europe/Stockholm',label:'Europe/Stockholm'},{value:'UTC',label:'UTC'}])}<div class="schedule-dialog-footer"><button type="submit" class="schedule-primary">${esc(tr('create_stable'))}</button></div></form>`;
+        if(p.kind==='share')return `${field('shareUrl',tr('schedule_link'),p.url,'url','readonly')}${button(tr('copy_link'),'copy-link','schedule-primary')}<p role="status" class="schedule-dialog-hint"></p>`;
         if(!stable)return'';
         if(p.kind==='settings')return this.settingsHTML(stable,p.horses);
-        if(p.kind==='templates')return `<p>${esc(tr('template_description'))}</p><form data-form="routines">${checks('routine',tr('daily_routines'),stable.types.filter(t=>t.scope==='stable'&&!t.archived).map(t=>t.id),stable.types.filter(t=>t.scope==='stable'&&!t.archived).map(t=>({value:t.id,label:t.name+(t.defaultTime?' · '+t.defaultTime:'')})))}<button type="submit" class="schedule-primary">${esc(tr('add_routines'))}</button></form><h3>${esc(tr('reuse_week'))}</h3>${button(tr('copy_previous_week'),'copy-week')}<form data-form="save-template">${field('name',tr('template_name'),'','text','required maxlength="200"')}<button type="submit" class="schedule-button">${esc(tr('save_template'))}</button></form>${p.templates.length?`<form data-form="apply-template">${select('templateId',tr('choose_template'),p.templates[0]!.id,p.templates.map(t=>({value:t.id,label:t.name+' · '+t.count+' '+tr('activities')})))}<label class="schedule-check"><input type="checkbox" name="keepAssignees" checked>${esc(tr('keep_assignees'))}</label><div class="schedule-dialog-footer"><button type="submit" class="schedule-primary">${esc(tr('apply_template'))}</button></div></form>`:''}<p class="schedule-dialog-hint">${esc(tr('copy_excludes_outcome'))}</p>`;
+        if(p.kind==='templates'){
+            const tabs = `<div class="schedule-actions" role="group" aria-label="${esc(tr('templates'))}">
+                ${button(tr('day_templates'), 'template-mode-day', 'schedule-filter', `aria-pressed="${p.mode === 'day'}"`)}
+                ${button(tr('weekly_template'), 'template-mode-week', 'schedule-filter', `aria-pressed="${p.mode === 'week'}"`)}
+            </div>`;
+            const status = p.status ? `<div class="schedule-dialog-info" role="status">${esc(p.status)}</div>` : '';
+            const templates = p.templates.filter(t => t.kind === p.mode);
+            if(p.mode==='day')return tabs+status+dayTemplatesPanel(templates,this.selectedDate(),this.date(this.selectedDate()));
+            return tabs+`<p>${esc(tr('template_description'))}</p><form data-form="routines">${checks('routine',tr('daily_routines'),stable.types.filter(t=>t.scope==='stable'&&!t.archived).map(t=>t.id),stable.types.filter(t=>t.scope==='stable'&&!t.archived).map(t=>({value:t.id,label:t.name+(t.defaultTime?' · '+t.defaultTime:'')})))}<button type="submit" class="schedule-primary">${esc(tr('add_routines'))}</button></form><h3>${esc(tr('reuse_week'))}</h3>${button(tr('copy_previous_week'),'copy-week')}<form data-form="save-template">${field('name',tr('template_name'),'','text','required maxlength="200"')}<button type="submit" class="schedule-button">${esc(tr('save_template'))}</button></form>${templates.length?`<form data-form="apply-template">${select('templateId',tr('choose_template'),templates[0]!.id,templates.map(t=>({value:t.id,label:t.name+' · '+t.count+' '+tr('activities')})))}<label class="schedule-check"><input type="checkbox" name="keepAssignees" checked>${esc(tr('keep_assignees'))}</label><div class="schedule-dialog-footer"><button type="submit" class="schedule-primary">${esc(tr('apply_template'))}</button></div></form>`:''}<p class="schedule-dialog-hint">${esc(tr('copy_excludes_outcome'))}</p>`;
+        }
         if(p.kind==='copy')return `<p>${esc(tr(p.week?'copy_week_description':'copy_day_description'))}</p>${field('sourceDate',tr('copy_from'),p.sourceDate,'date','required')}${p.week?field('targetDate',tr('copy_to'),p.targetDates[0]??'','date','required'):checks('copyTarget',tr('copy_to'),p.targetDates,Array.from({length:7},(_,d)=>addDays(this.startDate,d)).filter(date=>date!==p.sourceDate).map(date=>({value:date,label:this.date(date,{weekday:'long',day:'numeric',month:'short'})})))+field('extraTarget',tr('another_date'),'','date')}${!p.week&&p.targetDates.some(d=>d<this.startDate||d>addDays(this.startDate,6))?'<p>'+esc(p.targetDates.map(d=>this.date(d)).join(', '))+'</p>':''}<label class="schedule-check"><input type="checkbox" name="keepAssignees" ${p.keepAssignees?'checked':''}>${esc(tr('keep_assignees'))}</label><div class="schedule-dialog-info">${esc(tr('copy_scope'))}<br>${esc(tr('copy_excludes_outcome'))}</div>${p.preview?'<p role="status">'+esc(tr('copy_preview_count',{count:p.preview.count,source:p.preview.sourceCount}))+'</p>':''}<div class="schedule-dialog-footer">${button(tr('preview'),'copy-preview','schedule-button')}${button(tr('copy_activities'),'copy-confirm','schedule-primary',p.preview?.count?'':'disabled')}</div>`;
         if(p.kind==='training')return `<p>${esc(tr('training_description'))}</p><form data-form="training">${select('sessionId',tr('existing_training'),p.sessionId,[{value:'',label:tr('new_training')},...p.sessions.map(s=>({value:s.id,label:this.date(s.performedAt.slice(0,10))+' · '+(s.summary?.slice(0,45)??tr('training'))}))])}${field('performedWall',tr('performed_at'),p.performedWall,'datetime-local','required')}${offsetField('performedOffset',p.performedWall.slice(0,10),p.performedWall.slice(11,16),stable.timeZone,p.performedOffset)}${field('duration',tr('duration'),p.duration,'number','min="0" max="1440"')}${area('summary',tr('private_summary'),p.summary)}${area('resultNote',tr('result_note'),p.resultNote)}${checks('performerIds',tr('actual_performers'),p.performerIds,stable.members.filter(m=>m.active).map(m=>({value:m.userId,label:m.displayName})))}<div class="schedule-dialog-footer"><button type="submit" class="schedule-primary">${esc(tr('save_training'))}</button></div></form>`;
         return'';
@@ -347,6 +474,53 @@ export class ScheduleComponent extends Component {
 
     private async copy(preview:boolean):Promise<void>{if(this.panel?.kind!=='copy')return;const p=this.panel;const result=await this.svc.write(()=>api.scheduleTemplates.copy({stableId:this.stableId,requestId:p.requestId,sourceDate:p.sourceDate,targetDates:p.targetDates,week:p.week,keepAssignees:p.keepAssignees,preview,sourceVersion:preview?undefined:p.preview?.sourceVersion}));if(result){if(preview){p.preview=result;this.paintDialog(true);}else{this.closePanel();this.notice=tr('copied',{count:result.count});await this.refresh();}}}
 
+    private async submitTemplates(panel: Extract<Panel, { kind: 'templates' }>, name: string | undefined, data: FormData): Promise<void> {
+        const stableId = this.stableId, { requests } = panel;
+        const current = () => !this.disposed && this.panel === panel;
+        if (name === 'default-day-template') {
+            const templateId = String(data.get('defaultTemplateId') ?? '') || null;
+            const result = await this.svc.write(() => api.scheduleTemplates.setDefault({ stableId, templateId }));
+            if (result && current()) {
+                panel.templates = panel.templates.map(t => ({ ...t, isDefault: t.id === templateId }));
+                panel.status = tr('saved');
+                this.paintDialog(true);
+                await this.refresh();
+            }
+            return;
+        }
+        if (name === 'save-day-template' || name === 'save-template') {
+            const daily = name === 'save-day-template';
+            const result = await this.svc.write(() => api.scheduleTemplates.save({
+                stableId, requestId: requests.save, name: String(data.get('name')),
+                startDate: daily ? String(data.get('sourceDate')) : this.startDate,
+                kind: daily ? 'day' : undefined,
+            }));
+            if (!result || !current()) return;
+            if (daily) {
+                panel.templates.push(result);
+                panel.requests = templateRequests();
+                panel.status = tr('day_template_saved', { name: result.name });
+                this.paintDialog(true);
+            } else {
+                this.closePanel();
+                this.notice = tr('saved');
+                this.paint();
+            }
+            return;
+        }
+        const result = await this.svc.write(() => name === 'routines'
+            ? api.scheduleTemplates.routines({ stableId, requestId: requests.routines, startDate: this.startDate, typeIds: data.getAll('routine').map(String) })
+            : api.scheduleTemplates.apply({
+                stableId, requestId: requests.apply, startDate: panel.mode === 'day' ? this.selectedDate() : this.startDate,
+                templateId: String(data.get('templateId')), keepAssignees: data.has('keepAssignees'),
+            }));
+        if (result && current()) {
+            this.closePanel();
+            this.notice = tr('copied', { count: result.count });
+            await this.refresh();
+        }
+    }
+
     private async submit(form:HTMLFormElement):Promise<void>{
         if(!form.reportValidity()||this.svc.saving.get())return;const data=new FormData(form),name=form.dataset.form;
         if(name==='activity'){await this.saveActivity();return;}
@@ -355,9 +529,7 @@ export class ScheduleComponent extends Component {
         if(name==='attach-horse'){await this.settingsWrite(()=>api.stables.attachHorse({stableId:this.stableId,horseId:String(data.get('horseId'))}));return;}
         if(name==='save-type'){await this.settingsWrite(()=>api.stables.saveType({stableId:this.stableId,typeId:String(data.get('typeId'))||undefined,name:String(data.get('name')),category:String(data.get('category')) as ActivityType['category'],scope:String(data.get('scope')) as ActivityType['scope'],defaultTime:String(data.get('defaultTime'))||null,archived:data.has('archived')}));return;}
         if(this.panel?.kind==='templates'){
-            const p=this.panel;
-            const result=await this.svc.write<ScheduleCopyResult|ScheduleTemplate>(()=>name==='routines'?api.scheduleTemplates.routines({stableId:this.stableId,requestId:p.requests.routines,startDate:this.startDate,typeIds:data.getAll('routine').map(String)}):name==='save-template'?api.scheduleTemplates.save({stableId:this.stableId,requestId:p.requests.save,startDate:this.startDate,name:String(data.get('name'))}):api.scheduleTemplates.apply({stableId:this.stableId,requestId:p.requests.apply,startDate:this.startDate,templateId:String(data.get('templateId')),keepAssignees:data.has('keepAssignees')}));
-            if(result){this.closePanel();this.notice=tr('saved');await this.refresh();}return;
+            await this.submitTemplates(this.panel,name,data);return;
         }
         if(name==='training'&&this.panel?.kind==='training'){
             const p=this.panel;let performedAt:string;

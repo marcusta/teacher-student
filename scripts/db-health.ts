@@ -35,9 +35,10 @@ const requiredColumns: { [Table in keyof AppDatabase]: readonly (keyof AppDataba
     stable_activity_performers: ['activity_id', 'user_id'],
     stable_activity_programs: ['activity_id', 'program_id', 'title'],
     stable_activity_exercises: ['id', 'activity_id', 'exercise_id', 'name', 'description', 'sort_order'],
-    schedule_templates: ['id', 'stable_id', 'name', 'created_by'],
+    schedule_templates: ['id', 'stable_id', 'name', 'created_by', 'kind', 'is_default'],
     schedule_template_items: ['id', 'template_id', 'weekday', 'type_id', 'horse_id', 'content_json'],
     schedule_template_assignees: ['item_id', 'user_id'],
+    schedule_days: ['stable_id', 'date'],
     schedule_operations: ['stable_id', 'request_id', 'actor_id', 'fingerprint', 'result_json'],
 };
 
